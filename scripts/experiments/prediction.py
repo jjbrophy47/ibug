@@ -21,7 +21,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 from sklearn.neighbors import KNeighborsRegressor
 from ngboost import NGBRegressor
-from pgbm import PGBMRegressor
+# from pgbm import PGBMRegressor
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -97,11 +97,11 @@ def get_model(args):
     """
     if args.model == 'ngboost':
         model = NGBRegressor(verbose=0)
-        params = {'n_estimators': [10, 25, 50, 100, 200, 500, 1000, 2000]}
+        params = {'n_estimators': [10, 25, 50, 100, 200, 500, 1000]}
 
     elif args.model == 'pgbm':
         model = PGBMRegressor(verbose=0)
-        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],
+        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
                   'max_leaves': [15, 31, 61, 91],
                   'learning_rate': [0.01, 0.1]}
 
@@ -113,7 +113,7 @@ def get_model(args):
         model = util.get_model(tree_type=args.tree_type,
                                random_state=args.random_state)
 
-        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000]}
+        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000]}
 
         if args.tree_type == 'lgb':
             params['max_depth'] = [-1]
