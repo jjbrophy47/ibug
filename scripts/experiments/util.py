@@ -11,8 +11,6 @@ import numpy as np
 import properscoring as ps
 from catboost import CatBoostRegressor
 from lightgbm import LGBMRegressor
-from ngboost import NGBRegressor
-from pgbm import PGBMRegressor
 from sklearn.experimental import enable_hist_gradient_boosting  # noqa
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.ensemble import GradientBoostingRegressor
@@ -156,13 +154,6 @@ def get_model(tree_type='lgb', n_tree=100, max_depth=5, random_state=1, max_bins
     elif tree_type == 'xgb':
         tree = XGBRegressor(n_estimators=n_tree, max_depth=max_depth,
                             random_state=random_state, tree_method='hist')
-
-    elif tree_type == 'pgbm':
-        tree = PGBMRegressor(n_estimators=n_tree, random_state=random_state, max_leaves=2 ** max_depth,
-                             verbose=0)
-
-    elif tree_type == 'ngboost':
-        tree = NGBRegressor(n_estimators=n_tree, random_state=random_state)
 
     else:
         raise ValueError(f'Unknown tree_type {tree_type}')
