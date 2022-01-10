@@ -3,8 +3,10 @@ get_deps:
 
 clean:
 	cd intent/explainers/parsers/; rm -rf *.so *.c *.html build/ __pycache__; cd -
+	cd intent/estimators/parsers/; rm -rf *.so *.c *.html build/ __pycache__; cd -
 
 build:
 	cd intent/explainers/parsers/; python3 setup.py build_ext --inplace; cd ..
+	cd intent/estimators/parsers/; python3 setup.py build_ext --inplace; cd ..
 
 all: clean get_deps build
