@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=ProbRegress
+#SBATCH --job-name=ProbReg
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --account=uoml

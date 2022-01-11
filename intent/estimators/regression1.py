@@ -22,8 +22,7 @@ class KGBM(Estimator):
         using the k-nearest neighbors to a given test example in latent space.
     """
     def __init__(self, k=100, loc_type='gbm', affinity='unweighted', logger=None, verbose=0,
-                 k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201], scoring='nll',
-                 eps=1e-15):
+                 k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201], scoring='nll'):
         """
         Input
             k: int, no. neighbors to consider for uncertainty estimation.
@@ -33,14 +32,12 @@ class KGBM(Estimator):
             verbose: int, verbosity level.
             k_params: list, k values to try during tuning.
             scoring: str, metric to score probabilistic forecasts.
-            eps: float, Addendum to scale value to avoid 0 scale.
         """
         assert k > 0
         assert loc_type in ['gbm', 'knn']
         assert affinity in ['unweighted', 'weighted']
         assert isinstance(k_params, list) and len(k_params) > 0
         assert scoring in ['nll', 'crps']
-        assert eps > 0
 
         self.k = k
         self.loc_type = loc_type
@@ -49,7 +46,6 @@ class KGBM(Estimator):
         self.verbose = verbose
         self.k_params = k_params
         self.scoring = scoring
-        self.eps = eps
 
         if affinity == 'weighted':
             raise ValueError("'unweighted' affinity not yet implemented!")
@@ -75,32 +71,12 @@ class KGBM(Estimator):
         self.model_.update_node_count(X)
 
         self.leaf_counts_ = self.model_.get_leaf_counts()  # shape=(no. boost, no. class)
-
-        """
-        organize training example leaf IDs
-        schema: tree ID -> leaf ID -> train IDs
-        {
-          0: {0: [1, 7, 9], 1: [2, 3, 5]},
-          1: {0: [2, 11], 1: [1, 7, 27]}
-        }
-        """
-        train_leaves = self.model_.apply(X).squeeze()  # shape=(len(X), no. boost)
-
-        leaf_dict = {}
-        for boost_idx in range(train_leaves.shape[1]):
-            leaf_dict[boost_idx] = {}
-
-            for leaf_idx in np.unique(train_leaves[:, boost_idx]):
-                leaf_dict[boost_idx][leaf_idx] = np.where(train_leaves[:, boost_idx] == leaf_idx)[0]
-
-        self.leaf_dict_ = leaf_dict
+        self.train_leaves_ = self.model_.apply(X)  # shape=(len(X), no. boost, no. class)
 
         # tune k
-        k_params = [k for k in self.k_params if k <= len(X)]
-
         if X_val is not None and y_val is not None:
             X_val, y_val = util.check_data(X_val, y_val, objective=self.model_.objective)
-            self.k_ = self._tune_k(X=X_val, y=y_val, k_params=k_params, scoring=self.scoring)
+            self.k_ = self._tune_k(X=X_val, y=y_val, k_params=self.k_params, scoring=self.scoring)
         else:
             self.k_ = self.k
 
@@ -131,49 +107,31 @@ class KGBM(Estimator):
             - k-nearest neighbors computed using affinity to
                 the test example.
         """
-        leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
-        test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
+        train_leaves = self.train_leaves_  # shape=(n_train, n_boost, n_class)
+        test_leaves = self.model_.apply(X)  # shape=(n_test, n_boost, n_class)
 
         loc = np.zeros(len(X), dtype=np.float32)
         scale = np.zeros(len(X), dtype=np.float32)
 
-        vals = self.y_train_
-
-        affinity = np.zeros(self.n_train_, dtype=np.float32)  # shape=(n_train,)
-
-        for i in range(test_leaves.shape[0]):  # per test example
-            affinity[:] = 0  # reset affinity
+        for i in range(len(test_leaves)):
+            vals = self.y_train_
 
             # get nearest neighbors
-            for j in range(test_leaves.shape[1]):  # per tree
-                affinity[leaf_dict[j][test_leaves[i, j]]] += 1
-            train_vals = vals[np.argsort(affinity)]
+            co_leaf = np.where(train_leaves == test_leaves[[i]], 1, 0)  # shape=(n_train, n_boost, n_class)
+            affinity = np.sum(co_leaf, axis=(1, 2))  # shape=(n_train,)
+            train_idxs = np.argsort(affinity)[::-1][:self.k_]
 
-            loc[i] = np.mean(train_vals[-self.k:])
-            scale[i] = np.std(train_vals[-self.k:])
+            loc[i] = np.mean(vals[train_idxs])
+            scale[i] = np.std(vals[train_idxs])
 
-            # handle extremely small scale value (do not use during tuning!):
-            if scale[i] <= self.eps:
-                if self.verbose > 0:
-                    if self.logger:
-                        self.logger.info(f'[KGBM Warning] S.D. < {self.eps}, increasing k...')
-                    else:
-                        print(f'[KGBM Warning] S.D. < {self.eps}, increasing k...')
-
-                j = 1
-                while scale[i] <= self.eps:
-                    scale[i] = np.std(train_vals[-self.k - j:])
-                    j += 1
-
-            # display progress
-            if (i + 1) % 100 == 0 and self.verbose > 0:
+            if i % 100 == 0 and self.verbose > 0:
                 if self.logger:
                     self.logger.info(f'[KGBM - predict]: {i + 1:,} / {len(X):,}')
                 else:
                     print(f'[KGBM - predict]: {i + 1:,} / {len(X):,}')
 
         if self.loc_type == 'gbm':
-            loc[:] = self.predict(X).squeeze()  # shape=(len(X),)
+            loc[:] = self.model_.predict(X).flatten()
 
         return loc, scale
 
@@ -190,10 +148,8 @@ class KGBM(Estimator):
             cv: int, no. cross-validation folds.
             scoring: str, evaluation metric.
         """
-        start = time.time()
-
-        leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
-        test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost, n_class)
+        train_leaves = self.train_leaves_  # shape=(n_train, n_boost, n_class)
+        test_leaves = self.model_.apply(X)  # shape=(n_test, n_boost, n_class)
 
         scale = np.zeros((len(X), len(k_params)), dtype=np.float32)
         if self.loc_type == 'gbm':        
@@ -203,44 +159,26 @@ class KGBM(Estimator):
 
         # gather predictions
         vals = self.y_train_
-        affinity = np.zeros(self.n_train_, dtype=np.float32)  # shape=(n_train,)
-
-        for i in range(test_leaves.shape[0]):  # per test example
-            affinity[:] = 0  # reset affinity
+        for i in range(len(test_leaves)):
 
             # get nearest neighbors
-            for j in range(test_leaves.shape[1]):  # per tree
-                affinity[leaf_dict[j][test_leaves[i, j]]] += 1
-            train_idxs = np.argsort(affinity)
+            co_leaf = np.where(train_leaves == test_leaves[[i]], 1, 0)  # shape=(n_train, n_boost, n_class)
+            affinity = np.sum(co_leaf, axis=(1, 2))  # shape=(n_train,)
+            train_idxs = np.argsort(affinity)[::-1]  # most to least similar
 
             for j, k in enumerate(k_params):
-                vals_knn = vals[train_idxs[-k:]]
-                scale[i, j] = np.std(vals_knn) + self.eps
+                vals_knn = vals[train_idxs[:k]]
+                scale[i, j] = np.std(vals_knn)
                 if self.loc_type != 'gbm':
                     loc[i, j] = np.mean(vals_knn)
 
-            # progress
-            if (i + 1) % 100 == 0 and self.verbose > 0:
-                if self.logger:
-                    self.logger.info(f'[KGBM - tuning] {i + 1:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
-                else:
-                    print(f'[KGBM - tuning] {i + 2:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
-
-        # evaluate
         results = []
         if scoring == 'nll':
             for j, k in enumerate(k_params):
                 nll = np.mean([-norm.logpdf(y[i], loc=loc[i, j], scale=scale[i, j]) for i in range(len(y))])
                 results.append({'k': k, 'score': nll})
-
             df = pd.DataFrame(results).sort_values('score', ascending=True)
             best_k = df.astype(object).iloc[0]['k']
-
-            if self.verbose > 0:
-                if self.logger:
-                    self.logger.info(f'\n[KGBM - tuning] k results:\n{df}')
-                else:
-                    print(f'\n[KGBM - tuning] k results:\n{df}')
         else:
             raise ValueError(f'Unknown scoring {scoring}')
 

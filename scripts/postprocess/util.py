@@ -20,22 +20,31 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
     if logger and progress_bar:
         logger.info('\nGathering results...')
 
+    experiment_settings = list(product(*[args.model, args.tree_type, args.affinity, args.scale_bias]))
+
+    visited = set()
     results = []
 
-    for method in tqdm(args.method, disable=not progress_bar):
+    for items in tqdm(experiment_settings, disable=not progress_bar):
+        model, tree_type, affinity, scale_bias = items
 
-        method_dir = os.path.join(exp_dir, method)
+        template = {'tree_type': tree_type,
+                    'affinity': affinity,
+                    'scale_bias': scale_bias}
+
+        method_id = exp_util.get_method_identifier(model, template)
+        method_dir = os.path.join(exp_dir, method_id)
 
         # skip empty experiments
-        if not os.path.exists(method_dir):
+        if not os.path.exists(method_dir) or method_id in visited:
             continue
 
         # add results to result dict
         else:
+            visited.add(method_id)
             result = _get_result(method_dir)
-
             if result is not None:
-                results.append((method, result))
+                results.append((method_id, result))
 
     return results
 
@@ -67,24 +76,32 @@ def get_plot_dicts(markers=False):
     Return dict for color, line, and labels for each method.
     """
     color = {}
-    color['random'] = 'blue'
-    color['vog_asc'] = 'purple'
-    color['vog_desc'] = 'green'
+    color['constant'] = 'blue'
+    color['kgbm_6bb0cf1f98de921b0e92b3360b9a259b'] = 'cyan'
+    color['knn_fd48c03eaa6f667804f917b37f89'] = 'orange'
+    color['ngboost'] = 'green'
+    color['pgbm'] = 'brown'
 
     line = {}
-    line['random'] = '-'
-    line['vog_asc'] = '-'
-    line['vog_desc'] = '-'
+    line['constant'] = '-'
+    line['kgbm_6bb0cf1f98de921b0e92b3360b9a259b'] = '-'
+    line['knn_fd48c03eaa6f667804f917b37f89'] = '-'
+    line['ngboost'] = '-'
+    line['pgbm'] = '-'
 
     label = {}
-    label['random'] = 'Random'
-    label['vog_asc'] = 'VOG (asc.)'
-    label['vog_desc'] = 'VOG (desc.)'
+    label['constant'] = 'Constant (LGB)'
+    label['kgbm_6bb0cf1f98de921b0e92b3360b9a259b'] = r'KGBM (LGB)'
+    label['knn_fd48c03eaa6f667804f917b37f89aa30'] = 'KNN'
+    label['ngboost'] = 'NGBoost'
+    label['pgbm'] = 'PGBM'
 
     marker = {}
-    marker['random_'] = 'o'
-    marker['vog_asc'] = '^'
-    marker['vog_desc'] = 'd'
+    color['constant'] = 'o'
+    color['kgbm_6bb0cf1f98de921b0e92b3360b9a259b'] = 'd'
+    color['knn_fd48c03eaa6f667804f917b37f89'] = '1'
+    color['ngboost'] = '^'
+    color['pgbm'] = '+'
 
     result = (color, line, label)
 
@@ -119,29 +136,6 @@ def get_height(width, subplots=(1, 1)):
     golden_ratio = 1.618
     height = (width / golden_ratio) * (subplots[0] / subplots[1])
     return height
-
-
-def get_method_color(method):
-    """
-    Return color given the method name.
-    """
-    color = {}
-    color['Random'] = 'blue'
-    color['Target'] = 'cyan'
-    color['Minority'] = 'cyan'
-    color['Loss'] = 'yellow'
-    color['BoostIn'] = 'orange'
-    color['LeafInfSP'] = 'brown'
-    color['TREX'] = 'green'
-    color['TreeSim'] = 'mediumseagreen'
-    color['InputSim'] = 'gray'
-    color['LOO'] = 'red'
-    color['SubSample'] = 'rebeccapurple'
-    color['LeafInfluence'] = 'brown'
-    color['LeafRefit'] = 'gray'
-
-    assert method in color, f'{method} not in color dict'
-    return color[method]
 
 
 # private

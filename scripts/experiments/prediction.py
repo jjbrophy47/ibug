@@ -1,5 +1,13 @@
 """
 Model performance.
+
+TODO: V3: Add scale-bias variants.
+      V3: Train on train+val data. DONE.
+      V3: Create 5 folds per dataset. DONE.
+      V3: NGBoost: train for a max. of 2k iter. w/ early stopping. DONE.
+TODO: V3: adjust difficulty of synth_regression.
+TODO: V3: Fix PGBM on Talapas.
+TODO: V4: Implement CV tuning for KGBM.
 """
 import os
 import sys
@@ -31,32 +39,6 @@ from intent import KGBM
 
 # constants
 EPSILON = 1e-15
-
-
-def get_method_identifier(args):
-    """
-    Return method name concatenated with a hash
-    unqiuely identifying this method with the chosen settings.
-    """
-    settings = {}
-
-    if args.model == 'kgbm':
-        settings['affinity'] = args.affinity
-        settings['tree_type'] = args.tree_type
-
-    if args.model == 'knn':
-        settings['tree_type'] = args.tree_type
-
-    if args.scale_bias in ['add', 'mult']:
-        settings['scale_bias'] = args.scale_bias
-
-    if len(settings) > 0:
-        hash_str = util.dict_to_hash(settings)
-        method_name = f'{args.model}_{hash_str}'
-    else:
-        method_name = args.model
-
-    return method_name
 
 
 def include_scale_bias(scale, y, op='add'):
@@ -91,12 +73,16 @@ def product_dict(**kwargs):
         yield dict(zip(keys, instance))
 
 
-def get_model(args):
+def get_model(args, n_train):
     """
     Return the appropriate classifier.
+
+    Input
+        args: object, script arguments.
+        n_train: int, no. training examples.
     """
     if args.model == 'ngboost':
-        model = NGBRegressor(verbose=0)
+        model = NGBRegressor(n_estimators=2000, verbose=1)
         params = {'n_estimators': [10, 25, 50, 100, 200, 500, 1000]}
 
     elif args.model == 'pgbm':
@@ -108,6 +94,7 @@ def get_model(args):
     elif args.model == 'knn':
         model = KNeighborsRegressor(weights=args.weights)
         params = {'n_neighbors': [3, 5, 7, 11, 15, 31, 61, 91, 121, 151, 201]}
+        params['n_neighbors'] = [k for k in params['n_neighbors'] if k <= n_train]
 
     elif args.model in ['constant', 'kgbm']:
         model = util.get_model(tree_type=args.tree_type,
@@ -147,79 +134,98 @@ def experiment(args, logger, out_dir):
     """
     Main method comparing performance of tree ensembles and svm models.
     """
-
-    # start experiment timer
-    begin = time.time()
-
-    # pseduo-random number generator
-    rng = np.random.default_rng(args.random_state)
+    begin = time.time()  # experiment timer
+    rng = np.random.default_rng(args.random_state)  # pseduo-random number generator
 
     # get data
-    X_train, X_test, y_train, y_test, objective = util.get_data(args.data_dir, args.dataset)
+    X_train, X_test, y_train, y_test, objective = util.get_data(args.data_dir, args.dataset, args.fold)
 
     logger.info('no. train: {:,}'.format(X_train.shape[0]))
     logger.info('no. test: {:,}'.format(X_test.shape[0]))
     logger.info('no. features: {:,}'.format(X_train.shape[1]))
 
-    # get model
-    model, param_grid = get_model(args)
-    logger.info('\nmodel: {}, param_grid: {}'.format(args.model, param_grid))
-
-    # tune the model
+    # tune hyperparamters
+    logger.info('\nTuning...')
     start = time.time()
 
     X_train, X_val, y_train, y_val = train_test_split(X_train, y_train,
                                                       test_size=args.val_frac,
                                                       random_state=args.random_state)
 
-    cv_results = []
-    param_dicts = list(product_dict(**param_grid))
-    for i, param_dict in enumerate(param_dicts):
-        temp_model = clone(model).set_params(**param_dict).fit(X_train, y_train)
+    model, param_grid = get_model(args, n_train=len(X_train))
+    logger.info('\nmodel: {}, param_grid: {}'.format(args.model, param_grid))
 
-        if args.model in ['constant', 'knn', 'kgbm', 'pgbm']:  # optimize MSE
+    # tune multiple hyperparamters, optimizing MSE
+    if args.model in ['constant', 'knn', 'kgbm', 'pgbm']:
+        cv_results = []
+        param_dicts = list(product_dict(**param_grid))
+
+        # gridsearch
+        for i, param_dict in enumerate(param_dicts):
+            temp_model = clone(model).set_params(**param_dict).fit(X_train, y_train)
             y_val_hat = temp_model.predict(X_val)
             param_dict['score'] = mean_squared_error(y_val, y_val_hat)
 
-        else:  # optimize NLL
-            assert args.model == 'ngboost'
-            y_val_dist = temp_model.pred_dist(X_val)
-            loc_val, scale_val = y_val_dist.params['loc'], y_val_dist.params['scale']
-            scale_val = include_scale_bias(scale=scale_val, y=y_val, op=args.scale_bias)
-            param_dict['score'] = util.eval_normal(y=y_val, loc=loc_val, scale=scale_val, nll=True)
+            logger.info(f'[{i + 1:,}/{len(param_dicts):,}] {param_dict}'
+                        f', cum. time: {time.time() - start:.3f}s')
+            cv_results.append(param_dict)
 
-        logger.info(f'[{i + 1:,}/{len(param_dicts):,}] {param_dict}'
-                    f', cum. time: {time.time() - start:.3f}s')
-        cv_results.append(param_dict)
+        # get best params
+        df = pd.DataFrame(cv_results).sort_values('score', ascending=True)  # lower is better
+        logger.info(f'\ngridsearch results:\n{df}')
 
-    df = pd.DataFrame(cv_results).sort_values('score', ascending=True)  # lower is better
-    logger.info(f'\ngridsearch results:\n{df}')
+        best_params = df.astype(object).iloc[0].to_dict()
+        del best_params['score']
+        logger.info(f'\nbest params: {best_params}')
 
-    best_params = df.astype(object).iloc[0].to_dict()
-    del best_params['score']
-    logger.info(f'\nbest params: {best_params}')
+    else:  # NGBoost only, tune no. iterations
+        assert args.model == 'ngboost'
+        temp_model = clone(model).fit(X_train, y_train, X_val=X_val, Y_val=y_val,
+                                      early_stopping_rounds=args.n_stopping_rounds)
+        if temp_model.best_val_loss_itr is None:
+            best_n_estimators = temp_model.n_estimators
+        else:
+            best_n_estimators = temp_model.best_val_loss_itr + 1
+        best_params = {'n_estimators': best_n_estimators}
+        logger.info(f'\nbest params: {best_params}')
 
     tune_time = time.time() - start
-    logger.info('\nRESULTS\n\ntune time: {:.3f}s'.format(tune_time))
+    logger.info('tune time: {:.3f}s'.format(tune_time))
 
+    # KGBM ONLY: tune k
+    if args.model == 'kgbm':
+        tree_params = model.get_params()
+
+        logger.info('\nKGBM Tuning...')
+        start = time.time()
+        temp_model = clone(model).set_params(**best_params).fit(X_train, y_train)
+        temp_model = KGBM(verbose=args.verbose, logger=logger).fit(temp_model, X_train, y_train,
+                                                                   X_val=X_val, y_val=y_val)
+        best_k = temp_model.k_
+        tune_time_kgbm = time.time() - start
+
+        logger.info(f'\nbest k: {best_k}')
+        logger.info(f'\ntune time: {tune_time_kgbm:.3f}s')
+    else:
+        tune_time_kgbm = 0
+
+    # train on train+val data with best params
+    logger.info('\nTraining...')
     start = time.time()
+
+    X_train = np.vstack([X_train, X_val])
+    y_train = np.hstack([y_train, y_val])
+
     model = clone(model).set_params(**best_params).fit(X_train, y_train)
+    if args.model == 'kgbm':  # wrap model
+        model = KGBM(k=best_k, verbose=args.verbose, logger=logger).fit(model, X_train, y_train)
+
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')
 
-    # tune k
-    if args.model == 'kgbm':
-        tree_params = model.get_params()
-        start = time.time()
-        model = KGBM().fit(model, X_train, y_train, X_val=X_val, y_val=y_val)
-        tune_time_kgbm = time.time() - start
-        logger.info(f'[KGBM] k: {model.k_}, tune time: {tune_time_kgbm:.3f}s')
-        loc, scale = model.pred_dist(X_test)
-        total_build_time = tune_time + train_time + tune_time_kgbm
-    else:
-        total_build_time = tune_time + train_time
+    total_build_time = tune_time + tune_time_kgbm + train_time
 
-    # get location and scale
+    # compute location and scale
     start = time.time()
 
     if args.model == 'constant':
@@ -228,7 +234,6 @@ def experiment(args, logger, out_dir):
 
     elif args.model == 'kgbm':
         loc, scale = model.pred_dist(X_test)
-        scale += EPSILON
 
     elif args.model == 'knn':
         loc = np.zeros(len(X_test), dtype=np.float32)
@@ -237,10 +242,10 @@ def experiment(args, logger, out_dir):
         for i in range(len(X_test)):
             train_idxs = model.kneighbors(X_test[[i]], return_distance=False).flatten()  # shape=(len(X),)
             loc[i] = np.mean(y_train[train_idxs])
-            scale[i] = np.std(y_train[train_idxs]) + EPSILON
+            scale[i] = np.std(y_train[train_idxs]) + EPSILON  # avoid 0 scale
 
             if (i + 1) % 100 == 0 and args.verbose > 0:
-                logger.info(f'[KGBM - predict]: {i + 1:,} / {len(X_test):,}')
+                logger.info(f'[KNN - predict]: {i + 1:,} / {len(X_test):,}')
 
     elif args.model == 'pgbm':
         y_dist = model.predict_dist(X_test, n_forecasts=1000)
@@ -309,11 +314,12 @@ def experiment(args, logger, out_dir):
 def main(args):
 
     # create method identifier
-    method_name = get_method_identifier(args)
+    method_name = util.get_method_identifier(args.model, vars(args))
 
     # define output directory
     out_dir = os.path.join(args.out_dir,
                            args.dataset,
+                           f'fold{args.fold}',
                            method_name)
 
     # create outut directory and clear any previous contents
@@ -334,26 +340,22 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--out_dir', type=str, default='output/predictive_performance/')
-
-    # Data settings
-    parser.add_argument('--dataset', type=str, default='concrete')
+    parser.add_argument('--out_dir', type=str, default='output/prediction/')
 
     # Experiment settings
-    parser.add_argument('--random_state', type=int, default=1)
+    parser.add_argument('--dataset', type=str, default='concrete')
+    parser.add_argument('--fold', type=int, default=1)
     parser.add_argument('--model', type=str, default='kgbm')
-    parser.add_argument('--tree_type', type=str, default='lgb')
     parser.add_argument('--scale_bias', type=str, default=None)
-
-    # Tuning settings
-    parser.add_argument('--val_frac', type=float, default=0.2)
-
-    # Fixed hyperparameters
-    parser.add_argument('--weights', type=str, default='uniform')
-    parser.add_argument('--affinity', type=str, default='uniform')
+    parser.add_argument('--tree_type', type=str, default='lgb')
+    parser.add_argument('--affinity', type=str, default='unweighted')
 
     # Extra settings
     parser.add_argument('--verbose', type=int, default=1)
+    parser.add_argument('--random_state', type=int, default=1)
+    parser.add_argument('--val_frac', type=float, default=0.2)
+    parser.add_argument('--weights', type=str, default='uniform')
+    parser.add_argument('--n_stopping_rounds', type=int, default=25)
 
     args = parser.parse_args()
     main(args)
