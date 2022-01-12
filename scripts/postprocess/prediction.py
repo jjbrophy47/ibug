@@ -25,6 +25,7 @@ def process(args, out_dir, logger):
 
     # get results
     crps_list, nll_list, rmse_list, time_list = [], [], [], []
+    param_list = []
     for dataset in args.dataset:
         if dataset in args.skip:
             continue
@@ -35,6 +36,7 @@ def process(args, out_dir, logger):
 
             crps = {'dataset': dataset, 'fold': fold}
             nll, rmse, tot_time = crps.copy(), crps.copy(), crps.copy()
+            param = crps.copy()
             for method, res in results:
                 name = label[method]
                 crps[name] = res['crps']
@@ -42,16 +44,27 @@ def process(args, out_dir, logger):
                 rmse[name] = res['rmse']
                 tot_time[name] = res['total_build_time'] + res['total_predict_time']
 
+                if 'KGBM' in name:
+                    param['kgbm_k'] = res['model_params']['k_']
+                elif 'KNN' in name:
+                    param['knn_k'] = res['model_params']['n_neighbors']
+                elif 'NGBoost' in name:
+                    param['ngb_iter'] = res['model_params']['n_estimators']
+                elif 'PGBM' in name:
+                    pass
+
             crps_list.append(crps)
             nll_list.append(nll)
             rmse_list.append(rmse)
             time_list.append(tot_time)
+            param_list.append(param)
 
     # compile results
     crps_df = pd.DataFrame(crps_list)
     nll_df = pd.DataFrame(nll_list)
     rmse_df = pd.DataFrame(rmse_list)
     time_df = pd.DataFrame(time_list)
+    param_df = pd.DataFrame(param_list)
 
     # compute mean and std. error of the mean
     group_cols = ['dataset']
@@ -78,6 +91,7 @@ def process(args, out_dir, logger):
     logger.info(f'\nNLL (mean):\n{nll_mean_df}')
     logger.info(f'\nRMSE (mean):\n{rmse_mean_df}')
     logger.info(f'\nTotal time (mean):\n{time_mean_df}')
+    logger.info(f'\nParams:\n{param_df}')
 
     # save
     logger.info(f'\nSaving results to {out_dir}...')
@@ -91,6 +105,8 @@ def process(args, out_dir, logger):
     nll_sem_df.to_csv(os.path.join(out_dir, 'nll_sem.csv'), index=None)
     rmse_sem_df.to_csv(os.path.join(out_dir, 'rmse_sem.csv'), index=None)
     time_sem_df.to_csv(os.path.join(out_dir, 'time_sem.csv'), index=None)
+
+    param_df.to_csv(os.path.join(out_dir, 'param.csv'), index=None)
 
 
 def main(args):

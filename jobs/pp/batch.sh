@@ -16,5 +16,5 @@ done
 for f in ${fold_list[@]}; do
     sbatch -a 7 -c 10 -t 2880 -p 'long' -o ${o}'kgbm-%a.out'     $run $f 'kgbm'     $t $b
     sbatch -a 7 -c 10 -t 2880 -p 'long' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $b
-    sbatch -a 7 -c 10 -t 2880 -p 'long' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $b
+    # sbatch -a 7 -c 10 -t 2880 -p 'long' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $b
 done
