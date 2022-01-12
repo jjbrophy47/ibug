@@ -202,6 +202,9 @@ def eval_normal(y, loc, scale, nll=True, crps=False):
 
     result = ()
     if nll:
+        # nll_arr = np.array([-norm.logpdf(y[i], loc=loc[i], scale=scale[i]) for i in range(len(y))])
+        # idx = np.argmax(nll_arr)
+        # print(idx, nll_arr[idx], loc[idx], scale[idx], y[idx])
         result += (np.mean([-norm.logpdf(y[i], loc=loc[i], scale=scale[i]) for i in range(len(y))]),)
     if crps:
         result += (np.mean([ps.crps_gaussian(y[i], mu=loc[i], sig=scale[i]) for i in range(len(y))]),)

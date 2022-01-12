@@ -71,6 +71,7 @@ class KGBM(Estimator):
         self.y_train_ = y.copy()
         self.n_boost_ = self.model_.n_boost_
         self.n_class_ = self.model_.n_class_
+        self.scale_bias_ = np.std(y)
 
         self.model_.update_node_count(X)
 
@@ -131,6 +132,8 @@ class KGBM(Estimator):
             - k-nearest neighbors computed using affinity to
                 the test example.
         """
+        start = time.time()
+
         leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
         test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
 
@@ -167,10 +170,11 @@ class KGBM(Estimator):
 
             # display progress
             if (i + 1) % 100 == 0 and self.verbose > 0:
+                cum_time = time.time() - start
                 if self.logger:
-                    self.logger.info(f'[KGBM - predict]: {i + 1:,} / {len(X):,}')
+                    self.logger.info(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
                 else:
-                    print(f'[KGBM - predict]: {i + 1:,} / {len(X):,}')
+                    print(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
 
         if self.loc_type == 'gbm':
             loc[:] = self.predict(X).squeeze()  # shape=(len(X),)
