@@ -26,22 +26,26 @@ def process(args, out_dir, logger):
     # get results
     crps_list, nll_list, rmse_list, time_list = [], [], [], []
     for dataset in args.dataset:
-        exp_dir = os.path.join(args.in_dir, dataset)
-        results = util.get_results(args, exp_dir, logger, progress_bar=False)
+        if dataset in args.skip:
+            continue
 
-        crps = {'dataset': dataset}
-        nll, rmse, tot_time = crps.copy(), crps.copy(), crps.copy()
-        for method, res in results:
-            name = label[method]
-            crps[name] = res['crps']
-            nll[name] = res['nll']
-            rmse[name] = res['rmse']
-            tot_time[name] = res['total_build_time'] + res['total_predict_time']
+        for fold in args.fold:
+            exp_dir = os.path.join(args.in_dir, dataset, f'fold{fold}')
+            results = util.get_results(args, exp_dir, logger, progress_bar=False)
 
-        crps_list.append(crps)
-        nll_list.append(nll)
-        rmse_list.append(rmse)
-        time_list.append(tot_time)
+            crps = {'dataset': dataset, 'fold': fold}
+            nll, rmse, tot_time = crps.copy(), crps.copy(), crps.copy()
+            for method, res in results:
+                name = label[method]
+                crps[name] = res['crps']
+                nll[name] = res['nll']
+                rmse[name] = res['rmse']
+                tot_time[name] = res['total_build_time'] + res['total_predict_time']
+
+            crps_list.append(crps)
+            nll_list.append(nll)
+            rmse_list.append(rmse)
+            time_list.append(tot_time)
 
     # compile results
     crps_df = pd.DataFrame(crps_list)
@@ -49,23 +53,49 @@ def process(args, out_dir, logger):
     rmse_df = pd.DataFrame(rmse_list)
     time_df = pd.DataFrame(time_list)
 
+    # compute mean and std. error of the mean
+    group_cols = ['dataset']
+
+    crps_mean_df = crps_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    nll_mean_df = nll_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    rmse_mean_df = rmse_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    time_mean_df = time_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+
+    crps_sem_df = crps_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    nll_sem_df = nll_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    rmse_sem_df = rmse_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    time_sem_df = time_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+
+    # combine mean and sem into one dataframe
+    crps_ms_df = crps_mean_df.copy()
+    for c in [x for x in crps_ms_df.columns if x not in group_cols]:
+        crps_ms_df[c] = crps_mean_df[c].astype(str) + ' +/- ' + crps_sem_df[c].astype(str)
+
+    print(crps_ms_df)
+
     # display
-    logger.info(f'\nCRPS:\n{crps_df}')
-    logger.info(f'\nNLL:\n{nll_df}')
-    logger.info(f'\nRMSE:\n{rmse_df}')
-    logger.info(f'\nTotal time:\n{time_df}')
+    logger.info(f'\nCRPS (mean):\n{crps_mean_df}')
+    logger.info(f'\nNLL (mean):\n{nll_mean_df}')
+    logger.info(f'\nRMSE (mean):\n{rmse_mean_df}')
+    logger.info(f'\nTotal time (mean):\n{time_mean_df}')
 
     # save
     logger.info(f'\nSaving results to {out_dir}...')
-    crps_df.to_csv(os.path.join(out_dir, 'crps.csv'), index=None)
-    nll_df.to_csv(os.path.join(out_dir, 'nll.csv'), index=None)
-    rmse_df.to_csv(os.path.join(out_dir, 'rmse.csv'), index=None)
-    time_df.to_csv(os.path.join(out_dir, 'time.csv'), index=None)
+
+    crps_mean_df.to_csv(os.path.join(out_dir, 'crps_mean.csv'), index=None)
+    nll_mean_df.to_csv(os.path.join(out_dir, 'nll_mean.csv'), index=None)
+    rmse_mean_df.to_csv(os.path.join(out_dir, 'rmse_mean.csv'), index=None)
+    time_mean_df.to_csv(os.path.join(out_dir, 'time_mean.csv'), index=None)
+
+    crps_sem_df.to_csv(os.path.join(out_dir, 'crps_sem.csv'), index=None)
+    nll_sem_df.to_csv(os.path.join(out_dir, 'nll_sem.csv'), index=None)
+    rmse_sem_df.to_csv(os.path.join(out_dir, 'rmse_sem.csv'), index=None)
+    time_sem_df.to_csv(os.path.join(out_dir, 'time_sem.csv'), index=None)
 
 
 def main(args):
 
-    out_dir = args.out_dir
+    out_dir = os.path.join(args.out_dir, f'bias_{args.scale_bias}')
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
@@ -81,7 +111,7 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--in_dir', type=str, default='prediction/')
+    parser.add_argument('--in_dir', type=str, default='temp_prediction/')
     parser.add_argument('--out_dir', type=str, default='output/postprocess/prediction/')
 
     # Experiment settings
@@ -89,8 +119,10 @@ if __name__ == '__main__':
                         default=['ames_housing', 'cal_housing', 'concrete', 'energy', 'heart',
                                  'kin8nm', 'life', 'msd', 'naval', 'obesity', 'online_news', 'power', 'protein',
                                  'synth_regression', 'wine', 'yacht'])
+    parser.add_argument('--skip', type=str, nargs='+', default=['heart'])
+    parser.add_argument('--fold', type=int, nargs='+', default=[1, 2, 3, 4, 5])
     parser.add_argument('--model', type=str, nargs='+', default=['constant', 'kgbm', 'knn', 'ngboost', 'pgbm'])
-    parser.add_argument('--scale_bias', type=str, nargs='+', default=[None, 'add', 'mult'])
+    parser.add_argument('--scale_bias', type=str, default='none')
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted', 'uniform'])
 

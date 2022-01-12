@@ -1,11 +1,5 @@
 """
 Model performance.
-
-TODO: V3: Add scale-bias variants.
-      V3: Train on train+val data. DONE.
-      V3: Create 5 folds per dataset. DONE.
-      V3: NGBoost: train for a max. of 2k iter. w/ early stopping. DONE.
-TODO: V3: adjust difficulty of synth_regression.
 TODO: V3: Fix PGBM on Talapas.
 TODO: V4: Implement CV tuning for KGBM.
 """
@@ -29,7 +23,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 from sklearn.neighbors import KNeighborsRegressor
 from ngboost import NGBRegressor
-# from pgbm import PGBMRegressor
+from pgbm import PGBMRegressor
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -82,11 +76,12 @@ def get_model(args, n_train):
         n_train: int, no. training examples.
     """
     if args.model == 'ngboost':
-        model = NGBRegressor(n_estimators=2000, verbose=1)
+        model = NGBRegressor(n_estimators=2000, verbose=args.verbose)
         params = {'n_estimators': [10, 25, 50, 100, 200, 500, 1000]}
 
     elif args.model == 'pgbm':
-        model = PGBMRegressor(verbose=0)
+        model = PGBMRegressor(n_estimators=2000, learning_rate=0.1, max_leaves=16,
+                              max_bin=64, verbose=args.verbose + 1)
         params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
                   'max_leaves': [15, 31, 61, 91],
                   'learning_rate': [0.01, 0.1]}
@@ -156,7 +151,7 @@ def experiment(args, logger, out_dir):
     logger.info('\nmodel: {}, param_grid: {}'.format(args.model, param_grid))
 
     # tune multiple hyperparamters, optimizing MSE
-    if args.model in ['constant', 'knn', 'kgbm', 'pgbm']:
+    if args.model in ['constant', 'knn', 'kgbm']:
         cv_results = []
         param_dicts = list(product_dict(**param_grid))
 
@@ -178,7 +173,14 @@ def experiment(args, logger, out_dir):
         del best_params['score']
         logger.info(f'\nbest params: {best_params}')
 
-    else:  # NGBoost only, tune no. iterations
+    elif args.model == 'pgbm':  # PGBM, only tune no. iterations
+        temp_model = clone(model).fit(X_train, y_train, eval_set=(X_val, y_val),
+                                      early_stopping_rounds=args.n_stopping_rounds)
+        best_n_estimators = temp_model.learner_.best_iteration
+        best_params = {'n_estimators': best_n_estimators}
+        logger.info(f'\nbest params: {best_params}')
+
+    else:  # NGBoost, only tune no. iterations
         assert args.model == 'ngboost'
         temp_model = clone(model).fit(X_train, y_train, X_val=X_val, Y_val=y_val,
                                       early_stopping_rounds=args.n_stopping_rounds)
