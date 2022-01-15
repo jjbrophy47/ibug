@@ -30,7 +30,7 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
 
         template = {'tree_type': tree_type,
                     'affinity': affinity,
-                    'scale_bias': args.scale_bias}
+                    'delta': args.delta}
 
         method_id = exp_util.get_method_identifier(model, template)
         method_dir = os.path.join(exp_dir, method_id)

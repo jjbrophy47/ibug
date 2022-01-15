@@ -111,7 +111,8 @@ def process(args, out_dir, logger):
 
 def main(args):
 
-    out_dir = os.path.join(args.out_dir, f'bias_{args.scale_bias}')
+    delta_dir = 'no_delta' if not args.delta else 'delta'
+    out_dir = os.path.join(args.out_dir, delta_dir)
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
@@ -138,7 +139,7 @@ if __name__ == '__main__':
     parser.add_argument('--skip', type=str, nargs='+', default=['heart'])
     parser.add_argument('--fold', type=int, nargs='+', default=[1, 2, 3, 4, 5])
     parser.add_argument('--model', type=str, nargs='+', default=['constant', 'kgbm', 'knn', 'ngboost', 'pgbm'])
-    parser.add_argument('--scale_bias', type=str, default='none')
+    parser.add_argument('--delta', type=str, default=0)
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted', 'uniform'])
 

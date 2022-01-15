@@ -235,10 +235,14 @@ class KGBM(Estimator):
         if scoring == 'nll':
             for j, k in enumerate(k_params):
                 nll = np.mean([-norm.logpdf(y[i], loc=loc[i, j], scale=scale[i, j]) for i in range(len(y))])
-                results.append({'k': k, 'score': nll})
+                results.append({'k': k, 'score': nll, 'k_idx': j})
 
             df = pd.DataFrame(results).sort_values('score', ascending=True)
             best_k = df.astype(object).iloc[0]['k']
+            best_k_idx = df.astype(object).iloc[0]['k_idx']
+
+            self.loc_val_ = loc[:, best_k_idx]
+            self.scale_val_ = scale[:, best_k_idx]
 
             if self.verbose > 0:
                 if self.logger:

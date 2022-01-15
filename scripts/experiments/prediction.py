@@ -35,9 +35,11 @@ from intent import KGBM
 EPSILON = 1e-15
 
 
-def include_scale_bias(scale, y, op='add'):
+def tune_delta(loc, scale, y, ops=['add', 'mult'],
+               delta_vals=[1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.0, 1e0, 1e2],
+               scoring='nll', verbose=0, logger=None):
     """
-    Add or multiply scale bias value.
+    Add or multiply detla to scale values.
 
     Input
         scale: 1d array of scale values.
@@ -47,13 +49,92 @@ def include_scale_bias(scale, y, op='add'):
     Return
         1d array of updated scale values.
     """
-    if op == 'add':
-        scale = scale + np.std(y)
+    start = time.time()
+    assert scoring == 'nll'
 
-    elif op == 'mult':
-        scale = scale * np.std(y)
+    if verbose > 0:
+        if logger:
+            logger.info(f'\nTuning delta...')
+        else:
+            print(f'\nTuning delta...')
 
-    return scale
+    results = []
+    for op in ops:
+        for delta in delta_vals:
+
+            if op == 'mult' and delta == 0.0:
+                continue
+
+            if op == 'add':
+                temp_scale = scale + delta
+            else:
+                temp_scale = scale * delta
+
+            nll = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=True, crps=False)
+            results.append({'delta': delta, 'op': op, 'score': nll})
+
+    df = pd.DataFrame(results).sort_values('score', ascending=True)
+
+    best_delta = df.iloc[0]['delta']
+    best_op = df.iloc[0]['op']
+    tune_time = time.time() - start
+
+    if verbose > 0:
+        if logger:
+            logger.info(f'\ndelta gridsearch:\n{df}')
+        else:
+            print(f'\ndelta gridsearch:\n{df}')
+
+    return best_delta, best_op, tune_time
+
+
+def get_loc_scale(model, model_type, X, y=None, verbose=0, logger=None):
+    """
+    Predict location and scale for each x in X.
+
+    Input
+        model: object, uncertainty estimator.
+        model_type: str, type of uncertainty estimator.
+        X: 2d array of input data.
+        y: 1d array of targets (constant and KNN methods only).
+
+    Return
+        Tuple, 2 1d arrays of locations and scales.
+    """
+    if model_type == 'constant':
+        assert y is not None
+        loc = model.predict(X)
+        scale = np.full(len(X), np.std(y), dtype=np.float32)
+
+    elif model_type == 'kgbm':
+        loc, scale = model.pred_dist(X)
+
+    elif model_type == 'knn':
+        assert y is not None
+
+        loc = np.zeros(len(X), dtype=np.float32)
+        scale = np.zeros(len(X), dtype=np.float32)
+
+        for i in range(len(X)):
+            train_idxs = model.kneighbors(X[[i]], return_distance=False).flatten()  # shape=(len(X),)
+            loc[i] = np.mean(y[train_idxs])
+            scale[i] = np.std(y[train_idxs]) + EPSILON  # avoid 0 scale
+
+            if (i + 1) % 100 == 0 and args.verbose > 0:
+                if logger:
+                    logger.info(f'[KNN - predict]: {i + 1:,} / {len(X):,}')
+                else:
+                    print(f'[KNN - predict]: {i + 1:,} / {len(X):,}')
+
+    elif model_type == 'pgbm':
+        y_dist = model.predict_dist(X, n_forecasts=1000)
+        loc, scale = np.mean(y_dist, axis=0), np.std(y_dist, axis=0)
+
+    elif model_type == 'ngboost':
+        y_dist = model.pred_dist(X)
+        loc, scale = y_dist.params['loc'], y_dist.params['scale']
+
+    return loc, scale
 
 
 def product_dict(**kwargs):
@@ -139,8 +220,8 @@ def experiment(args, logger, out_dir):
     logger.info('no. test: {:,}'.format(X_test.shape[0]))
     logger.info('no. features: {:,}'.format(X_train.shape[1]))
 
-    # tune hyperparamters
-    logger.info('\nTuning...')
+    # tune
+    logger.info('\nTuning model...')
     start = time.time()
 
     X_train, X_val, y_train, y_val = train_test_split(X_train, y_train,
@@ -150,12 +231,11 @@ def experiment(args, logger, out_dir):
     model, param_grid = get_model(args, n_train=len(X_train))
     logger.info('\nmodel: {}, param_grid: {}'.format(args.model, param_grid))
 
-    # tune multiple hyperparamters, optimizing MSE
-    if args.model in ['constant', 'knn', 'kgbm']:
+    if args.model in ['constant', 'knn', 'kgbm']:  # gridsearch
         cv_results = []
         param_dicts = list(product_dict(**param_grid))
 
-        # gridsearch
+        # cross-validation
         for i, param_dict in enumerate(param_dicts):
             temp_model = clone(model).set_params(**param_dict).fit(X_train, y_train)
             y_val_hat = temp_model.predict(X_val)
@@ -174,20 +254,20 @@ def experiment(args, logger, out_dir):
         logger.info(f'\nbest params: {best_params}')
 
     elif args.model == 'pgbm':  # PGBM, only tune no. iterations
-        temp_model = clone(model).fit(X_train, y_train, eval_set=(X_val, y_val),
-                                      early_stopping_rounds=args.n_stopping_rounds)
-        best_n_estimators = temp_model.learner_.best_iteration
+        model_val = clone(model).fit(X_train, y_train, eval_set=(X_val, y_val),
+                                     early_stopping_rounds=args.n_stopping_rounds)
+        best_n_estimators = model_val.learner_.best_iteration
         best_params = {'n_estimators': best_n_estimators}
         logger.info(f'\nbest params: {best_params}')
 
     else:  # NGBoost, only tune no. iterations
         assert args.model == 'ngboost'
-        temp_model = clone(model).fit(X_train, y_train, X_val=X_val, Y_val=y_val,
-                                      early_stopping_rounds=args.n_stopping_rounds)
-        if temp_model.best_val_loss_itr is None:
-            best_n_estimators = temp_model.n_estimators
+        model_val = clone(model).fit(X_train, y_train, X_val=X_val, Y_val=y_val,
+                                     early_stopping_rounds=args.n_stopping_rounds)
+        if model_val.best_val_loss_itr is None:
+            best_n_estimators = model_val.n_estimators
         else:
-            best_n_estimators = temp_model.best_val_loss_itr + 1
+            best_n_estimators = model_val.best_val_loss_itr + 1
         best_params = {'n_estimators': best_n_estimators}
         logger.info(f'\nbest params: {best_params}')
 
@@ -198,20 +278,39 @@ def experiment(args, logger, out_dir):
     if args.model == 'kgbm':
         tree_params = model.get_params()
 
-        logger.info('\nKGBM Tuning...')
+        logger.info('\nTuning k (KGBM)...')
         start = time.time()
-        temp_model = clone(model).set_params(**best_params).fit(X_train, y_train)
-        temp_model = KGBM(verbose=args.verbose, logger=logger).fit(temp_model, X_train, y_train,
-                                                                   X_val=X_val, y_val=y_val)
-        best_k = temp_model.k_
+
+        model_val = clone(model).set_params(**best_params).fit(X_train, y_train)
+        model_val = KGBM(verbose=args.verbose, logger=logger).fit(model_val, X_train, y_train,
+                                                                  X_val=X_val, y_val=y_val)
+        best_k = model_val.k_
         tune_time_kgbm = time.time() - start
 
         logger.info(f'\nbest k: {best_k}')
-        logger.info(f'\ntune time: {tune_time_kgbm:.3f}s')
+        logger.info(f'\ntune time (KGBM): {tune_time_kgbm:.3f}s')
     else:
         tune_time_kgbm = 0
 
-    # train on train+val data with best params
+    # tune delta
+    if args.delta:
+        if args.model == 'kgbm':
+            loc_val = model_val.loc_val_
+            scale_val = model_val.scale_val_
+        else:
+            if args.model in ['constant', 'knn']:
+                model_val = clone(model).set_params(**best_params).fit(X_train, y_train)
+            loc_val, scale_val = get_loc_scale(model_val, args.model, X=X_val, y=y_train,
+                                               verbose=args.verbose, logger=logger)
+        delta, delta_op, tune_time_delta = tune_delta(loc=loc_val, scale=scale_val, y=y_val,
+                                                      verbose=args.verbose, logger=logger)
+
+        logger.info(f'\nbest delta: {delta}, op: {delta_op}')
+        logger.info(f'tune time (delta): {tune_time_delta:.3f}s')
+    else:
+        tune_time_delta = 0
+
+    # train: build using train+val data with best params
     logger.info('\nTraining...')
     start = time.time()
 
@@ -225,40 +324,19 @@ def experiment(args, logger, out_dir):
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')
 
-    total_build_time = tune_time + tune_time_kgbm + train_time
+    total_build_time = tune_time + tune_time_kgbm + tune_time_delta + train_time
 
-    # compute location and scale
+    # predict: compute location and scale
     start = time.time()
+    loc, scale = get_loc_scale(model, args.model, X=X_test, y=y_train, verbose=args.verbose, logger=logger)
 
-    if args.model == 'constant':
-        loc = model.predict(X_test)
-        scale = np.full(len(X_test), np.std(y_train), dtype=np.float32)
+    # add/multiply delta
+    if args.delta:
+        if delta_op == 'add':
+            scale = scale + delta
+        elif delta_op == 'mult':
+            scale = scale * delta
 
-    elif args.model == 'kgbm':
-        loc, scale = model.pred_dist(X_test)
-
-    elif args.model == 'knn':
-        loc = np.zeros(len(X_test), dtype=np.float32)
-        scale = np.zeros(len(X_test), dtype=np.float32)
-
-        for i in range(len(X_test)):
-            train_idxs = model.kneighbors(X_test[[i]], return_distance=False).flatten()  # shape=(len(X),)
-            loc[i] = np.mean(y_train[train_idxs])
-            scale[i] = np.std(y_train[train_idxs]) + EPSILON  # avoid 0 scale
-
-            if (i + 1) % 100 == 0 and args.verbose > 0:
-                logger.info(f'[KNN - predict]: {i + 1:,} / {len(X_test):,}')
-
-    elif args.model == 'pgbm':
-        y_dist = model.predict_dist(X_test, n_forecasts=1000)
-        loc, scale = np.mean(y_dist, axis=0), np.std(y_dist, axis=0)
-
-    elif args.model == 'ngboost':
-        y_dist = model.pred_dist(X_test)
-        loc, scale = y_dist.params['loc'], y_dist.params['scale']
-
-    # include scale bias
-    scale = include_scale_bias(scale=scale, y=y_val, op=args.scale_bias)
     total_predict_time = time.time() - start
 
     # display times
@@ -299,6 +377,10 @@ def experiment(args, logger, out_dir):
     result['total_experiment_time'] = time.time() - begin
     result['max_rss_MB'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6  # MB if OSX, GB if Linux
     result['val_frac'] = args.val_frac
+    if args.delta:
+        result['best_delta'] = delta
+        result['best_delta_op'] = delta_op
+        result['tune_time_delta'] = tune_time_delta
     if args.model == 'kgbm':
         result['tree_params'] = tree_params
         result['tune_time_kgbm'] = tune_time_kgbm
@@ -348,7 +430,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='concrete')
     parser.add_argument('--fold', type=int, default=1)
     parser.add_argument('--model', type=str, default='kgbm')
-    parser.add_argument('--scale_bias', type=str, default=None)
+    parser.add_argument('--delta', type=int, default=0)
     parser.add_argument('--tree_type', type=str, default='lgb')
     parser.add_argument('--affinity', type=str, default='unweighted')
 

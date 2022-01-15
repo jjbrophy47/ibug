@@ -300,8 +300,8 @@ def get_method_identifier(model, exp_params):
     elif model == 'knn':
         settings['tree_type'] = exp_params['tree_type']
 
-    if exp_params['scale_bias'] in ['add', 'mult']:
-        settings['scale_bias'] = exp_params['scale_bias']
+    if exp_params['delta'] in ['add', 'mult']:
+        settings['delta'] = exp_params['delta']
 
     if len(settings) > 0:
         hash_str = dict_to_hash(settings)
