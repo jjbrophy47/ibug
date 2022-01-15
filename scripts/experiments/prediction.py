@@ -23,7 +23,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 from sklearn.neighbors import KNeighborsRegressor
 from ngboost import NGBRegressor
-# from pgbm import PGBMRegressor
+from pgbm import PGBMRegressor
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
