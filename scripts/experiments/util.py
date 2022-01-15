@@ -300,7 +300,7 @@ def get_method_identifier(model, exp_params):
     elif model == 'knn':
         settings['tree_type'] = exp_params['tree_type']
 
-    if exp_params['delta'] in ['add', 'mult']:
+    if exp_params['delta']:
         settings['delta'] = exp_params['delta']
 
     if len(settings) > 0:
