@@ -20,17 +20,19 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
     if logger and progress_bar:
         logger.info('\nGathering results...')
 
-    experiment_settings = list(product(*[args.model, args.tree_type, args.affinity]))
+    experiment_settings = list(product(*[args.model, args.tree_type, args.affinity,
+                                         args.min_scale_pct]))
 
     visited = set()
     results = []
 
     for items in tqdm(experiment_settings, disable=not progress_bar):
-        model, tree_type, affinity = items
+        model, tree_type, affinity, min_scale_pct = items
 
         template = {'tree_type': tree_type,
                     'affinity': affinity,
-                    'delta': args.delta}
+                    'delta': args.delta,
+                    'min_scale_pct': min_scale_pct}
 
         method_id = exp_util.get_method_identifier(model, template)
         method_dir = os.path.join(exp_dir, method_id)
@@ -76,63 +78,51 @@ def get_plot_dicts(markers=False):
     """
     color = {}
     color['constant_fd48c03eaa6f667804f917b37f89aa30'] = 'blue'
-    color['constant_8958a70621bd987675ee4563f7381154'] = 'blue'
-    color['constant_e996a4dd6a3156fa10b9dd0883ca8c4a'] = 'blue'
+    color['constant_334858faf273fcedf1f1a954626ea3c5'] = 'blue'
     color['kgbm_e1475e027e7f1c9398825dee1b291cf5'] = 'cyan'
-    color['kgbm_83fdcc238907ad1712b0c2dc89de489a'] = 'cyan'
-    color['kgbm_3b909679514d273bb41f91a7f01426ad'] = 'cyan'
-    color['knn_fd48c03eaa6f667804f917b37f89'] = 'orange'
-    color['knn_8958a70621bd987675ee4563f7381154'] = 'orange'
-    color['knn_e996a4dd6a3156fa10b9dd0883ca8c4a'] = 'orange'
+    color['kgbm_fbaa76960042055e53104aa80d91f385'] = 'cyan'
+    color['knn_19f65e07ad4a0f21e2a3b3488e53c947'] = 'orange'
+    color['knn_816312457bd29f7ba532915a9f39aa29'] = 'orange'
     color['ngboost'] = 'green'
-    color['ngboost_34ec78fcc91ffb1e54cd85e4a0924332'] = 'green'
-    color['ngboost_0f9f2d92c2583ef952556e1f382d0974'] = 'green'
+    color['ngboost_c4ca4238a0b923820dcc509a6f75849b'] = 'green'
     color['pgbm'] = 'brown'
+    color['pgbm_c4ca4238a0b923820dcc509a6f75849b'] = 'brown'
 
     line = {}
     line['constant_fd48c03eaa6f667804f917b37f89aa30'] = '-'
-    line['constant_8958a70621bd987675ee4563f7381154'] = '-'
-    line['constant_e996a4dd6a3156fa10b9dd0883ca8c4a'] = '-'
+    line['constant_334858faf273fcedf1f1a954626ea3c5'] = '-'
     line['kgbm_e1475e027e7f1c9398825dee1b291cf5'] = '-'
-    line['kgbm_83fdcc238907ad1712b0c2dc89de489a'] = '-'
-    line['kgbm_3b909679514d273bb41f91a7f01426ad'] = '-'
-    line['knn_fd48c03eaa6f667804f917b37f89'] = '-'
-    line['knn_8958a70621bd987675ee4563f7381154'] = '-'
-    line['knn_e996a4dd6a3156fa10b9dd0883ca8c4a'] = '-'
+    line['kgbm_fbaa76960042055e53104aa80d91f385'] = '-'
+    line['knn_19f65e07ad4a0f21e2a3b3488e53c947'] = '-'
+    line['knn_816312457bd29f7ba532915a9f39aa29'] = '-'
     line['ngboost'] = '-'
-    line['ngboost_34ec78fcc91ffb1e54cd85e4a0924332'] = '-'
-    line['ngboost_0f9f2d92c2583ef952556e1f382d0974'] = '-'
+    line['ngboost_c4ca4238a0b923820dcc509a6f75849b'] = '-'
     line['pgbm'] = '-'
+    line['pgbm_c4ca4238a0b923820dcc509a6f75849b'] = '-'
 
     label = {}
     label['constant_fd48c03eaa6f667804f917b37f89aa30'] = 'Constant (LGB)'
-    label['constant_8958a70621bd987675ee4563f7381154'] = 'Constant (LGB)'
-    label['constant_e996a4dd6a3156fa10b9dd0883ca8c4a'] = 'Constant (LGB)'
+    label['constant_334858faf273fcedf1f1a954626ea3c5'] = 'Constant (LGB)'
     label['kgbm_e1475e027e7f1c9398825dee1b291cf5'] = r'KGBM (LGB)'
-    label['kgbm_83fdcc238907ad1712b0c2dc89de489a'] = r'KGBM (LGB)'
-    label['kgbm_3b909679514d273bb41f91a7f01426ad'] = r'KGBM (LGB)'
-    label['knn_fd48c03eaa6f667804f917b37f89aa30'] = 'KNN'
-    label['knn_8958a70621bd987675ee4563f7381154'] = 'KNN'
-    label['knn_e996a4dd6a3156fa10b9dd0883ca8c4a'] = 'KNN'
+    label['kgbm_fbaa76960042055e53104aa80d91f385'] = r'KGBM (LGB)'
+    label['knn_19f65e07ad4a0f21e2a3b3488e53c947'] = 'KNN'
+    label['knn_816312457bd29f7ba532915a9f39aa29'] = 'KNN'
     label['ngboost'] = 'NGBoost'
-    label['ngboost_34ec78fcc91ffb1e54cd85e4a0924332'] = 'NGBoost'
-    label['ngboost_0f9f2d92c2583ef952556e1f382d0974'] = 'NGBoost'
+    label['ngboost_c4ca4238a0b923820dcc509a6f75849b'] = 'NGBoost'
     label['pgbm'] = 'PGBM'
+    label['pgbm_c4ca4238a0b923820dcc509a6f75849b'] = 'PGBM'
 
     marker = {}
-    color['constant_fd48c03eaa6f667804f917b37f89aa30'] = 'o'
-    color['constant_8958a70621bd987675ee4563f7381154'] = 'o'
-    color['constant_e996a4dd6a3156fa10b9dd0883ca8c4a'] = 'o'
-    color['kgbm_e1475e027e7f1c9398825dee1b291cf5'] = 'd'
-    color['kgbm_83fdcc238907ad1712b0c2dc89de489a'] = 'd'
-    color['kgbm_3b909679514d273bb41f91a7f01426ad'] = 'd'
-    color['knn_fd48c03eaa6f667804f917b37f89'] = '1'
-    color['knn_8958a70621bd987675ee4563f7381154'] = '1'
-    color['knn_e996a4dd6a3156fa10b9dd0883ca8c4a'] = '1'
-    color['ngboost'] = '^'
-    color['ngboost_34ec78fcc91ffb1e54cd85e4a0924332'] = '^'
-    color['ngboost_0f9f2d92c2583ef952556e1f382d0974'] = '^'
-    color['pgbm'] = '+'
+    marker['constant_fd48c03eaa6f667804f917b37f89aa30'] = 'o'
+    marker['constant_334858faf273fcedf1f1a954626ea3c5'] = 'o'
+    marker['kgbm_e1475e027e7f1c9398825dee1b291cf5'] = 'd'
+    marker['kgbm_fbaa76960042055e53104aa80d91f385'] = 'd'
+    marker['knn_19f65e07ad4a0f21e2a3b3488e53c947'] = '1'
+    marker['knn_816312457bd29f7ba532915a9f39aa29'] = '1'
+    marker['ngboost'] = '^'
+    marker['ngboost_c4ca4238a0b923820dcc509a6f75849b'] = '^'
+    marker['pgbm'] = '+'
+    marker['pgbm_c4ca4238a0b923820dcc509a6f75849b'] = 'brown'
 
     result = (color, line, label)
 

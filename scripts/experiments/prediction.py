@@ -1,7 +1,6 @@
 """
 Model performance.
-TODO: V3: Fix PGBM on Talapas.
-TODO: V4: Implement CV tuning for KGBM.
+TODO: V4 - add min. scale to KGBM and KNN.
 """
 import os
 import sys
@@ -88,7 +87,7 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
     return best_delta, best_op, tune_time
 
 
-def get_loc_scale(model, model_type, X, y=None, verbose=0, logger=None):
+def get_loc_scale(model, model_type, X, y=None, min_scale=None, verbose=0, logger=None):
     """
     Predict location and scale for each x in X.
 
@@ -119,6 +118,9 @@ def get_loc_scale(model, model_type, X, y=None, verbose=0, logger=None):
             train_idxs = model.kneighbors(X[[i]], return_distance=False).flatten()  # shape=(len(X),)
             loc[i] = np.mean(y[train_idxs])
             scale[i] = np.std(y[train_idxs]) + EPSILON  # avoid 0 scale
+
+            if min_scale is not None and scale[i] < min_scale:
+                scale[i] = min_scale
 
             if (i + 1) % 100 == 0 and args.verbose > 0:
                 if logger:
@@ -291,21 +293,39 @@ def experiment(args, logger, out_dir):
         logger.info(f'\nbest k: {best_k}')
         logger.info(f'\ntune time (KGBM): {tune_time_kgbm:.3f}s')
     else:
+        min_scale = None
         tune_time_kgbm = 0
+
+    # KNN ONLY: tune min_scale
+    if args.model == 'knn':
+        logger.info('\nTuning KNN...')
+        start = time.time()
+        model_val = clone(model).set_params(**best_params).fit(X_train, y_train)
+        loc_val, scale_val = get_loc_scale(model_val, args.model, X=X_val, y=y_train,
+                                           verbose=args.verbose, logger=logger)
+        idx = int(len(scale_val) * args.min_scale_pct)  # 0.1 percentile (default)
+        min_scale = np.argsort(scale_val)[idx]
+        tune_time_knn = time.time() - start
+
+        logger.info(f'\nmin. scale: {min_scale}')
+        logger.info(f'\ntune time (KNN): {tune_time_knn:.3f}s')
+    else:
+        tune_time_knn = 0
 
     # tune delta
     if args.delta:
         if args.model == 'kgbm':
-            loc_val = model_val.loc_val_
-            scale_val = model_val.scale_val_
-        else:
-            if args.model in ['constant', 'knn']:
+            loc_val, scale_val = model_val.loc_val_, model_val.scale_val_
+        elif args.model in ['constant', 'ngboost', 'pgbm']:
+            if args.model == 'constant':
                 model_val = clone(model).set_params(**best_params).fit(X_train, y_train)
             loc_val, scale_val = get_loc_scale(model_val, args.model, X=X_val, y=y_train,
                                                verbose=args.verbose, logger=logger)
+
         delta, delta_op, tune_time_delta = tune_delta(loc=loc_val, scale=scale_val, y=y_val,
                                                       verbose=args.verbose, logger=logger)
 
+        logger.info(f'\nmin. scale (validation): {min_scale:.3f}s')
         logger.info(f'\nbest delta: {delta}, op: {delta_op}')
         logger.info(f'tune time (delta): {tune_time_delta:.3f}s')
     else:
@@ -325,11 +345,12 @@ def experiment(args, logger, out_dir):
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')
 
-    total_build_time = tune_time + tune_time_kgbm + tune_time_delta + train_time
+    total_build_time = tune_time + tune_time_kgbm + tune_time_knn + tune_time_delta + train_time
 
     # predict: compute location and scale
     start = time.time()
-    loc, scale = get_loc_scale(model, args.model, X=X_test, y=y_train, verbose=args.verbose, logger=logger)
+    loc, scale = get_loc_scale(model, args.model, X=X_test, y=y_train,
+                               min_scale=min_scale, verbose=args.verbose, logger=logger)
 
     # add/multiply delta
     if args.delta:
@@ -434,6 +455,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', type=int, default=0)
     parser.add_argument('--tree_type', type=str, default='lgb')
     parser.add_argument('--affinity', type=str, default='unweighted')
+    parser.add_argument('--min_scale_pct', type=float, default=0.001)
 
     # Extra settings
     parser.add_argument('--verbose', type=int, default=1)

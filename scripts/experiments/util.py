@@ -287,6 +287,7 @@ def get_method_identifier(model, exp_params):
 
     Input
         model: str, model name.
+        exp_params: dict, method parameters.
     """
     settings = {}
 
@@ -299,6 +300,7 @@ def get_method_identifier(model, exp_params):
 
     elif model == 'knn':
         settings['tree_type'] = exp_params['tree_type']
+        settings['min_scale_pct'] = exp_params['min_scale_pct']
 
     if exp_params['delta']:
         settings['delta'] = exp_params['delta']

@@ -139,9 +139,10 @@ if __name__ == '__main__':
     parser.add_argument('--skip', type=str, nargs='+', default=['heart'])
     parser.add_argument('--fold', type=int, nargs='+', default=[1, 2, 3, 4, 5])
     parser.add_argument('--model', type=str, nargs='+', default=['constant', 'kgbm', 'knn', 'ngboost', 'pgbm'])
-    parser.add_argument('--delta', type=str, default=0)
+    parser.add_argument('--delta', type=int, default=0)
+    parser.add_argument('--min_scale_pct', type=float, nargs='+', default=[0.001])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
-    parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted', 'uniform'])
+    parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted', 'weighted'])
 
     args = parser.parse_args()
     main(args)
