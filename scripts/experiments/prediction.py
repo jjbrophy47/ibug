@@ -285,6 +285,7 @@ def experiment(args, logger, out_dir):
         model_val = KGBM(verbose=args.verbose, logger=logger).fit(model_val, X_train, y_train,
                                                                   X_val=X_val, y_val=y_val)
         best_k = model_val.k_
+        min_scale = model_val.min_scale_
         tune_time_kgbm = time.time() - start
 
         logger.info(f'\nbest k: {best_k}')
@@ -319,7 +320,7 @@ def experiment(args, logger, out_dir):
 
     model = clone(model).set_params(**best_params).fit(X_train, y_train)
     if args.model == 'kgbm':  # wrap model
-        model = KGBM(k=best_k, verbose=args.verbose, logger=logger).fit(model, X_train, y_train)
+        model = KGBM(k=best_k, min_scale=min_scale, verbose=args.verbose, logger=logger).fit(model, X_train, y_train)
 
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')

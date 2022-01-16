@@ -23,7 +23,7 @@ class KGBM(Estimator):
     """
     def __init__(self, k=100, loc_type='gbm', affinity='unweighted', logger=None, verbose=0,
                  k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201], scoring='nll',
-                 eps=1e-15):
+                 min_scale=1e-15, eps=1e-15):
         """
         Input
             k: int, no. neighbors to consider for uncertainty estimation.
@@ -33,14 +33,15 @@ class KGBM(Estimator):
             verbose: int, verbosity level.
             k_params: list, k values to try during tuning.
             scoring: str, metric to score probabilistic forecasts.
-            eps: float, Addendum to scale value to avoid 0 scale.
+            min_scale: float, Minimum scale value.
+            eps: float, Addendum to scale value.
         """
         assert k > 0
         assert loc_type in ['gbm', 'knn']
         assert affinity in ['unweighted', 'weighted']
         assert isinstance(k_params, list) and len(k_params) > 0
         assert scoring in ['nll', 'crps']
-        assert eps > 0
+        assert min_scale > 0
 
         self.k = k
         self.loc_type = loc_type
@@ -49,6 +50,7 @@ class KGBM(Estimator):
         self.verbose = verbose
         self.k_params = k_params
         self.scoring = scoring
+        self.min_scale = min_scale
         self.eps = eps
 
         if affinity == 'weighted':
@@ -104,6 +106,7 @@ class KGBM(Estimator):
             self.k_ = self._tune_k(X=X_val, y=y_val, k_params=k_params, scoring=self.scoring)
         else:
             self.k_ = self.k
+            self.min_scale_ = self.min_scale
 
         return self
 
@@ -155,18 +158,22 @@ class KGBM(Estimator):
             loc[i] = np.mean(train_vals[-self.k:])
             scale[i] = np.std(train_vals[-self.k:])
 
-            # handle extremely small scale value (do not use during tuning!):
-            if scale[i] <= self.eps:
-                if self.verbose > 0:
-                    if self.logger:
-                        self.logger.info(f'[KGBM Warning] S.D. < {self.eps}, increasing k...')
-                    else:
-                        print(f'[KGBM Warning] S.D. < {self.eps}, increasing k...')
+            # handle extremely small scale value
+            if scale[i] <= self.min_scale_:
+                scale[i] = self.min_scale_
 
-                j = 1
-                while scale[i] <= self.eps:
-                    scale[i] = np.std(train_vals[-self.k - j:])
-                    j += 1
+            # # handle extremely small scale value (do not use during tuning!)
+            # if scale[i] <= self.eps:
+            #     if self.verbose > 0:
+            #         if self.logger:
+            #             self.logger.info(f'[KGBM Warning] S.D. < {self.eps}, increasing k...')
+            #         else:
+            #             print(f'[KGBM Warning] S.D. < {self.eps}, increasing k...')
+
+            #     j = 1
+            #     while scale[i] <= self.eps:
+            #         scale[i] = np.std(train_vals[-self.k - j:])
+            #         j += 1
 
             # display progress
             if (i + 1) % 100 == 0 and self.verbose > 0:
@@ -243,6 +250,7 @@ class KGBM(Estimator):
 
             self.loc_val_ = loc[:, best_k_idx]
             self.scale_val_ = scale[:, best_k_idx]
+            self.min_scale_ = np.min(self.scale_val_)
 
             if self.verbose > 0:
                 if self.logger:
@@ -265,8 +273,12 @@ class KGBM(Estimator):
         d['affinity'] = self.affinity
         d['k_params'] = self.k_params
         d['scoring'] = self.scoring
+        d['min_scale'] = self.min_scale
+        d['eps'] = self.eps
         if hasattr(self, 'k_'):
             d['k_'] = self.k_
+        if hasattr(self, 'min_scale_'):
+            d['min_scale_'] = self.min_scale_
         return d
 
 
