@@ -1,6 +1,5 @@
 """
 Model performance.
-TODO: V4 - add min. scale to KGBM and KNN.
 """
 import os
 import sys
@@ -22,7 +21,6 @@ from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 from sklearn.neighbors import KNeighborsRegressor
 from ngboost import NGBRegressor
-from pgbm import PGBMRegressor
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -418,6 +416,9 @@ def experiment(args, logger, out_dir):
 
 
 def main(args):
+
+    if args.model == 'pgbm':
+        from pgbm import PGBMRegressor
 
     # create method identifier
     method_name = util.get_method_identifier(args.model, vars(args))
