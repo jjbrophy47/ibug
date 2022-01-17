@@ -5,9 +5,7 @@ dataset=$2
 delta=$3
 
 dataset_list=('ames_housing' 'cal_housing' 'concrete' 'energy' 'heart' 'kin8nm'
-              'life' 'naval' 'obesity' 'online_news' 'power' 'protein'
-              'synth_regression' 'wine' 'yacht')
-dataset_list=('naval' 'obesity' 'online_news' 'power' 'protein'
+              'life' 'msd' 'naval' 'obesity' 'online_news' 'power' 'protein'
               'synth_regression' 'wine' 'yacht')
 fold_list=(1 2 3 4 5)
 

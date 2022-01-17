@@ -295,6 +295,7 @@ def get_method_identifier(model, exp_params):
         settings['tree_type'] = exp_params['tree_type']
 
     elif model == 'kgbm':
+        settings['tree_frac'] = exp_params['tree_frac']
         settings['affinity'] = exp_params['affinity']
         settings['tree_type'] = exp_params['tree_type']
 

@@ -21,37 +21,45 @@ class KGBM(Estimator):
         Wrapper around any standard GBM model enabling probabilistic forecasting
         using the k-nearest neighbors to a given test example in latent space.
     """
-    def __init__(self, k=100, loc_type='gbm', affinity='unweighted', logger=None, verbose=0,
+    def __init__(self, k=100, tree_frac=1.0, loc_type='gbm', affinity='unweighted',
                  k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201], scoring='nll',
-                 min_scale=1e-15, eps=1e-15):
+                 min_scale=1e-15, eps=1e-15, random_state=1, verbose=0, logger=None):
         """
         Input
             k: int, no. neighbors to consider for uncertainty estimation.
+            tree_frac: float, Fraction of trees to use for the affinity computation
             loc_type: str, prediction should come from original tree or mean of neighbors.
+            tree_frac: str, prediction should come from original tree or mean of neighbors.
             affinity: str, If 'weighted', weight affinity by leaf weights.
-            logger: object, If not None, output to logger.
-            verbose: int, verbosity level.
             k_params: list, k values to try during tuning.
             scoring: str, metric to score probabilistic forecasts.
             min_scale: float, Minimum scale value.
             eps: float, Addendum to scale value.
+            random_state: int, Seed for random number generation to enhance reproducibility.
+            verbose: int, verbosity level.
+            logger: object, If not None, output to logger.
         """
         assert k > 0
+        assert tree_frac > 0 and tree_frac <= 1.0
         assert loc_type in ['gbm', 'knn']
         assert affinity in ['unweighted', 'weighted']
         assert isinstance(k_params, list) and len(k_params) > 0
         assert scoring in ['nll', 'crps']
         assert min_scale > 0
+        assert eps > 0
+        assert isinstance(random_state, int) and random_state > 0
 
         self.k = k
+        self.tree_frac = tree_frac
         self.loc_type = loc_type
         self.affinity = affinity
-        self.logger = logger
-        self.verbose = verbose
         self.k_params = k_params
         self.scoring = scoring
         self.min_scale = min_scale
         self.eps = eps
+        self.random_state = random_state
+        self.verbose = verbose
+        self.logger = logger
 
         if affinity == 'weighted':
             raise ValueError("'unweighted' affinity not yet implemented!")
@@ -67,6 +75,9 @@ class KGBM(Estimator):
         """
         super().fit(model, X, y)
         X, y = util.check_data(X, y, objective=self.model_.objective)
+
+        # pseudo-random number generator
+        self.rng_ = np.random.default_rng(self.random_state)
 
         # save results
         self.n_train_ = X.shape[0]
@@ -97,6 +108,14 @@ class KGBM(Estimator):
                 leaf_dict[boost_idx][leaf_idx] = np.where(train_leaves[:, boost_idx] == leaf_idx)[0]
 
         self.leaf_dict_ = leaf_dict
+
+        # randomly select a subset of trees to sample
+        if self.tree_frac < 1.0:
+            n_idxs = int(self.n_boost_ * self.tree_frac)
+            tree_idxs = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)
+        else:
+            tree_idxs = np.arange(self.n_boost_)
+        self.tree_idxs_ = tree_idxs
 
         # tune k
         k_params = [k for k in self.k_params if k <= len(X)]
@@ -151,29 +170,16 @@ class KGBM(Estimator):
             affinity[:] = 0  # reset affinity
 
             # get nearest neighbors
-            for j in range(test_leaves.shape[1]):  # per tree
-                affinity[leaf_dict[j][test_leaves[i, j]]] += 1
+            for tree_idx in self.tree_idxs_:  # per tree
+                affinity[leaf_dict[tree_idx][test_leaves[i, tree_idx]]] += 1
             train_vals = vals[np.argsort(affinity)]
 
             loc[i] = np.mean(train_vals[-self.k:])
             scale[i] = np.std(train_vals[-self.k:])
 
-            # handle extremely small scale value
+            # handle extremely small scale values
             if scale[i] <= self.min_scale_:
                 scale[i] = self.min_scale_
-
-            # # handle extremely small scale value (do not use during tuning!)
-            # if scale[i] <= self.eps:
-            #     if self.verbose > 0:
-            #         if self.logger:
-            #             self.logger.info(f'[KGBM Warning] S.D. < {self.eps}, increasing k...')
-            #         else:
-            #             print(f'[KGBM Warning] S.D. < {self.eps}, increasing k...')
-
-            #     j = 1
-            #     while scale[i] <= self.eps:
-            #         scale[i] = np.std(train_vals[-self.k - j:])
-            #         j += 1
 
             # display progress
             if (i + 1) % 100 == 0 and self.verbose > 0:
@@ -220,8 +226,8 @@ class KGBM(Estimator):
             affinity[:] = 0  # reset affinity
 
             # get nearest neighbors
-            for j in range(test_leaves.shape[1]):  # per tree
-                affinity[leaf_dict[j][test_leaves[i, j]]] += 1
+            for tree_idx in self.tree_idxs_:  # per tree
+                affinity[leaf_dict[tree_idx][test_leaves[i, tree_idx]]] += 1
             train_idxs = np.argsort(affinity)
 
             for j, k in enumerate(k_params):
@@ -267,8 +273,8 @@ class KGBM(Estimator):
         Return a dict of parameter values.
         """
         d = {}
-        d['k_params'] = self.k_params
         d['k'] = self.k
+        d['tree_frac'] = self.tree_frac
         d['loc_type'] = self.loc_type
         d['affinity'] = self.affinity
         d['k_params'] = self.k_params

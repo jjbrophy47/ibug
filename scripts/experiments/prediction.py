@@ -33,7 +33,7 @@ EPSILON = 1e-15
 
 
 def tune_delta(loc, scale, y, ops=['add', 'mult'],
-               delta_vals=[1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.0, 1e0, 1e2],
+               delta_vals=[1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.0, 1e0, 1e1, 1e2, 1e3],
                scoring='nll', verbose=0, logger=None):
     """
     Add or multiply detla to scale values.
@@ -161,6 +161,7 @@ def get_model(args, n_train):
         params = {'n_estimators': [10, 25, 50, 100, 200, 500, 1000]}
 
     elif args.model == 'pgbm':
+        from pgbm import PGBMRegressor  # dynamic import (some machines cannot install pgbm)
         model = PGBMRegressor(n_estimators=2000, learning_rate=0.1, max_leaves=16,
                               max_bin=64, verbose=args.verbose + 1)
         params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
@@ -282,8 +283,8 @@ def experiment(args, logger, out_dir):
         start = time.time()
 
         model_val = clone(model).set_params(**best_params).fit(X_train, y_train)
-        model_val = KGBM(verbose=args.verbose, logger=logger).fit(model_val, X_train, y_train,
-                                                                  X_val=X_val, y_val=y_val)
+        model_val = KGBM(tree_frac=args.tree_frac, verbose=args.verbose,
+                         logger=logger).fit(model_val, X_train, y_train, X_val=X_val, y_val=y_val)
         best_k = model_val.k_
         min_scale = model_val.min_scale_
         tune_time_kgbm = time.time() - start
@@ -323,7 +324,6 @@ def experiment(args, logger, out_dir):
         delta, delta_op, tune_time_delta = tune_delta(loc=loc_val, scale=scale_val, y=y_val,
                                                       verbose=args.verbose, logger=logger)
 
-        logger.info(f'\nmin. scale (validation): {min_scale:.3f}s')
         logger.info(f'\nbest delta: {delta}, op: {delta_op}')
         logger.info(f'tune time (delta): {tune_time_delta:.3f}s')
     else:
@@ -338,7 +338,8 @@ def experiment(args, logger, out_dir):
 
     model = clone(model).set_params(**best_params).fit(X_train, y_train)
     if args.model == 'kgbm':  # wrap model
-        model = KGBM(k=best_k, min_scale=min_scale, verbose=args.verbose, logger=logger).fit(model, X_train, y_train)
+        model = KGBM(k=best_k, tree_frac=args.tree_frac, min_scale=min_scale,
+                     verbose=args.verbose, logger=logger).fit(model, X_train, y_train)
 
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')
@@ -417,9 +418,6 @@ def experiment(args, logger, out_dir):
 
 def main(args):
 
-    if args.model == 'pgbm':
-        from pgbm import PGBMRegressor
-
     # create method identifier
     method_name = util.get_method_identifier(args.model, vars(args))
 
@@ -455,6 +453,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='kgbm')
     parser.add_argument('--delta', type=int, default=0)
     parser.add_argument('--tree_type', type=str, default='lgb')
+    parser.add_argument('--tree_frac', type=float, default=1.0)
     parser.add_argument('--affinity', type=str, default='unweighted')
     parser.add_argument('--min_scale_pct', type=float, default=0.001)
 
