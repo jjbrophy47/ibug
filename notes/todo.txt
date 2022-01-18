@@ -1,0 +1,135 @@
+Influence Estimation
+---
+- Add mention of comparison to LeafInfluence (abstract). DONE.
+- Maybe provide some detail about the empirical measures and how rankings
+	may change depending on the measure (introduction). DONE.
+- Make sure sheer number of methods compared comes through (introduction). DONE.
+- Remove Z* from early introduction. DONE.
+- De-emphasize qualitative analysis from DL papers in introduction. DONE.
+- Un-hyphenate "deep-learning". DONE.
+- Change order of empirical findings; our main finding is NOT that
+	LeafInfluence is a poor approximation of LOO (introduction). DONE.
+- DShap is not "more principled", it gives an average LOO given more context (Sec. 2.1). DONE.
+	* Could do "Another approach..."; or something more subtle. DONE.
+- Check capitalization of "Representer-Point" and "Influence Functions". DONE.
+- Merge last par. of sec. 3.1 to prev. par. DONE.
+- Mention LeafInfluence-SP before BoostIn, fully defining or providing a preview
+	in the LeafInfluence section (Sec. 3.1). DONE.
+- Two examples are TREATED identically, sec. 3.3. DONE.
+- How to interpret Figure 5, make text clearer about the significance. DONE.
+- Potentially summarize experiment descriptions before Figure 2; then supplementary
+	analysis comes after. Still mention extra analysis for each sec. in appendix (experiments). DONE.
+	* Keep backup. DONE.
+	* Move runtime comparison to earlier in supplementary analysis. DONE.
+
+
+Uncertainty GBRTs
+---
+
+- Read LSF paper. DONE.
+	* https://openreview.net/forum?id=VD3TMzyxKK
+- Read Forecasting w/ Trees paper. DONE.
+- Read Meinhausen paper.
+- Read quantile regression forests paper.
+- Read conformal predictions paper.
+- Read about M5 prediction dataset.
+
+- Motivation of KGBM:
+	* More interpretable predictions (point estimate + uncertainty).
+	* Forecasting models are increasingly popular for high-stakes applications
+		such as medical, weather, m5 predictions.
+	* Trees outperform DL (Kaggle, M5 prediction, used in industry).
+	* Libraries are "battle-hardened".
+		+ Can be used as black-box learners, allowing users to
+			focus on feature engineering, hyper parameter tuning, etc.
+		+ Fast to train.
+		+ Less investment than trying to select a DL architecture,
+		 	which is more of an art.
+
+
+V5
+
+- Potential changes
+	* Increase speed, options:
+		+ Use sparse vectors for affinities (check sparseness of affinity vectors).
+		+ Randomly sample a fraction of trees to approx. exact affinity vector.
+		+ Save leaf weights and only sample from leaves with a small no. examples.
+	* Get PGBM working on Talapas.
+	* Use fixed hyper parameters for LGB as PGBM and just tune no. iter.
+
+
+V4
+
+- Results
+	* Using min. scale for KNN makes KNN an INEFFECTIVE uncertainty estimator.
+	* The min. scale method for KGBM is very EFFECTIVE.
+	* Even w/ delta, KGBM is generally outperforming NGBoost and PGBM.
+		+ Constant w/ delta is much more effective than constant w/o delta.
+		+ KGBM w/ delta is not any more effective than KGBM w/o delta,
+			except for the Concrete dataset.
+
+- Changes made
+	* Use min. scale value when predicting to prevent catastrophic failure.
+		+ KGBM: Set min. scale value to be the min. scale value on validation data.
+		+ KNN: Set min. scale value to be the 0.1 (default) percentile of sorted (asc.)
+			scale values computed on validation data.
+	* Delta was missing 1e1 in values to search through.
+		+ Also added 1e-8, 1e-7, and 1e3 to list of delta values.
+
+- Potential changes
+	* Set scale values < min. s.d. Min. s.d. could be: value at 0.1 percentile
+		of (sorted) squared errors on validation data (0.1% of predictions
+                 in expectation will have this exact same minimum uncertainty prediction).
+                 This percentage can be a hyper-parameter for KGBM.
+	* Add more datasets.
+	* Remove datasets: online_news, synth_regression.
+	* KGBM: CV tuning.
+
+
+V3
+
+- Results
+	* Catastrophic failures can happen when the k-nearest neighbors all have
+		the same or very similar values (see setting a min. s.d. above).
+	* KGBM is better than the other methods on average. NGBoost is better
+		on very small (<1,000 samples) datasets.
+	* PGBM slightly better than NGBoost.
+	* Constant w/ delta can be better than everything sometimes!
+	* MSD is missing for PGBM, and KGBM and NGBoost delta variants.
+	* KNN is fastest, followed by constant; KGBM and NGBoost are about even;
+		PGBM is slightly faster than KGBM and NGBoost.
+
+- Changes made
+	* Added delta variants.
+	* Train on train+val data.
+	* Create 5 non-overlapping folds per dataset.
+	* NGBoost: find n_iter on val. data (max. 2k), then train on train+val data.
+	* PGBM: find n_iter on val. data (max. 2k), then train on train+val data.
+		+ Fix hyperparameters to be the same as in the original paper.
+	* Constant and KGBM's LGB, and KNN are tuned using gridsearch.
+	* Changed synth_regression to "Friedman1" problem from SKLearn.
+	* Removed heart dataset.
+	* Delta tuned via grid search on validation data using values
+		[1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0, 1e0, 1e1, 1e2],
+		and operation tuned using values ['add', 'mult'].
+
+
+V2
+
+- Results
+	* KGBM is best on avg. for CRPS, NLL, and RMSE.; effect sizes are small but
+		 the significant advantage is pretty consistent.
+	* In terms of time compared with NGBoost, it is a wash overall;
+		KGBM is sometimes orders of magnitude faster, slower, or tied.
+	* NGBoost does better on SMALL datasets (e.g., <1,000 examples).
+	* Synthetic regression dataset is too easy; no distinction between methods.
+	* Online news dataset is too hard; no distinction between methods.
+	* KNN approaches suffer when the targets for the k-nearest neighbors of a prediction are
+		all the same -> zero variance. This can result in a NaN NLL or CRPS if an unseen
+		example has a different target value. Mitigations:
+		+ Add a very small amount of variance to the scale value (e.g., 1e-5 up to 1e-15).
+		+ Add bias scale term to all or extremely confident scale predictions.
+		+ Tune k more rigorously (i.e., using cross-validation or a larger val. size).
+		+ Increase k until std. dev. > eps (e.g., 1e-15); do not use during tuning
+			since this could lead to very small values of k.
+		+ Some combination of the above.

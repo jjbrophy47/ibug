@@ -19,6 +19,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
+from lightgbm import LGBMRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from ngboost import NGBRegressor
 
@@ -174,32 +175,36 @@ def get_model(args, n_train):
         params['n_neighbors'] = [k for k in params['n_neighbors'] if k <= n_train]
 
     elif args.model in ['constant', 'kgbm']:
-        model = util.get_model(tree_type=args.tree_type,
-                               random_state=args.random_state)
-
-        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000]}
 
         if args.tree_type == 'lgb':
-            params['max_depth'] = [-1]
-            params['num_leaves'] = [15, 31, 61, 91]
-            params['learning_rate'] = [0.01, 0.1]
+            model = LGBMRegressor(n_estimators=2000, learning_rate=0.1, max_depth=-1,
+                                  num_leaves=16, max_bin=64, random_state=args.random_state)
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
+                      'num_leaves': [15, 31, 61, 91],
+                      'learning_rate': [0.01, 0.1],
+                      'max_bin': [255]}
 
-        elif args.tree_type == 'sgb':
-            params['max_iter'] = params['n_estimators']
-            params['max_depth'] = [None]
-            params['max_leaf_nodes'] = [15, 31, 61, 91]
-            params['max_bins'] = [50, 100, 250]
-            del params['n_estimators']
+        else:
+            model = util.get_model(tree_type=args.tree_type,
+                                   random_state=args.random_state)
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000]}
 
-        elif args.tree_type == 'cb':
-            params['learning_rate'] = [0.1, 0.3, 0.6, 0.9]
-            params['max_depth'] = [2, 3, 4, 5, 6, 7]
+            if args.tree_type == 'sgb':
+                params['max_iter'] = params['n_estimators']
+                params['max_depth'] = [None]
+                params['max_leaf_nodes'] = [15, 31, 61, 91]
+                params['max_bins'] = [50, 100, 250]
+                del params['n_estimators']
 
-        elif args.tree_type == 'xgb':
-            params['max_depth'] = [2, 3, 4, 5, 6, 7]
+            elif args.tree_type == 'cb':
+                params['learning_rate'] = [0.1, 0.3, 0.6, 0.9]
+                params['max_depth'] = [2, 3, 4, 5, 6, 7]
 
-        elif args.tree_type == 'skgbm':
-            params['max_depth'] = [2, 3, 4, 5, 6, 7]
+            elif args.tree_type == 'xgb':
+                params['max_depth'] = [2, 3, 4, 5, 6, 7]
+
+            elif args.tree_type == 'skgbm':
+                params['max_depth'] = [2, 3, 4, 5, 6, 7]
 
     else:
         raise ValueError('model unknown: {}'.format(args.model))
@@ -232,7 +237,7 @@ def experiment(args, logger, out_dir):
     model, param_grid = get_model(args, n_train=len(X_train))
     logger.info('\nmodel: {}, param_grid: {}'.format(args.model, param_grid))
 
-    if args.model in ['constant', 'knn', 'kgbm']:  # gridsearch
+    if args.model == 'knn' or (args.model in ['constant', 'kgbm'] and args.gridsearch):
         cv_results = []
         param_dicts = list(product_dict(**param_grid))
 
@@ -252,6 +257,13 @@ def experiment(args, logger, out_dir):
 
         best_params = df.astype(object).iloc[0].to_dict()
         del best_params['score']
+        logger.info(f'\nbest params: {best_params}')
+
+    elif args.model in ['constant', 'kgbm'] and not args.gridsearch:
+        model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
+                                     eval_metric='mse', early_stopping_rounds=args.n_stopping_rounds)
+        best_n_estimators = model_val.best_iteration_
+        best_params = {'n_estimators': best_n_estimators}
         logger.info(f'\nbest params: {best_params}')
 
     elif args.model == 'pgbm':  # PGBM, only tune no. iterations
@@ -451,18 +463,21 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='concrete')
     parser.add_argument('--fold', type=int, default=1)
     parser.add_argument('--model', type=str, default='kgbm')
-    parser.add_argument('--delta', type=int, default=0)
-    parser.add_argument('--tree_type', type=str, default='lgb')
-    parser.add_argument('--tree_frac', type=float, default=1.0)
-    parser.add_argument('--affinity', type=str, default='unweighted')
-    parser.add_argument('--min_scale_pct', type=float, default=0.001)
 
-    # Extra settings
-    parser.add_argument('--verbose', type=int, default=1)
-    parser.add_argument('--random_state', type=int, default=1)
-    parser.add_argument('--val_frac', type=float, default=0.2)
-    parser.add_argument('--weights', type=str, default='uniform')
-    parser.add_argument('--n_stopping_rounds', type=int, default=25)
+    # Method settings
+    parser.add_argument('--delta', type=int, default=0)  # affects ALL
+    parser.add_argument('--tree_type', type=str, default='lgb')  # KGBM, constant
+    parser.add_argument('--tree_frac', type=float, default=1.0)  # KGBM
+    parser.add_argument('--affinity', type=str, default='unweighted')  # KGBM
+    parser.add_argument('--min_scale_pct', type=float, default=0.001)  # KNN
+
+    # Default settings
+    parser.add_argument('--val_frac', type=float, default=0.2)  # ALL
+    parser.add_argument('--random_state', type=int, default=1)  # ALL
+    parser.add_argument('--verbose', type=int, default=1)  # ALL
+    parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, KGBM, constant
+    parser.add_argument('--gridsearch', type=int, default=0)  # KGBM, KNN, constant
+    parser.add_argument('--weights', type=str, default='uniform')  # KNN
 
     args = parser.parse_args()
     main(args)

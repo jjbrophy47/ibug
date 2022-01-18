@@ -21,18 +21,19 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
         logger.info('\nGathering results...')
 
     experiment_settings = list(product(*[args.model, args.tree_type, args.affinity,
-                                         args.min_scale_pct]))
+                                         args.min_scale_pct, args.tree_frac]))
 
     visited = set()
     results = []
 
     for items in tqdm(experiment_settings, disable=not progress_bar):
-        model, tree_type, affinity, min_scale_pct = items
+        model, tree_type, affinity, min_scale_pct, tree_frac = items
 
         template = {'tree_type': tree_type,
                     'affinity': affinity,
                     'delta': args.delta,
-                    'min_scale_pct': min_scale_pct}
+                    'min_scale_pct': min_scale_pct,
+                    'tree_frac': tree_frac}
 
         method_id = exp_util.get_method_identifier(model, template)
         method_dir = os.path.join(exp_dir, method_id)
