@@ -476,7 +476,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_state', type=int, default=1)  # ALL
     parser.add_argument('--verbose', type=int, default=1)  # ALL
     parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, KGBM, constant
-    parser.add_argument('--gridsearch', type=int, default=0)  # KGBM, KNN, constant
+    parser.add_argument('--gridsearch', type=int, default=0)  # KGBM, constant
     parser.add_argument('--weights', type=str, default='uniform')  # KNN
 
     args = parser.parse_args()

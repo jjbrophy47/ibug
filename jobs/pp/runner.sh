@@ -3,6 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --account=uoml
+module load gcc/7.3
 module load miniconda
 conda activate jbrophy-20210713
 

@@ -1,5 +1,10 @@
 Influence Estimation
 ---
+- Combine last sentence of Sec. 3.2. to previous paragraph (Sec. 3.2).
+- Make new paragraph in after equations in Sec. 3.2.1 and merge last paragraph
+	to the previous one (Sec. 3.2.1).
+- Fix "regrresion" (Sec. 3.3, footnote 6).
+
 - Add mention of comparison to LeafInfluence (abstract). DONE.
 - Maybe provide some detail about the empirical measures and how rankings
 	may change depending on the measure (introduction). DONE.
@@ -27,12 +32,33 @@ Uncertainty GBRTs
 ---
 
 - Read LSF paper. DONE.
-	* https://openreview.net/forum?id=VD3TMzyxKK
+	* LSF groups examples based on only the OUTPUT of the model.
+	* This does not group by example similarity/affinity:
+		+ See reviewer eTYD - 2) https://openreview.net/forum?id=VD3TMzyxKK
 - Read Forecasting w/ Trees paper. DONE.
+	* Written by LSF authors, gives context into forecasting with trees.
 - Read Meinhausen paper.
 - Read quantile regression forests paper.
+	* Special case of LSF for RF models.
 - Read conformal predictions paper.
 - Read about M5 prediction dataset.
+- Read NGBoost paper. DONE.
+	* NGBoost model estimates the parameters of a distribution.
+	* Distributional parameters must be chosen beforehand.
+		+ An Ensemble of trees is built for each parameter.
+- Read XGBoostLSS paper. DONE.
+	* XBoostLSS and CatBoostLSS models estimate the parameters of a distribution.
+- Read PGBM paper. DONE.
+	* The model is NOT a wrapper, but still optimizes MSE.
+	* Computes location and scale for each prediction using the stochasticity of leaves.
+		+ Any distribution that uses location and scale can be used.
+		+ Theoretically, a different distribution could be used for each prediction,
+			but in practice, it is more likely to optimize a distribution
+			across all examples.
+	* Experiments use max_leaves=16 and max_bin=64 likely to speed up computation.
+		+ May be really slow for a larger number of leaves and/or max. no. bins.
+	* Implemented in PyTorch and thus can optimize arbitrary loss functions.
+- Read M5 accuracy competition: Results, findings, and conclusions.
 
 - Motivation of KGBM:
 	* More interpretable predictions (point estimate + uncertainty).
