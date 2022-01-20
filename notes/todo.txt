@@ -1,10 +1,5 @@
 Influence Estimation
 ---
-- Combine last sentence of Sec. 3.2. to previous paragraph (Sec. 3.2).
-- Make new paragraph in after equations in Sec. 3.2.1 and merge last paragraph
-	to the previous one (Sec. 3.2.1).
-- Fix "regrresion" (Sec. 3.3, footnote 6).
-
 - Add mention of comparison to LeafInfluence (abstract). DONE.
 - Maybe provide some detail about the empirical measures and how rankings
 	may change depending on the measure (introduction). DONE.
@@ -20,7 +15,11 @@ Influence Estimation
 - Merge last par. of sec. 3.1 to prev. par. DONE.
 - Mention LeafInfluence-SP before BoostIn, fully defining or providing a preview
 	in the LeafInfluence section (Sec. 3.1). DONE.
+- Combine last sentence of Sec. 3.2. to previous paragraph (Sec. 3.2). DONE.
+- Make new paragraph in after equations in Sec. 3.2.1 and merge last paragraph
+	to the previous one (Sec. 3.2.1). DONE.
 - Two examples are TREATED identically, sec. 3.3. DONE.
+- Fix "regresion" (Sec. 3.3, footnote 6). DONE.
 - How to interpret Figure 5, make text clearer about the significance. DONE.
 - Potentially summarize experiment descriptions before Figure 2; then supplementary
 	analysis comes after. Still mention extra analysis for each sec. in appendix (experiments). DONE.
@@ -41,7 +40,7 @@ Uncertainty GBRTs
 - Read quantile regression forests paper.
 	* Special case of LSF for RF models.
 - Read conformal predictions paper.
-- Read about M5 prediction dataset.
+- Read about M5 prediction dataset. DONE.
 - Read NGBoost paper. DONE.
 	* NGBoost model estimates the parameters of a distribution.
 	* Distributional parameters must be chosen beforehand.
@@ -75,6 +74,17 @@ Uncertainty GBRTs
 
 V5
 
+- Changes made
+	* Added "grid_search" arg (constant, KGBM, PGBM).
+		+ Set grid search values to be consistent across models.
+	* Added "tree_frac" arg (KGBM) for faster predictions.
+	* PGBM is now working on Talapas!
+	* Getting sample statistics straight from the prediction (PGBM) instead of
+		approximating them from 1,000 forecasts.
+	* Set "min_scale_pct" default to 0 (deactivate) for KNN.
+		+ Tuning "delta" should help with the catastrophic failures.
+	* Added 301, 401, 501, 601, and 701 to list of k values to search (KGBM).
+
 - Potential changes
 	* Increase speed, options:
 		+ Use sparse vectors for affinities (check sparseness of affinity vectors).
@@ -82,6 +92,10 @@ V5
 		+ Save leaf weights and only sample from leaves with a small no. examples.
 	* Get PGBM working on Talapas.
 	* Use fixed hyper parameters for LGB as PGBM and just tune no. iter.
+	* Add XGBoostLSS, LightGBMLSS, or CatboostLSS as an additional baseline.
+	* Add LSF as an additional baseline.
+	* Add conformal predictions as an additional baseline.
+	* Add datasets: bike, communities, superconductor, star.
 
 
 V4
@@ -93,6 +107,7 @@ V4
 		+ Constant w/ delta is much more effective than constant w/o delta.
 		+ KGBM w/ delta is not any more effective than KGBM w/o delta,
 			except for the Concrete dataset.
+		+ Delta somewhat helps out NGBoost and PGBM, but not much.
 
 - Changes made
 	* Use min. scale value when predicting to prevent catastrophic failure.

@@ -31,9 +31,10 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
 
         template = {'tree_type': tree_type,
                     'affinity': affinity,
-                    'delta': args.delta,
                     'min_scale_pct': min_scale_pct,
-                    'tree_frac': tree_frac}
+                    'tree_frac': tree_frac,
+                    'delta': args.delta,
+                    'gridsearch': args.gridsearch}
 
         method_id = exp_util.get_method_identifier(model, template)
         method_dir = os.path.join(exp_dir, method_id)
@@ -78,60 +79,76 @@ def get_plot_dicts(markers=False):
     Return dict for color, line, and labels for each method.
     """
     color = {}
-    color['constant_fd48c03eaa6f667804f917b37f89aa30'] = 'blue'
-    color['constant_334858faf273fcedf1f1a954626ea3c5'] = 'blue'
-    color['kgbm_663cc48c2d48513d9b906dee97427c37'] = 'cyan'  # tf: 1.0, del: 1
-    color['kgbm_ea165ac8a817022c2ac013f13f83e81d'] = 'cyan'  # tf: 1.0, del: 0
-    color['kgbm_73c21532a539b7baa4be98e716a91d18'] = 'cyan'  # tf: 0.5, del: 0
-    color['kgbm_2641e1b8f198bdc326366826f3c37d5e'] = 'cyan'  # tf: 0.1, del: 0
-    color['knn_19f65e07ad4a0f21e2a3b3488e53c947'] = 'orange'
-    color['knn_816312457bd29f7ba532915a9f39aa29'] = 'orange'
-    color['ngboost'] = 'green'
-    color['ngboost_c4ca4238a0b923820dcc509a6f75849b'] = 'green'
-    color['pgbm'] = 'brown'
-    color['pgbm_c4ca4238a0b923820dcc509a6f75849b'] = 'brown'
+    color['constant_7dce9f275106683dabaf1f08543e1590'] = 'blue'  # del=0, gs=0, tt=lgb
+    color['constant_aca6c15e53adb4da131f8e19c52d4338'] = 'blue'  # del=1, gs=0, tt=lgb
+    color['constant_2f29848944ee19df0034c5b92858317b'] = 'blue'  # del=0, gs=1, tt=lgb
+    color['constant_27ebb0dfd1660c84cea9593d646a7175'] = 'blue'  # del=1, gs=1, tt=lgb
+    color['kgbm_a3c550c0f0bbbbb3b1cfb318075c64b8'] = 'cyan'  # del=0, gs=0, other=def.
+    color['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'cyan'  # del=1, gs=0, other=def.
+    color['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'cyan'  # del=0, gs=1, other=def.
+    color['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'cyan'  # del=1, gs=1, other=def.
+    color['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = 'orange'  # del=0, ms=def.
+    color['knn_e2170c02389ba12f975387bc30c99f6e'] = 'orange'  # del=1, ms=def.
+    color['ngboost'] = 'green'  # del=0
+    color['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = 'green'  # del=1
+    color['pgbm'] = 'brown'  # del=0, gs=0
+    color['pgbm_acff7ecceeb4c799d280f7252a2b3585'] = 'brown'  # del=1, gs=0
+    color['pgbm_5e13b5ea212546260ba205c54e1d9559'] = 'brown'  # del=0, gs=1
+    color['pgbm_992d84ddec6882788a2969fca8876a52'] = 'brown'  # del=1, gs=1
 
     line = {}
-    line['constant_fd48c03eaa6f667804f917b37f89aa30'] = '-'
-    line['constant_334858faf273fcedf1f1a954626ea3c5'] = '-'
-    line['kgbm_663cc48c2d48513d9b906dee97427c37'] = '-'  # tf: 1.0, del: 1
-    line['kgbm_ea165ac8a817022c2ac013f13f83e81d'] = '-'  # tf: 1.0, del: 0
-    line['kgbm_73c21532a539b7baa4be98e716a91d18'] = '-'  # tf: 0.5, del: 0
-    line['kgbm_2641e1b8f198bdc326366826f3c37d5e'] = '-'  # tf: 0.1, del: 0
-    line['knn_19f65e07ad4a0f21e2a3b3488e53c947'] = '-'
-    line['knn_816312457bd29f7ba532915a9f39aa29'] = '-'
-    line['ngboost'] = '-'
-    line['ngboost_c4ca4238a0b923820dcc509a6f75849b'] = '-'
-    line['pgbm'] = '-'
-    line['pgbm_c4ca4238a0b923820dcc509a6f75849b'] = '-'
+    line['constant_7dce9f275106683dabaf1f08543e1590'] = '-'  # del=0, gs=0, tt=lgb
+    line['constant_aca6c15e53adb4da131f8e19c52d4338'] = '-'  # del=1, gs=0, tt=lgb
+    line['constant_2f29848944ee19df0034c5b92858317b'] = '-'  # del=0, gs=1, tt=lgb
+    line['constant_27ebb0dfd1660c84cea9593d646a7175'] = '-'  # del=1, gs=1, tt=lgb
+    line['kgbm_a3c550c0f0bbbbb3b1cfb318075c64b8'] = '-'  # del=0, gs=0, other=def.
+    line['kgbm_9e6706ce251feef3fe80af643dba21cd'] = '-'  # del=1, gs=0, other=def.
+    line['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = '-'  # del=0, gs=1, other=def.
+    line['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = '-'  # del=1, gs=1, other=def.
+    line['knn_e1d3a6556cd2fc44117cb551ad070e4f'] = '-'  # del=0, ms=def.
+    line['knn_e4224e67c3aa5dc684499170b7dec6fc'] = '-'  # del=1, ms=def.
+    line['ngboost'] = '-'  # del=0
+    line['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = '-'  # del=1
+    line['pgbm'] = '-'  # del=0, gs=0
+    line['pgbm_acff7ecceeb4c799d280f7252a2b3585'] = '-'  # del=1, gs=0
+    line['pgbm_5e13b5ea212546260ba205c54e1d9559'] = '-'  # del=0, gs=1
+    line['pgbm_992d84ddec6882788a2969fca8876a52'] = '-'  # del=1, gs=1
 
     label = {}
-    label['constant_fd48c03eaa6f667804f917b37f89aa30'] = 'Constant (LGB)'
-    label['constant_334858faf273fcedf1f1a954626ea3c5'] = 'Constant (LGB)'
-    label['kgbm_663cc48c2d48513d9b906dee97427c37'] = 'KGBM (LGB)'  # tf: 1.0, del: 1
-    label['kgbm_ea165ac8a817022c2ac013f13f83e81d'] = 'KGBM (LGB)'  # tf: 1.0, del: 0
-    label['kgbm_73c21532a539b7baa4be98e716a91d18'] = 'KGBM (LGB)'  # tf: 0.5, del: 0
-    label['kgbm_2641e1b8f198bdc326366826f3c37d5e'] = 'KGBM (LGB)'  # tf: 0.1, del: 0
-    label['knn_19f65e07ad4a0f21e2a3b3488e53c947'] = 'KNN'
-    label['knn_816312457bd29f7ba532915a9f39aa29'] = 'KNN'
-    label['ngboost'] = 'NGBoost'
-    label['ngboost_c4ca4238a0b923820dcc509a6f75849b'] = 'NGBoost'
-    label['pgbm'] = 'PGBM'
-    label['pgbm_c4ca4238a0b923820dcc509a6f75849b'] = 'PGBM'
+    label['constant_7dce9f275106683dabaf1f08543e1590'] = 'Constant-L'  # del=0, gs=0, tt=lgb
+    label['constant_aca6c15e53adb4da131f8e19c52d4338'] = 'Constant-LD'  # del=1, gs=0, tt=lgb
+    label['constant_2f29848944ee19df0034c5b92858317b'] = 'Constant-LG'  # del=0, gs=1, tt=lgb
+    label['constant_27ebb0dfd1660c84cea9593d646a7175'] = 'Constant-LDG'  # del=1, gs=1, tt=lgb
+    label['kgbm_a3c550c0f0bbbbb3b1cfb318075c64b8'] = 'KGBM-L'  # del=0, gs=0, other=def.
+    label['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'KGBM-LD'  # del=1, gs=0, other=def.
+    label['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'KGBM-LG'  # del=0, gs=1, other=def.
+    label['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'KGBM-LDG'  # del=1, gs=1, other=def.
+    label['knn_e1d3a6556cd2fc44117cb551ad070e4f'] = 'KNN'  # del=0, ms=def.
+    label['knn_e4224e67c3aa5dc684499170b7dec6fc'] = 'KNN-D'  # del=1, ms=def.
+    label['ngboost'] = 'NGBoost'  # del=0
+    label['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = 'NGBoost-D'  # del=1
+    label['pgbm'] = 'PGBM'  # del=0, gs=0
+    label['pgbm_acff7ecceeb4c799d280f7252a2b3585'] = 'PGBM-D'  # del=1, gs=0
+    label['pgbm_5e13b5ea212546260ba205c54e1d9559'] = 'PGBM-G'  # del=0, gs=1
+    label['pgbm_992d84ddec6882788a2969fca8876a52'] = 'PGBM-DG'  # del=1, gs=1
 
     marker = {}
-    marker['constant_fd48c03eaa6f667804f917b37f89aa30'] = 'o'
-    marker['constant_334858faf273fcedf1f1a954626ea3c5'] = 'o'
-    marker['kgbm_663cc48c2d48513d9b906dee97427c37'] = 'd'  # tf: 1.0, del: 1
-    marker['kgbm_ea165ac8a817022c2ac013f13f83e81d'] = 'd'  # tf: 1.0, del: 0
-    marker['kgbm_73c21532a539b7baa4be98e716a91d18'] = 'd'  # tf: 0.5, del: 0
-    marker['kgbm_2641e1b8f198bdc326366826f3c37d5e'] = 'd'  # tf: 0.1, del: 0
-    marker['knn_19f65e07ad4a0f21e2a3b3488e53c947'] = '1'
-    marker['knn_816312457bd29f7ba532915a9f39aa29'] = '1'
-    marker['ngboost'] = '^'
-    marker['ngboost_c4ca4238a0b923820dcc509a6f75849b'] = '^'
-    marker['pgbm'] = '+'
-    marker['pgbm_c4ca4238a0b923820dcc509a6f75849b'] = 'brown'
+    marker['constant_7dce9f275106683dabaf1f08543e1590'] = 'o'  # del=0, gs=0, tt=lgb
+    marker['constant_aca6c15e53adb4da131f8e19c52d4338'] = 'o'  # del=1, gs=0, tt=lgb
+    marker['constant_2f29848944ee19df0034c5b92858317b'] = 'o'  # del=0, gs=1, tt=lgb
+    marker['constant_27ebb0dfd1660c84cea9593d646a7175'] = 'o'  # del=1, gs=1, tt=lgb
+    marker['kgbm_a3c550c0f0bbbbb3b1cfb318075c64b8'] = 'd'  # del=0, gs=0, other=def.
+    marker['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'd'  # del=1, gs=0, other=def.
+    marker['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'd'  # del=0, gs=1, other=def.
+    marker['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'd'  # del=1, gs=1, other=def.
+    marker['knn_e1d3a6556cd2fc44117cb551ad070e4f'] = '1'  # del=0, ms=def.
+    marker['knn_e4224e67c3aa5dc684499170b7dec6fc'] = '1'  # del=1, ms=def.
+    marker['ngboost'] = '^'  # del=0
+    marker['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = '^'  # del=1
+    marker['pgbm'] = '+'  # del=0, gs=0
+    marker['pgbm_acff7ecceeb4c799d280f7252a2b3585'] = '+'  # del=1, gs=0
+    marker['pgbm_5e13b5ea212546260ba205c54e1d9559'] = '+'  # del=0, gs=1
+    marker['pgbm_992d84ddec6882788a2969fca8876a52'] = '+'  # del=1, gs=1
 
     result = (color, line, label)
 

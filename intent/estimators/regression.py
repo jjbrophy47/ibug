@@ -22,7 +22,7 @@ class KGBM(Estimator):
         using the k-nearest neighbors to a given test example in latent space.
     """
     def __init__(self, k=100, tree_frac=1.0, loc_type='gbm', affinity='unweighted',
-                 k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201], scoring='nll',
+                 k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201, 301, 401, 501, 601, 701], scoring='nll',
                  min_scale=1e-15, eps=1e-15, random_state=1, verbose=0, logger=None):
         """
         Input

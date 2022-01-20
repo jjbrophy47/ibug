@@ -107,9 +107,13 @@ def get_data(data_dir, dataset, fold=1, feature=False):
     """
     Return train and test data for the specified dataset.
     """
-    datasets = ['ames_housing', 'cal_housing', 'concrete', 'energy', 'heart', 'kin8nm',
-                'life', 'msd', 'naval', 'obesity', 'online_news', 'power', 'protein',
-                'synth_regression', 'wine', 'yacht']
+    datasets = ['ames_housing', 'bike', 'cal_housing',
+                'communities', 'concrete', 'energy',
+                'fb', 'heart', 'kin8nm', 'life', 'meps',
+                'msd', 'naval', 'obesity', 'online_news',
+                'power', 'protein', 'star', 'superconductor',
+                'synth_regression', 'wave', 'wine',
+                'yacht']
     assert dataset in datasets
 
     data = np.load(os.path.join(data_dir, dataset, 'data.npy'), allow_pickle=True)[()]
@@ -202,9 +206,6 @@ def eval_normal(y, loc, scale, nll=True, crps=False):
 
     result = ()
     if nll:
-        # nll_arr = np.array([-norm.logpdf(y[i], loc=loc[i], scale=scale[i]) for i in range(len(y))])
-        # idx = np.argmax(nll_arr)
-        # print(idx, nll_arr[idx], loc[idx], scale[idx], y[idx])
         result += (np.mean([-norm.logpdf(y[i], loc=loc[i], scale=scale[i]) for i in range(len(y))]),)
     if crps:
         result += (np.mean([ps.crps_gaussian(y[i], mu=loc[i], sig=scale[i]) for i in range(len(y))]),)
@@ -273,7 +274,7 @@ def dict_to_hash(my_dict, skip=[]):
         if key in d:
             del d[key]
 
-    s = ''.join(str(v) for k, v in sorted(d.items()))  # alphabetical key sort
+    s = ''.join(k + str(v) for k, v in sorted(d.items()))  # alphabetical key sort
 
     result = hashlib.md5(s.encode('utf-8')).hexdigest() if s != '' else ''
 
@@ -305,6 +306,9 @@ def get_method_identifier(model, exp_params):
 
     if exp_params['delta']:
         settings['delta'] = exp_params['delta']
+
+    if exp_params['gridsearch'] and model in ['constant', 'kgbm', 'pgbm']:
+        settings['gridsearch'] = exp_params['gridsearch']
 
     if len(settings) > 0:
         hash_str = dict_to_hash(settings)

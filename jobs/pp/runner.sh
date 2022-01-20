@@ -11,6 +11,7 @@ fold=$1
 model=$2
 tree_type=$3
 delta=$4
+gridsearch=$5
 
 . jobs/config.sh
 
@@ -22,3 +23,4 @@ python3 scripts/experiments/prediction.py \
   --model $model \
   --tree_type $tree_type \
   --delta $delta \
+  --gridsearch $gridsearch \
