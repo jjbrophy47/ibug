@@ -11,7 +11,6 @@ def parse_xgb_ensemble(model):
     # validation
     model_params = model.get_params()
     assert model_params['reg_alpha'] == 0
-    assert model_params['tree_method'] == 'hist'
 
     string_data = _get_string_data_from_xgb_model(model)
     trees = np.array([_parse_xgb_tree(tree_str) for tree_str in string_data], dtype=np.dtype(object))

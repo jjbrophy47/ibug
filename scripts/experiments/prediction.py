@@ -20,6 +20,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 from lightgbm import LGBMRegressor
+from xgboost import XGBRegressor
+from catboost import CatBoostRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from ngboost import NGBRegressor
 
@@ -165,7 +167,7 @@ def get_model(args, n_train):
 
     elif args.model == 'knn':
         model = KNeighborsRegressor(weights=args.weights)
-        params = {'n_neighbors': [3, 5, 7, 11, 15, 31, 61, 91, 121, 151, 201]}
+        params = {'n_neighbors': [3, 5, 7, 11, 15, 31, 61, 91, 121, 151, 201, 301, 401, 501, 601, 701]}
         params['n_neighbors'] = [k for k in params['n_neighbors'] if k <= n_train]
 
     elif args.model in ['constant', 'kgbm']:
@@ -178,27 +180,25 @@ def get_model(args, n_train):
                       'learning_rate': [0.01, 0.1],
                       'max_bin': [255]}
 
+        elif args.tree_type == 'xgb':
+            model = XGBRegressor(n_estimators=2000, max_depth=4,
+                                 max_bin=64, random_state=args.random_state)
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
+                      'max_depth': [2, 3, 5, 7, None],
+                      'learning_rate': [0.01, 0.1],
+                      'max_bin': [255]}
+
+        elif args.tree_type == 'cb':
+            model = CatBoostRegressor(n_estimators=2000, max_depth=4, max_bin=64,
+                                      random_state=args.random_state,
+                                      logging_level='Silent', learning_rate=0.1)
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
+                      'max_depth': [2, 3, 5, 7, None],
+                      'learning_rate': [0.01, 0.1],
+                      'max_bin': [255]}
+
         else:
-            model = util.get_model(tree_type=args.tree_type,
-                                   random_state=args.random_state)
-            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000]}
-
-            if args.tree_type == 'sgb':
-                params['max_iter'] = params['n_estimators']
-                params['max_depth'] = [None]
-                params['max_leaf_nodes'] = [15, 31, 61, 91]
-                params['max_bins'] = [50, 100, 250]
-                del params['n_estimators']
-
-            elif args.tree_type == 'cb':
-                params['learning_rate'] = [0.1, 0.3, 0.6, 0.9]
-                params['max_depth'] = [2, 3, 4, 5, 6, 7]
-
-            elif args.tree_type == 'xgb':
-                params['max_depth'] = [2, 3, 4, 5, 6, 7]
-
-            elif args.tree_type == 'skgbm':
-                params['max_depth'] = [2, 3, 4, 5, 6, 7]
+            raise ValueError('tree_type unknown: {}'.format(args.tree_type))
 
     else:
         raise ValueError('model unknown: {}'.format(args.model))
@@ -239,6 +239,7 @@ def experiment(args, logger, out_dir):
         # gridsearch
         best_score = None
         best_model = None
+        best_params = None
 
         for i, param_dict in enumerate(param_dicts):
             temp_model = clone(model).set_params(**param_dict).fit(X_train, y_train)
@@ -252,12 +253,12 @@ def experiment(args, logger, out_dir):
             if best_score is None or param_dict['score'] < best_score:
                 best_score = param_dict['score']
                 best_model = temp_model
+                best_params = param_dict
 
         # get best params
         df = pd.DataFrame(cv_results).sort_values('score', ascending=True)  # lower is better
         logger.info(f'\ngridsearch results:\n{df}')
 
-        best_params = df.astype(object).iloc[0].to_dict()
         del best_params['score']
         logger.info(f'\nbest params: {best_params}')
 
@@ -265,9 +266,23 @@ def experiment(args, logger, out_dir):
         model_val = best_model
 
     elif args.model in ['constant', 'kgbm']:
-        model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
-                                     eval_metric='mse', early_stopping_rounds=args.n_stopping_rounds)
-        best_n_estimators = model_val.best_iteration_
+
+        if args.tree_type == 'lgb':
+            model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
+                                         eval_metric='mse', early_stopping_rounds=args.n_stopping_rounds)
+            best_n_estimators = model_val.best_iteration_
+
+        elif args.tree_type == 'xgb':
+            model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
+                                         early_stopping_rounds=args.n_stopping_rounds)
+            best_n_estimators = model_val.best_ntree_limit
+
+        else:
+            assert args.tree_type == 'cb'
+            model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
+                                         early_stopping_rounds=args.n_stopping_rounds)
+            best_n_estimators = model_val.tree_count_
+
         best_params = {'n_estimators': best_n_estimators}
         logger.info(f'\nbest params: {best_params}')
 

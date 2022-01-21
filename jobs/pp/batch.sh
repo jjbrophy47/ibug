@@ -1,7 +1,7 @@
 run='jobs/pp/runner.sh'
 o='jobs/logs/pp/'
 t='lgb'
-d=0
+d=1
 
 fold_list=(1 2 3 4 5)
 g_list=(0 1)

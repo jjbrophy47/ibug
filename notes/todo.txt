@@ -1,5 +1,15 @@
 Influence Estimation
 ---
+- Line up numbers in Tables 2 and 3
+	* 2-level sort: metric, then alphabetical.
+- Consider adding batch size for TracInCP to make it more consistent with the original paper.
+- Consider expanding the explanation for Feldman and Zhang before introducing Subsample.
+	* Should the name SubSample be changed? Why is the second "s" capitalized?
+- Run paper through grammarly.
+- Fix capitalization errors in references.
+- Fix typo in the abstract.
+- Change indicator function to be a subscript of the 1 (and remove brackets?) in eq. (14).
+
 - Add mention of comparison to LeafInfluence (abstract). DONE.
 - Maybe provide some detail about the empirical measures and how rankings
 	may change depending on the measure (introduction). DONE.
@@ -36,9 +46,40 @@ Uncertainty GBRTs
 		+ See reviewer eTYD - 2) https://openreview.net/forum?id=VD3TMzyxKK
 - Read Forecasting w/ Trees paper. DONE.
 	* Written by LSF authors, gives context into forecasting with trees.
-- Read Meinhausen paper.
-- Read quantile regression forests paper.
+- Read quantile regression forests (QRFs) paper. DONE.
 	* Special case of LSF for RF models.
+	* Similar to KGBM, but different.
+		+ Theory of QRF is specifically designed for RFs.
+		+ They use the estimated conditional mean (avg. weighted response over
+                 	all train examples) as the central prediction.
+		+ Each training example gets a weight: 1 / no. examples at its leaf,
+			summed over all trees in the forest.
+		+ A weighted distribution over ALL training examples is used to
+			model the distribution of the estimated conditional mean.
+	* To directly apply QRFs to boosted regression trees would require:
+		+ Modeling the location as a weighted sum of the training examples.
+			This is not how GBRTs are predicted! GBRTs are ADDITIVE models.
+		+ Modeling the scale as a weighted distribution of ALL training examples.
+			This is MUCH more costly than using the k-nearest examples.
+			This would also require computing the weight of ALL training
+			examples (visiting EVERY leaf) for EVERY new prediction!
+		+ The QRFs algorithm recomputes every leaf weight for x_i for each
+			new prediction x. The leaf weights for x_i can be precomputed;
+			however, the weight of x w.r.t. x_i still needs to be computed.
+			Thus, the runtime complexity for computing	 w_i(x) is O(T), and
+			O(Tn) for all train examples in which n = no. train, and T = no. trees.
+	* KGBM, in contrast, uses the k-nearest neighbors based on an UNWEIGHTED affinity.
+		+ The distribution is also UNWEIGHTED.
+		+ For location, the ORIGINAL prediction is used instead of a weighted average
+			response from ALL training examples.
+		+ KGBM has a worst-case runtime complexity of O(nT) but an avg.
+			case of O(mT) in which m ~= n / no. leaves (assuming balanced leaves).
+                          Computing weights for ALL examples would SEVERELY limit scalability.
+	* QRFs are doing QUANTILE REGRESSION, i.e., in what quantile does the output of my
+		test prediction fall w.r.t. my entire training set.
+	* NGBoost/PGBM/KGBM only provide the data (or aleatoric) uncertainty for a given prediction.
+		+ Maybe quantiles can be computed from the predicted distribution, whether
+			that be parametric or non-parametric?
 - Read conformal predictions paper.
 - Read about M5 prediction dataset. DONE.
 - Read NGBoost paper. DONE.
@@ -72,6 +113,20 @@ Uncertainty GBRTs
 		 	which is more of an art.
 
 
+V6
+
+- Changes made
+	* Added 301, 401, 501, 601, and 701 to KNN k search values.
+	* Small change to the creation of "leaf_dict" in KGBM.
+		+ Assigns array of train examples to EACH leaf, not just
+			ones assigned from the apply method.
+		+ This means some leafs can have empty arrays (typically CatBoost).
+		+ Fixes key errors if a test example falls into a leaf
+			that no training examples have been in.
+		+ Only affects building KGBM runtime not predicting.
+		+ Should not affect runtime complexity significantly.
+
+
 V5
 
 - Changes made
@@ -84,6 +139,12 @@ V5
 	* Set "min_scale_pct" default to 0 (deactivate) for KNN.
 		+ Tuning "delta" should help with the catastrophic failures.
 	* Added 301, 401, 501, 601, and 701 to list of k values to search (KGBM).
+	* Changed the following dataset names:
+		+ "ames_housing" -> "ames"
+		+ "cal_housing" -> "california"
+		+ "fb" -> "facebook"
+		+ "online_news" -> "news"
+		+ "synth_regression" -> "synthetic"
 
 - Potential changes
 	* Increase speed, options:

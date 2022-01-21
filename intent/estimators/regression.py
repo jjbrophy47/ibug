@@ -99,12 +99,13 @@ class KGBM(Estimator):
         }
         """
         train_leaves = self.model_.apply(X).squeeze()  # shape=(len(X), no. boost)
+        leaf_counts = self.model_.get_leaf_counts().squeeze()  # shape=(n_boost,)
 
         leaf_dict = {}
         for boost_idx in range(train_leaves.shape[1]):
             leaf_dict[boost_idx] = {}
 
-            for leaf_idx in np.unique(train_leaves[:, boost_idx]):
+            for leaf_idx in range(leaf_counts[boost_idx]):
                 leaf_dict[boost_idx][leaf_idx] = np.where(train_leaves[:, boost_idx] == leaf_idx)[0]
 
         self.leaf_dict_ = leaf_dict

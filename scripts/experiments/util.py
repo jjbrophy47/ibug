@@ -9,13 +9,6 @@ import hashlib
 import numpy as np
 
 import properscoring as ps
-from catboost import CatBoostRegressor
-from lightgbm import LGBMRegressor
-from sklearn.experimental import enable_hist_gradient_boosting  # noqa
-from sklearn.ensemble import HistGradientBoostingRegressor
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
@@ -107,13 +100,12 @@ def get_data(data_dir, dataset, fold=1, feature=False):
     """
     Return train and test data for the specified dataset.
     """
-    datasets = ['ames_housing', 'bike', 'cal_housing',
+    datasets = ['ames', 'bike', 'california',
                 'communities', 'concrete', 'energy',
-                'fb', 'heart', 'kin8nm', 'life', 'meps',
-                'msd', 'naval', 'obesity', 'online_news',
+                'facebook', 'heart', 'kin8nm', 'life', 'meps',
+                'msd', 'naval', 'news', 'obesity',
                 'power', 'protein', 'star', 'superconductor',
-                'synth_regression', 'wave', 'wine',
-                'yacht']
+                'synthetic', 'wave', 'wine', 'yacht']
     assert dataset in datasets
 
     data = np.load(os.path.join(data_dir, dataset, 'data.npy'), allow_pickle=True)[()]
@@ -132,41 +124,6 @@ def get_data(data_dir, dataset, fold=1, feature=False):
         result = X_train, X_test, y_train, y_test, objective
 
     return result
-
-
-def get_model(tree_type='lgb', n_tree=100, max_depth=5, random_state=1, max_bins=255,
-              learning_rate=0.3):
-    """
-    Return the ensemble object from the specified framework and objective.
-    """
-    if tree_type == 'cb':
-        tree = CatBoostRegressor(n_estimators=n_tree, max_depth=max_depth,
-                                 leaf_estimation_iterations=1, random_state=random_state,
-                                 logging_level='Silent', learning_rate=learning_rate)
-
-    elif tree_type == 'lgb':
-        tree = LGBMRegressor(n_estimators=n_tree, max_depth=max_depth, num_leaves=2 ** max_depth,
-                             random_state=random_state)
-
-    elif tree_type == 'sgb':
-        tree = HistGradientBoostingRegressor(max_iter=n_tree, max_depth=max_depth, max_leaf_nodes=2 ** max_depth,
-                                             random_state=random_state, max_bins=max_bins, early_stopping=False)
-
-    elif tree_type == 'skgbm':
-        tree = GradientBoostingRegressor(n_estimators=n_tree, max_depth=max_depth, random_state=random_state)
-
-    elif tree_type == 'skrf':
-        tree = RandomForestRegressor(n_estimators=n_tree, max_depth=max_depth,
-                                     random_state=random_state, bootstrap=False)
-
-    elif tree_type == 'xgb':
-        tree = XGBRegressor(n_estimators=n_tree, max_depth=max_depth,
-                            random_state=random_state, tree_method='hist')
-
-    else:
-        raise ValueError(f'Unknown tree_type {tree_type}')
-
-    return tree
 
 
 def eval_pred(y, yhat=None, model=None, X=None, logger=None, prefix=''):

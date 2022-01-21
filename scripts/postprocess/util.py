@@ -21,20 +21,21 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
         logger.info('\nGathering results...')
 
     experiment_settings = list(product(*[args.model, args.tree_type, args.affinity,
-                                         args.min_scale_pct, args.tree_frac]))
+                                         args.min_scale_pct, args.tree_frac,
+                                         args.gridsearch, args.delta]))
 
     visited = set()
     results = []
 
     for items in tqdm(experiment_settings, disable=not progress_bar):
-        model, tree_type, affinity, min_scale_pct, tree_frac = items
+        model, tree_type, affinity, min_scale_pct, tree_frac, gridsearch, delta = items
 
         template = {'tree_type': tree_type,
                     'affinity': affinity,
                     'min_scale_pct': min_scale_pct,
                     'tree_frac': tree_frac,
-                    'delta': args.delta,
-                    'gridsearch': args.gridsearch}
+                    'gridsearch': gridsearch,
+                    'delta': delta}
 
         method_id = exp_util.get_method_identifier(model, template)
         method_dir = os.path.join(exp_dir, method_id)
@@ -105,8 +106,8 @@ def get_plot_dicts(markers=False):
     line['kgbm_9e6706ce251feef3fe80af643dba21cd'] = '-'  # del=1, gs=0, other=def.
     line['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = '-'  # del=0, gs=1, other=def.
     line['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = '-'  # del=1, gs=1, other=def.
-    line['knn_e1d3a6556cd2fc44117cb551ad070e4f'] = '-'  # del=0, ms=def.
-    line['knn_e4224e67c3aa5dc684499170b7dec6fc'] = '-'  # del=1, ms=def.
+    line['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = '-'  # del=0, ms=def.
+    line['knn_e2170c02389ba12f975387bc30c99f6e'] = '-'  # del=1, ms=def.
     line['ngboost'] = '-'  # del=0
     line['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = '-'  # del=1
     line['pgbm'] = '-'  # del=0, gs=0
@@ -123,8 +124,8 @@ def get_plot_dicts(markers=False):
     label['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'KGBM-LD'  # del=1, gs=0, other=def.
     label['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'KGBM-LG'  # del=0, gs=1, other=def.
     label['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'KGBM-LDG'  # del=1, gs=1, other=def.
-    label['knn_e1d3a6556cd2fc44117cb551ad070e4f'] = 'KNN'  # del=0, ms=def.
-    label['knn_e4224e67c3aa5dc684499170b7dec6fc'] = 'KNN-D'  # del=1, ms=def.
+    label['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = 'KNN'  # del=0, ms=def.
+    label['knn_e2170c02389ba12f975387bc30c99f6e'] = 'KNN-D'  # del=1, ms=def.
     label['ngboost'] = 'NGBoost'  # del=0
     label['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = 'NGBoost-D'  # del=1
     label['pgbm'] = 'PGBM'  # del=0, gs=0
@@ -141,8 +142,8 @@ def get_plot_dicts(markers=False):
     marker['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'd'  # del=1, gs=0, other=def.
     marker['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'd'  # del=0, gs=1, other=def.
     marker['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'd'  # del=1, gs=1, other=def.
-    marker['knn_e1d3a6556cd2fc44117cb551ad070e4f'] = '1'  # del=0, ms=def.
-    marker['knn_e4224e67c3aa5dc684499170b7dec6fc'] = '1'  # del=1, ms=def.
+    marker['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = '1'  # del=0, ms=def.
+    marker['knn_e2170c02389ba12f975387bc30c99f6e'] = '1'  # del=1, ms=def.
     marker['ngboost'] = '^'  # del=0
     marker['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = '^'  # del=1
     marker['pgbm'] = '+'  # del=0, gs=0

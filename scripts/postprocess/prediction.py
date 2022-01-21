@@ -133,20 +133,20 @@ if __name__ == '__main__':
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, nargs='+',
-                        default=['ames_housing', 'cal_housing', 'concrete', 'energy', 'heart',
-                                 'kin8nm', 'life', 'msd', 'naval', 'obesity', 'online_news', 'power', 'protein',
-                                 'synth_regression', 'wine', 'yacht'])
+                        default=['ames', 'bike', 'cal', 'communisties', 'concrete',
+                                 'energy', 'facebook', 'heart', 'kin8nm', 'life', 'meps',
+                                 'msd', 'naval', 'obesity', 'news', 'power', 'protein',
+                                 'star', 'superconductor', 'synthetic', 'wave',
+                                 'wine', 'yacht'])
     parser.add_argument('--skip', type=str, nargs='+', default=['heart'])
     parser.add_argument('--fold', type=int, nargs='+', default=[1, 2, 3, 4, 5])
     parser.add_argument('--model', type=str, nargs='+', default=['constant', 'kgbm', 'knn', 'ngboost', 'pgbm'])
     parser.add_argument('--tree_frac', type=str, nargs='+', default=[1.0])
-    parser.add_argument('--min_scale_pct', type=float, nargs='+', default=[0.001])
+    parser.add_argument('--min_scale_pct', type=float, nargs='+', default=[0.0])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted', 'weighted'])
-
-    # Fixed settings
-    parser.add_argument('--delta', type=int, default=1)
-    parser.add_argument('--gridsearch', type=int, default=0)
+    parser.add_argument('--delta', type=int, nargs='+', default=[0, 1])
+    parser.add_argument('--gridsearch', type=int, nargs='+', default=[0, 1])
 
     args = parser.parse_args()
     main(args)
