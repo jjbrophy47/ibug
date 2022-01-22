@@ -84,10 +84,18 @@ def get_plot_dicts(markers=False):
     color['constant_aca6c15e53adb4da131f8e19c52d4338'] = 'blue'  # del=1, gs=0, tt=lgb
     color['constant_2f29848944ee19df0034c5b92858317b'] = 'blue'  # del=0, gs=1, tt=lgb
     color['constant_27ebb0dfd1660c84cea9593d646a7175'] = 'blue'  # del=1, gs=1, tt=lgb
-    color['kgbm_a3c550c0f0bbbbb3b1cfb318075c64b8'] = 'cyan'  # del=0, gs=0, other=def.
-    color['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'cyan'  # del=1, gs=0, other=def.
-    color['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'cyan'  # del=0, gs=1, other=def.
-    color['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'cyan'  # del=1, gs=1, other=def.
+    color['kgbm_a3c550c0f0bbbbb3b1cfb318075c64b8'] = 'cyan'  # L other=def.
+    color['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'cyan'  # LD other=def.
+    color['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'cyan'  # LG other=def.
+    color['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'cyan'  # LGD other=def.
+    color['kgbm_257690bac9ad94b554382703ef083b7c'] = 'cyan'  # X other=def.
+    color['kgbm_d043ef8d524cc7e4c54f6ec0a951e968'] = 'cyan'  # XD other=def.
+    color['kgbm_8437b091947fba51cc8ed2bf9c1d52cc'] = 'cyan'  # XG other=def.
+    color['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'cyan'  # XGD other=def.
+    color['kgbm_10d39697496e3417832ee82591e665df'] = 'cyan'  # C other=def.
+    color['kgbm_eeb56073a3edce5d6308bc4059a11ddd'] = 'cyan'  # CD other=def.
+    color['kgbm_bab933a5e5b09c9da6e49a6e064af7cf'] = 'cyan'  # CG other=def.
+    color['kgbm_39005ff08c2fc46ba3d0dd1db1085ad4'] = 'cyan'  # CGD other=def.
     color['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = 'orange'  # del=0, ms=def.
     color['knn_e2170c02389ba12f975387bc30c99f6e'] = 'orange'  # del=1, ms=def.
     color['ngboost'] = 'green'  # del=0
@@ -106,6 +114,14 @@ def get_plot_dicts(markers=False):
     line['kgbm_9e6706ce251feef3fe80af643dba21cd'] = '-'  # del=1, gs=0, other=def.
     line['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = '-'  # del=0, gs=1, other=def.
     line['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = '-'  # del=1, gs=1, other=def.
+    line['kgbm_257690bac9ad94b554382703ef083b7c'] = '-'  # X other=def.
+    line['kgbm_d043ef8d524cc7e4c54f6ec0a951e968'] = '-'  # XD other=def.
+    line['kgbm_8437b091947fba51cc8ed2bf9c1d52cc'] = '-'  # XG other=def.
+    line['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = '-'  # XGD other=def.
+    line['kgbm_10d39697496e3417832ee82591e665df'] = '-'  # C other=def.
+    line['kgbm_eeb56073a3edce5d6308bc4059a11ddd'] = '-'  # CD other=def.
+    line['kgbm_bab933a5e5b09c9da6e49a6e064af7cf'] = '-'  # CG other=def.
+    line['kgbm_39005ff08c2fc46ba3d0dd1db1085ad4'] = '-'  # CGD other=def.
     line['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = '-'  # del=0, ms=def.
     line['knn_e2170c02389ba12f975387bc30c99f6e'] = '-'  # del=1, ms=def.
     line['ngboost'] = '-'  # del=0
@@ -124,6 +140,14 @@ def get_plot_dicts(markers=False):
     label['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'KGBM-LD'  # del=1, gs=0, other=def.
     label['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'KGBM-LG'  # del=0, gs=1, other=def.
     label['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'KGBM-LDG'  # del=1, gs=1, other=def.
+    label['kgbm_257690bac9ad94b554382703ef083b7c'] = 'KGBM-X'  # X other=def.
+    label['kgbm_d043ef8d524cc7e4c54f6ec0a951e968'] = 'KGBM-XD'  # XD other=def.
+    label['kgbm_8437b091947fba51cc8ed2bf9c1d52cc'] = 'KGBM-XG'  # XG other=def.
+    label['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'KGBM-XDG'  # XGD other=def.
+    label['kgbm_10d39697496e3417832ee82591e665df'] = 'KGBM-C'  # C other=def.
+    label['kgbm_eeb56073a3edce5d6308bc4059a11ddd'] = 'KGBM-CD'  # CD other=def.
+    label['kgbm_bab933a5e5b09c9da6e49a6e064af7cf'] = 'KGBM-CG'  # CG other=def.
+    label['kgbm_39005ff08c2fc46ba3d0dd1db1085ad4'] = 'KGBM-CDG'  # CGD other=def.
     label['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = 'KNN'  # del=0, ms=def.
     label['knn_e2170c02389ba12f975387bc30c99f6e'] = 'KNN-D'  # del=1, ms=def.
     label['ngboost'] = 'NGBoost'  # del=0
@@ -142,6 +166,14 @@ def get_plot_dicts(markers=False):
     marker['kgbm_9e6706ce251feef3fe80af643dba21cd'] = 'd'  # del=1, gs=0, other=def.
     marker['kgbm_55182dc99cac0d1db2b9406a6c35adcb'] = 'd'  # del=0, gs=1, other=def.
     marker['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'd'  # del=1, gs=1, other=def.
+    marker['kgbm_257690bac9ad94b554382703ef083b7c'] = 'd'  # X other=def.
+    marker['kgbm_d043ef8d524cc7e4c54f6ec0a951e968'] = 'd'  # XD other=def.
+    marker['kgbm_8437b091947fba51cc8ed2bf9c1d52cc'] = 'd'  # XG other=def.
+    marker['kgbm_7009ad3af77a41a50b20b4a5616a97a2'] = 'd'  # XGD other=def.
+    marker['kgbm_10d39697496e3417832ee82591e665df'] = 'd'  # C other=def.
+    marker['kgbm_eeb56073a3edce5d6308bc4059a11ddd'] = 'd'  # CD other=def.
+    marker['kgbm_bab933a5e5b09c9da6e49a6e064af7cf'] = 'd'  # CG other=def.
+    marker['kgbm_39005ff08c2fc46ba3d0dd1db1085ad4'] = 'd'  # CGD other=def.
     marker['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = '1'  # del=0, ms=def.
     marker['knn_e2170c02389ba12f975387bc30c99f6e'] = '1'  # del=1, ms=def.
     marker['ngboost'] = '^'  # del=0

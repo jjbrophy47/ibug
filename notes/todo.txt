@@ -125,6 +125,7 @@ V6
 			that no training examples have been in.
 		+ Only affects building KGBM runtime not predicting.
 		+ Should not affect runtime complexity significantly.
+	* Added support for XGB and CB for "tree_type".
 
 
 V5
