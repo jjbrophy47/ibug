@@ -48,6 +48,55 @@ def join_mean_sem(mean_df, sem_df, mask_cols=['dataset'],
     return result_df
 
 
+def aggregate_params(param_df, param_names, param_types):
+    """
+    Combine parameters from multiple folds into one list.
+
+    Input
+        param_df: pd.DataFrame, Dataframe with parameters for each fold.
+        param_names: dict, List of parameter names, index by method name.
+        param_types: dict, List of parameter types, index by method name.
+
+    Return
+        Dataframe with combined parameter values.
+    """
+    param_list = []
+
+    for dataset, df in param_df.groupby(['dataset']):
+        dataset_dict = {'dataset': dataset}
+
+        for name in df.columns:
+            if name in ['dataset', 'fold']:
+                continue
+
+            values_list = [x for x in df[name].values if isinstance(x, list)]
+
+            # aggregate each list of valus into one string
+            param_str = ''
+            if len(values_list) > 0:
+                values = np.vstack(values_list)
+
+                for i in range(values.shape[1]):
+                    param_vals = []
+
+                    # format value
+                    for x in values[:, i]:
+                        if param_types[name][i] == float:
+                            param_val = f'{param_types[name][i](x):.3f}'.rstrip('0').rstrip('.')
+                        else:
+                            param_val = str(param_types[name][i](x))
+                        param_vals.append(param_val)
+
+                    param_vals_str = ', '.join(param_vals)
+                    param_str += f'{param_names[name][i]}: {param_vals_str}\n'
+
+            dataset_dict[name] = param_str.strip()
+        param_list.append(dataset_dict)
+    param_df = pd.DataFrame(param_list)
+
+    return param_df
+
+
 def get_param_list(name, result):
     """
     Extract parameters selected to obtain this result.
@@ -169,29 +218,7 @@ def process(args, out_dir, logger):
     param_df = pd.DataFrame(param_list)
 
     # aggregate hyperparameters
-    param_list = []
-    for dataset, df in param_df.groupby(['dataset']):
-        dataset_dict = {'dataset': dataset}
-        for name in df.columns:
-            if name in ['dataset', 'fold']:
-                continue
-            values_list = [x for x in df[name].values if isinstance(x, list)]
-            param_str = ''
-            if len(values_list) > 0:
-                values = np.vstack(values_list)
-                for i in range(values.shape[1]):
-                    param_vals = []
-                    for x in values[:, i]:
-                        if param_types[name][i] == float:
-                            param_val = f'{param_types[name][i](x):.3f}'.rstrip('0').rstrip('.')
-                        else:
-                            param_val = str(param_types[name][i](x))
-                        param_vals.append(param_val)
-                    param_vals_str = ', '.join(param_vals)
-                    param_str += f'{param_names[name][i]}: {param_vals_str}\n'
-            dataset_dict[name] = param_str.strip()
-        param_list.append(dataset_dict)
-    param_df = pd.DataFrame(param_list)
+    param_df = aggregate_params(param_df, param_names, param_types)
 
     # compute mean and std. error of the mean
     group_cols = ['dataset']

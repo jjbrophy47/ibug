@@ -266,17 +266,14 @@ def experiment(args, logger, out_dir):
         model_val = best_model
 
     elif args.model in ['constant', 'kgbm']:
-
         if args.tree_type == 'lgb':
             model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
                                          eval_metric='mse', early_stopping_rounds=args.n_stopping_rounds)
             best_n_estimators = model_val.best_iteration_
-
         elif args.tree_type == 'xgb':
             model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
                                          early_stopping_rounds=args.n_stopping_rounds)
             best_n_estimators = model_val.best_ntree_limit
-
         else:
             assert args.tree_type == 'cb'
             model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
@@ -431,6 +428,7 @@ def experiment(args, logger, out_dir):
     result['total_experiment_time'] = time.time() - begin
     result['max_rss_MB'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6  # MB if OSX, GB if Linux
     result['val_frac'] = args.val_frac
+    result['tree_type'] = args.tree_type
     if args.delta:
         result['best_delta'] = delta
         result['best_delta_op'] = delta_op
@@ -472,8 +470,14 @@ def main(args):
     logger.info(args)
     logger.info('\ntimestamp: {}'.format(datetime.now()))
 
+    # write everything printed to stdout to this log file
+    logfile, stdout, stderr = util.stdout_stderr_to_log(os.path.join(out_dir, 'log+.txt'))
+
     # run experiment
     experiment(args, logger, out_dir)
+
+    # restore original stdout and stderr settings
+    util.reset_stdout_stderr(logfile, stdout, stderr)
 
 
 if __name__ == '__main__':
