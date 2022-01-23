@@ -458,6 +458,7 @@ def main(args):
 
     # define output directory
     out_dir = os.path.join(args.out_dir,
+                           args.custom_dir,
                            args.dataset,
                            f'fold{args.fold}',
                            method_name)
@@ -487,6 +488,7 @@ if __name__ == '__main__':
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--out_dir', type=str, default='output/prediction/')
+    parser.add_argument('--custom_dir', type=str, default='')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='concrete')
