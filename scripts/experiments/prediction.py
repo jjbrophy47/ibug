@@ -36,7 +36,8 @@ EPSILON = 1e-15
 
 
 def tune_delta(loc, scale, y, ops=['add', 'mult'],
-               delta_vals=[1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.0, 1e0, 1e1, 1e2, 1e3],
+               delta_vals=[1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3,
+                           1e-2, 1e-1, 0.0, 1e0, 1e1, 1e2, 1e3],
                scoring='nll', verbose=0, logger=None):
     """
     Add or multiply detla to scale values.
