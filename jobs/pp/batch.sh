@@ -20,7 +20,14 @@ for f in ${fold_list[@]}; do
 done
 
 # scratch pad
+
+t_list=('lgb' 'xgb' 'cb')
+g_list=(0 1)
+
 for f in ${fold_list[@]}; do
-    sbatch -a 1-6,8-15 -c 10 -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $d
-    sbatch -a 7        -c 10 -t 2880 -p 'long'  -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $d
+    sbatch -a 1-22             -c 10 -t 1440 -p 'short' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $d 0
+done
+
+for f in ${fold_list[@]}; do
+    sbatch -a 11            -c 15 -t 10080 -p 'long'  -o ${o}'pgbm-%a.out' $run $f 'pgbm' $t $d 1
 done

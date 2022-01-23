@@ -29,7 +29,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
 sys.path.insert(0, here + '/../../')  # for libliner
 import util
-from intent import KGBM
+from kgbm import KGBMWrapper
 
 # constants
 EPSILON = 1e-15
@@ -311,8 +311,8 @@ def experiment(args, logger, out_dir):
         logger.info('\nTuning k (KGBM)...')
         start = time.time()
 
-        model_val = KGBM(tree_frac=args.tree_frac, verbose=args.verbose,
-                         logger=logger).fit(model_val, X_train, y_train, X_val=X_val, y_val=y_val)
+        model_val = KGBMWrapper(tree_frac=args.tree_frac, verbose=args.verbose,
+                                logger=logger).fit(model_val, X_train, y_train, X_val=X_val, y_val=y_val)
         best_k = model_val.k_
         min_scale = model_val.min_scale_
 
@@ -368,8 +368,8 @@ def experiment(args, logger, out_dir):
 
     model = clone(model).set_params(**best_params).fit(X_train, y_train)
     if args.model == 'kgbm':  # wrap model
-        model = KGBM(k=best_k, tree_frac=args.tree_frac, min_scale=min_scale,
-                     verbose=args.verbose, logger=logger).fit(model, X_train, y_train)
+        model = KGBMWrapper(k=best_k, tree_frac=args.tree_frac, min_scale=min_scale,
+                            verbose=args.verbose, logger=logger).fit(model, X_train, y_train)
 
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')

@@ -6,7 +6,7 @@ from .parsers import parse_model
 
 class Estimator(object):
     """
-    Abstract class that all estimators must implement.
+    Abstract class for all uncertainty estimators.
     """
     def __init__(self):
         pass
@@ -25,5 +25,5 @@ class Estimator(object):
         start = time.time()
         self.model_ = parse_model(model, X, y)
         assert self.model_.tree_type in ['rf', 'gbdt']
-        assert self.model_.objective in ['regression', 'binary', 'multiclass']
+        assert self.model_.objective == 'regression'
         self.parse_time_ = time.time() - start
