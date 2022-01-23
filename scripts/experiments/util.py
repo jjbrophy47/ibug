@@ -258,7 +258,6 @@ def get_method_identifier(model, exp_params):
         settings['tree_type'] = exp_params['tree_type']
 
     elif model == 'knn':
-        settings['tree_type'] = exp_params['tree_type']
         settings['min_scale_pct'] = exp_params['min_scale_pct']
 
     if exp_params['delta']:
