@@ -182,7 +182,7 @@ def get_model(args, n_train):
                       'max_bin': [255]}
 
         elif args.tree_type == 'xgb':
-            model = XGBRegressor(n_estimators=2000, max_depth=4,
+            model = XGBRegressor(n_estimators=2000, max_depth=4, learning_rate=0.1,
                                  max_bin=64, random_state=args.random_state)
             params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
                       'max_depth': [2, 3, 5, 7, None],
@@ -307,7 +307,7 @@ def experiment(args, logger, out_dir):
 
     # KGBM ONLY: tune k
     if args.model == 'kgbm':
-        tree_params = model.get_params()
+        tree_params = model_val.get_params()
 
         logger.info('\nTuning k (KGBM)...')
         start = time.time()

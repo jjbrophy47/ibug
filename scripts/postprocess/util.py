@@ -46,6 +46,7 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
 
         # add results to result dict
         else:
+            print(method_dir)
             visited.add(method_id)
             result = _get_result(method_dir)
             if result is not None:

@@ -71,13 +71,17 @@ def aggregate_params(param_df, param_names, param_types):
 
             values_list = [x for x in df[name].values if isinstance(x, list)]
 
-            # aggregate each list of valus into one string
+            print(df)
+
+            # aggregate each list of values into one string
             param_str = ''
             if len(values_list) > 0:
                 values = np.vstack(values_list)
 
-                for i in range(values.shape[1]):
+                for i in range(values.shape[1]):  # per parameter
                     param_vals = []
+
+                    print(i, name, values[:, i], param_names[name][i])
 
                     # format value
                     for x in values[:, i]:
@@ -113,6 +117,8 @@ def get_param_list(name, result):
     param_names = []
     param_types = []
 
+    print(name)
+
     if 'KGBM' in name:
         param_list.append(int(result['model_params']['k_']))
         param_list.append(result['model_params']['min_scale_'])
@@ -122,14 +128,18 @@ def get_param_list(name, result):
         param_names += ['k', 'min_scale', 'n_tree', 'lr', 'max_bin']
         param_types += [int, float, int, float, int]
 
-        if 'max_depth' in result['tree_params']:
-            param_list.append(result['tree_params']['max_depth'])
-            param_names += ['max_depth']
-            param_types += [int]
-
-        if 'num_leaves' in result['tree_params']:
+        # if result['tree_type'] == 'lgb':
+        if 'num_leaves' in result['tree_params']:  # TEMP
             param_list.append(result['tree_params']['num_leaves'])
             param_names += ['num_leaves']
+            param_types += [int]
+
+        # elif result['tree_type'] in ['xgb', 'cb']:
+        if 'max_depth' in result['tree_params']:  # TEMP
+            md = result['tree_params']['max_depth']
+            md = -1 if md is None else md
+            param_list.append(md)
+            param_names += ['max_depth']
             param_types += [int]
 
     elif 'Constant' in name:
@@ -139,14 +149,18 @@ def get_param_list(name, result):
         param_names += ['n_tree', 'lr', 'max_bin']
         param_types += [int, float, int]
 
-        if 'max_depth' in result['model_params']:
-            param_list.append(result['model_params']['max_depth'])
-            param_names += ['max_depth']
-            param_types += [int]
-
-        if 'num_leaves' in result['model_params']:
+        # if result['tree_type'] == 'lgb':
+        if 'num_leaves' in result['model_params']:  # TEMP
             param_list.append(result['model_params']['num_leaves'])
             param_names += ['num_leaves']
+            param_types += [int]
+
+        # elif result['max_depth'] in ['xgb', 'cb']:
+        if 'max_depth' in result['model_params']:  # TEMP
+            md = result['model_params']['max_depth']
+            md = -1 if md is None else md
+            param_list.append(md)
+            param_names += ['max_depth']
             param_types += [int]
 
     elif 'KNN' in name:
@@ -216,6 +230,8 @@ def process(args, out_dir, logger):
     rmse_df = pd.DataFrame(rmse_list)
     time_df = pd.DataFrame(time_list)
     param_df = pd.DataFrame(param_list)
+
+    print(param_df)
 
     # aggregate hyperparameters
     param_df = aggregate_params(param_df, param_names, param_types)
