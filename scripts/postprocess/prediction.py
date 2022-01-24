@@ -231,8 +231,6 @@ def process(args, out_dir, logger):
     time_df = pd.DataFrame(time_list)
     param_df = pd.DataFrame(param_list)
 
-    print(param_df)
-
     # aggregate hyperparameters
     param_df = aggregate_params(param_df, param_names, param_types)
 

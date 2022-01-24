@@ -13,17 +13,20 @@ warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler war
 
 import numpy as np
 import pandas as pd
+import seaborn as sns
+import properscoring as ps
 import matplotlib.pyplot as plt
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
+from sklearn.neighbors import KNeighborsRegressor
 from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
-from sklearn.neighbors import KNeighborsRegressor
 from ngboost import NGBRegressor
+from scipy.stats import gaussian_kde
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -81,7 +84,8 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
     return best_delta, best_op
 
 
-def get_loc_scale(model, model_type, X, y=None, min_scale=None, verbose=0, logger=None):
+def get_loc_scale(model, model_type, X, y=None, min_scale=None,
+                  verbose=0, logger=None):
     """
     Predict location and scale for each x in X.
 
@@ -413,6 +417,7 @@ def experiment(args, logger, out_dir):
     ax.set_ylabel('Output')
     ax.legend()
     plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, 'test_pred.png'), bbox_inches='tight')
 
     # save results
     result = {}
@@ -440,6 +445,45 @@ def experiment(args, logger, out_dir):
     if args.model == 'knn' and args.min_scale_pct > 0:
         result['best_min_scale'] = min_scale
         result['tune_time_knn'] = tune_time_knn
+    if args.custom_dir == 'tree_frac':
+        neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
+        result['neighbor_idxs'] = neighbor_idxs
+        result['neighbor_vals'] = neighbor_vals
+    elif args.custom_dir == 'kde':
+        neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
+
+        # model output distribution using KDE
+        nll_list = []
+        crps_list = []
+        for i in range(neighbor_vals.shape[0]):
+            kde = gaussian_kde(neighbor_vals[i], bw_method='scott')
+            nll_list.append(-kde.logpdf(y_test[i])[0])
+            samples = kde.resample(size=1000, seed=args.random_state)[0]
+            crps_list.append(ps.crps_ensemble(y_test[i], samples))
+        nll_kde = np.mean(nll_list)
+        crps_kde = np.mean(crps_list)
+
+        # plot output dist. of k nearest neighbors
+        test_idxs = rng.choice(np.arange(X_test.shape[0]), size=16)
+
+        fig, axs = plt.subplots(4, 4, figsize=(12, 8))
+        axs = axs.flatten()
+
+        for i, test_idx in enumerate(test_idxs):
+            ax = axs[i]
+            sns.histplot(neighbor_vals[test_idx], kde=True, ax=ax)
+            ax.set_title(f'Test idx.: {test_idx}')
+            if i >= 12:
+                ax.set_xlabel('y')
+            elif i in [0, 4, 8, 12]:
+                ax.set_ylabel('Count')
+        plt.tight_layout()
+        fig.savefig(os.path.join(out_dir, 'kdist.png'), bbox_inches='tight')
+
+        logger.info(f'CRPS (kde): {crps_kde:.5f}, NLL (kde): {nll_kde:.5f}')
+
+        result['nll_kde'] = np.mean(nll_list)
+        result['crps_kde'] = np.mean(crps_list)
 
     # Macs show this in bytes, unix machines show this in KB
     logger.info(f"\ntotal experiment time: {result['total_experiment_time']:.3f}s")
@@ -447,7 +491,6 @@ def experiment(args, logger, out_dir):
     logger.info(f"\nresults:\n{result}")
     logger.info(f"\nsaving results to {os.path.join(out_dir, 'results.npy')}")
 
-    plt.savefig(os.path.join(out_dir, 'test_pred.png'), bbox_inches='tight')
     np.save(os.path.join(out_dir, 'results.npy'), result)
 
 
@@ -487,8 +530,8 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--out_dir', type=str, default='output/prediction/')
-    parser.add_argument('--custom_dir', type=str, default='')
+    parser.add_argument('--out_dir', type=str, default='output')
+    parser.add_argument('--custom_dir', type=str, default='prediction')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='concrete')
