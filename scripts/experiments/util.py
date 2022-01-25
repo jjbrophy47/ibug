@@ -12,7 +12,7 @@ import properscoring as ps
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
-from scipy.stats import norm
+from scipy import stats
 
 # constants
 dtype_t = np.float64
@@ -163,10 +163,101 @@ def eval_normal(y, loc, scale, nll=True, crps=False):
 
     result = ()
     if nll:
-        result += (np.mean([-norm.logpdf(y[i], loc=loc[i], scale=scale[i]) for i in range(len(y))]),)
+        result += (np.mean([-stats.norm.logpdf(y[i], loc=loc[i], scale=scale[i]) for i in range(len(y))]),)
     if crps:
         result += (np.mean([ps.crps_gaussian(y[i], mu=loc[i], sig=scale[i]) for i in range(len(y))]),)
 
+    if len(result) == 1:
+        result = result[0]
+
+    return result
+
+
+def eval_dist(y, samples, dist='normal', nll=True, crps=False,
+              min_scale=None, random_state=1, rng=None):
+    """
+    Evaluate each predicted normal distribution.
+
+    Input
+        y: np.ndarray, 1d array of targets, shape=(no. instances,).
+        X: np.ndarray, 2d array of samples, shape=(no. instances, no. neighbors).
+        dist: str, distribution to model.
+        nll: bool, If True, return the avg. neg. log likelihood.
+        crps: bool, If True, return the avg. CRPS score.
+        random_state: int, Random seed to enhance reproducibility.
+
+    Return
+        Tuple of scores.
+    """
+    assert nll or crps
+    assert y.ndim == 1
+    assert samples.ndim == 2
+    assert y.shape[0] == samples.shape[0]
+
+    # pseudo-random number generator
+    if rng is None:
+        rng = np.random.default_rng(random_state)
+
+    # get distribution
+    if dist == 'normal':
+        D = stats.norm
+    elif dist == 'lognormal':
+        D = stats.lognorm
+    elif dist == 'laplace':
+        D = stats.laplace
+    elif dist == 'student_t':
+        D = stats.t
+    elif dist == 'logistic':
+        D = stats.logistic
+    elif dist == 'gumbel':
+        D = stats.gumbel_r
+    elif dist == 'weibull':
+        D = stats.weibull_min
+    elif dist == 'kde':
+        D = stats.gaussian_kde
+    else:
+        raise ValueError(f'Distribution {dist} unknown!')
+
+    # evaluate output samples
+    nll_list = []
+    crps_list = []
+
+    for i in range(y.shape[0]):
+
+        # handle extremely small scale value
+        if min_scale is not None and np.std(samples[i]) < min_scale:
+            noise = rng.normal(loc=0.0, scale=min_scale, size=samples.shape[1])
+            samples[i] += noise
+
+        # fit distribution
+        if dist == 'kde':
+            D_obj = D(samples[i], bw_method='scott')
+        else:
+            params = D.fit(samples[i])
+            if dist == 'logistic' and params[1] < 0:  # fixes odd error where scale is negative
+                params = (params[0], np.abs(params[1]))
+            D_obj = D(*params)
+
+        # evaluate
+        if nll:
+            if dist == 'kde':
+                nll_list.append(-D_obj.logpdf(x=y[i])[0])
+            else:
+                nll_list.append(-D_obj.logpdf(x=y[i]))
+
+        if crps:
+            if dist == 'kde':
+                samples_crps = D_obj.resample(size=1000, seed=random_state)[0]
+            else:
+                samples_crps = D_obj.rvs(size=1000, random_state=random_state)
+            crps_list.append(ps.crps_ensemble(y[i], samples_crps))
+
+    # assemble output
+    result = ()
+    if nll:
+        result += (np.mean(nll_list),)
+    if crps:
+        result += (np.mean(crps_list),)
     if len(result) == 1:
         result = result[0]
 

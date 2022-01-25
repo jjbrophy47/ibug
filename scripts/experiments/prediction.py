@@ -27,6 +27,7 @@ from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
 from ngboost import NGBRegressor
 from scipy.stats import gaussian_kde
+from scipy.stats import lognorm
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -323,7 +324,7 @@ def experiment(args, logger, out_dir):
 
         tune_time_kgbm = time.time() - start
         logger.info(f'\nbest k: {best_k}')
-        logger.info(f'\ntune time (KGBM): {tune_time_kgbm:.3f}s')
+        logger.info(f'tune time (KGBM): {tune_time_kgbm:.3f}s')
     else:
         min_scale = None
         tune_time_kgbm = 0
@@ -382,6 +383,7 @@ def experiment(args, logger, out_dir):
     total_build_time = tune_time + tune_time_kgbm + tune_time_knn + tune_time_delta + train_time
 
     # predict: compute location and scale
+    logger.info('\nPredicting...')
     start = time.time()
     loc, scale = get_loc_scale(model, args.model, X=X_test, y=y_train,
                                min_scale=min_scale, verbose=args.verbose, logger=logger)
@@ -394,15 +396,19 @@ def experiment(args, logger, out_dir):
             scale = scale * delta
 
     total_predict_time = time.time() - start
+    logger.info(f'time: {total_predict_time:.3f}s')
 
     # display times
     logger.info(f'\ntotal build time: {total_build_time:.3f}s')
     logger.info(f'total predict time: {total_predict_time:.3f}s')
 
     # evaluate
+    logger.info(f'\nEvaluating...')
+    start = time.time()
     rmse, mae = util.eval_pred(y_test, model=model, X=X_test, logger=None, prefix=args.model)
     nll, crps = util.eval_normal(y=y_test, loc=loc, scale=scale, nll=True, crps=True)
     logger.info(f'CRPS: {crps:.5f}, NLL: {nll:.5f}, RMSE: {rmse:.5f}, MAE: {mae:.5f}')
+    logger.info(f'time: {time.time() - start:.3f}s')
 
     # plot predictions
     test_idxs = np.argsort(y_test)
@@ -449,19 +455,23 @@ def experiment(args, logger, out_dir):
         neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
         result['neighbor_idxs'] = neighbor_idxs
         result['neighbor_vals'] = neighbor_vals
-    elif args.custom_dir == 'kde':
+    elif args.custom_dir == 'dist':
+        logger.info('\nPredicting (distribution)...')
+        start = time.time()
         neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
+        logger.info(f'time: {time.time() - start:.3f}s')
 
         # model output distribution using KDE
-        nll_list = []
-        crps_list = []
-        for i in range(neighbor_vals.shape[0]):
-            kde = gaussian_kde(neighbor_vals[i], bw_method='scott')
-            nll_list.append(-kde.logpdf(y_test[i])[0])
-            samples = kde.resample(size=1000, seed=args.random_state)[0]
-            crps_list.append(ps.crps_ensemble(y_test[i], samples))
-        nll_kde = np.mean(nll_list)
-        crps_kde = np.mean(crps_list)
+        logger.info('\nEvaluating (distributions)...')
+        start = time.time()
+        dist_res = {'nll': {}}
+        for dist in args.distribution:
+            nll_d, crps_d = util.eval_dist(y=y_test, samples=neighbor_vals.copy(), dist=dist, nll=True,
+                                           crps=True, min_scale=min_scale, random_state=args.random_state)
+            logger.info(f'CRPS ({dist}): {crps_d:.5f}, NLL ({dist}): {nll_d:.5f}')
+            dist_res['nll'][dist] = nll_d
+            dist_res['crps'][dist] = crps_d
+        logger.info(f'time: {time.time() - start:.3f}s')
 
         # plot output dist. of k nearest neighbors
         test_idxs = rng.choice(np.arange(X_test.shape[0]), size=16)
@@ -480,10 +490,9 @@ def experiment(args, logger, out_dir):
         plt.tight_layout()
         fig.savefig(os.path.join(out_dir, 'kdist.png'), bbox_inches='tight')
 
-        logger.info(f'CRPS (kde): {crps_kde:.5f}, NLL (kde): {nll_kde:.5f}')
-
-        result['nll_kde'] = np.mean(nll_list)
-        result['crps_kde'] = np.mean(crps_list)
+        result['neighbor_idxs'] = neighbor_idxs
+        result['neighbor_vals'] = neighbor_vals
+        result['dist_res'] = dist_res
 
     # Macs show this in bytes, unix machines show this in KB
     logger.info(f"\ntotal experiment time: {result['total_experiment_time']:.3f}s")
@@ -552,6 +561,9 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', type=int, default=1)  # ALL
     parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, KGBM, constant
     parser.add_argument('--weights', type=str, default='uniform')  # KNN
+    parser.add_argument('--distribution', type=str, nargs='+',
+                        default=['normal', 'lognormal', 'laplace', 'student_t',
+                                 'logistic', 'gumbel', 'weibull', 'kde'])
 
     args = parser.parse_args()
     main(args)

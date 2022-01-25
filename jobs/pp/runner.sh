@@ -12,6 +12,16 @@ model=$2
 tree_type=$3
 delta=$4
 gridsearch=$5
+custom_dir=$6
+tree_frac=$7
+
+if [[ ! $custom_dir ]]; then
+    custom_dir=''
+fi
+
+if [[ ! $tree_frac ]]; then
+    tree_frac=1.0
+fi
 
 . jobs/config.sh
 
@@ -24,3 +34,4 @@ python3 scripts/experiments/prediction.py \
   --tree_type $tree_type \
   --delta $delta \
   --gridsearch $gridsearch \
+  --custom_dir $custom_dir \
