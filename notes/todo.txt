@@ -9,6 +9,7 @@ Influence Estimation
 - Fix capitalization errors in references.
 - Fix typo in the abstract.
 - Change indicator function to be a subscript of the 1 (and remove brackets?) in eq. (14).
+- Add Daniel and Zayd influence paper reference into the paper.
 
 - Add mention of comparison to LeafInfluence (abstract). DONE.
 - Maybe provide some detail about the empirical measures and how rankings
