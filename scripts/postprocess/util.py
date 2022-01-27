@@ -46,7 +46,6 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
 
         # add results to result dict
         else:
-            print(method_dir)
             visited.add(method_id)
             result = _get_result(method_dir)
             if result is not None:
@@ -124,7 +123,7 @@ def get_plot_dicts(markers=False):
     line['kgbm_bab933a5e5b09c9da6e49a6e064af7cf'] = '-'  # CG other=def.
     line['kgbm_39005ff08c2fc46ba3d0dd1db1085ad4'] = '-'  # CGD other=def.
     line['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = '-'  # del=0, ms=def.
-    line['knn_e2170c02389ba12f975387bc30c99f6e'] = '-'  # del=1, ms=def.
+    line['knn_fbf8f87f41a9d607aa7c4993190b1b13'] = '-'  # del=1, ms=def.
     line['ngboost'] = '-'  # del=0
     line['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = '-'  # del=1
     line['pgbm'] = '-'  # del=0, gs=0
@@ -150,7 +149,7 @@ def get_plot_dicts(markers=False):
     label['kgbm_bab933a5e5b09c9da6e49a6e064af7cf'] = 'KGBM-CG'  # CG other=def.
     label['kgbm_39005ff08c2fc46ba3d0dd1db1085ad4'] = 'KGBM-CDG'  # CGD other=def.
     label['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = 'KNN'  # del=0, ms=def.
-    label['knn_e2170c02389ba12f975387bc30c99f6e'] = 'KNN-D'  # del=1, ms=def.
+    label['knn_fbf8f87f41a9d607aa7c4993190b1b13'] = 'KNN-D'  # del=1, ms=def.
     label['ngboost'] = 'NGBoost'  # del=0
     label['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = 'NGBoost-D'  # del=1
     label['pgbm'] = 'PGBM'  # del=0, gs=0
@@ -176,7 +175,7 @@ def get_plot_dicts(markers=False):
     marker['kgbm_bab933a5e5b09c9da6e49a6e064af7cf'] = 'd'  # CG other=def.
     marker['kgbm_39005ff08c2fc46ba3d0dd1db1085ad4'] = 'd'  # CGD other=def.
     marker['knn_19250ba19055dcc90f74a8f1a4ef24ba'] = '1'  # del=0, ms=def.
-    marker['knn_e2170c02389ba12f975387bc30c99f6e'] = '1'  # del=1, ms=def.
+    marker['knn_fbf8f87f41a9d607aa7c4993190b1b13'] = '1'  # del=1, ms=def.
     marker['ngboost'] = '^'  # del=0
     marker['ngboost_acff7ecceeb4c799d280f7252a2b3585'] = '^'  # del=1
     marker['pgbm'] = '+'  # del=0, gs=0

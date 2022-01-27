@@ -41,6 +41,8 @@ Influence Estimation
 Uncertainty GBRTs
 ---
 
+- Change improve point prediction to competitively. DONE.
+
 - Read LSF paper. DONE.
 	* LSF groups examples based on only the OUTPUT of the model.
 	* This does not group by example similarity/affinity:

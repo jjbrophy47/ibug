@@ -464,7 +464,7 @@ def experiment(args, logger, out_dir):
         # model output distribution using KDE
         logger.info('\nEvaluating (distributions)...')
         start = time.time()
-        dist_res = {'nll': {}}
+        dist_res = {'nll': {}, 'crps': {}}
         for dist in args.distribution:
             nll_d, crps_d = util.eval_dist(y=y_test, samples=neighbor_vals.copy(), dist=dist, nll=True,
                                            crps=True, min_scale=min_scale, random_state=args.random_state)

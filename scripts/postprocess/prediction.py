@@ -20,6 +20,33 @@ import util
 from experiments import util as exp_util
 
 
+def format_cols(df):
+    """
+    Format columns.
+
+    Input
+        df: pd.DataFrame, Dataframe rename columns.
+
+    Return
+        Dataframe with the newly formatted columns.
+    """
+    new_cols = []
+    for c in df.columns:
+        if '-' in c:
+            items = c.split('-')
+            c1 = items[0]
+            c2 = items[1].replace('D', '').replace('G', '')
+            if len(c2) == 0:
+                c = c1
+            else:
+                c = f'{c1}-{c2}'
+        else:
+            c = c.capitalize()
+        new_cols.append(c)
+    df.columns = new_cols
+    return df
+
+
 def join_mean_sem(mean_df, sem_df, mask_cols=['dataset'],
                   fmt='{:.3f}'.format, join_str=' +/- '):
     """
@@ -38,12 +65,37 @@ def join_mean_sem(mean_df, sem_df, mask_cols=['dataset'],
     assert np.all(mean_df.columns == sem_df.columns)
     float_cols = [c for c in mean_df.columns if c not in mask_cols]
 
-    temp1_df = mean_df[float_cols].applymap(fmt).astype(str)
-    temp2_df = sem_df[float_cols].applymap(fmt).astype(str)
-    result_df = temp1_df + join_str + temp2_df
+    formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
+               (['star'], '{:.2f}'.format),
+               (['bike', 'california', 'communities', 'concrete', 'energy',
+                 'facebook', 'kin8nm', 'life', 'meps', 'msd',
+                 'naval', 'obesity', 'power', 'protein',
+                 'superconductor', 'synthetic', 'wine', 'yacht'], '{:.3f}'.format)]
 
-    for c in mask_cols:
-        result_df.insert(loc=0, column=c, value=mean_df[c])
+    dataset_map = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
+
+    # format rows differently
+    m_list = []
+    s_list = []
+    dataset_list = []
+
+    for datasets, fmt in formats:
+        idxs = mean_df[mean_df['dataset'].isin(datasets)].index
+
+        m_df = mean_df.loc[idxs][float_cols].applymap(fmt).astype(str)
+        m_list.append(m_df)
+
+        s_df = sem_df.loc[idxs][float_cols].applymap(fmt).astype(str)
+        s_list.append(s_df)
+
+        dataset_list += [dataset_map[d] if d in dataset_map else d.capitalize() for d in datasets]
+
+    temp1_df = pd.concat(m_list)
+    temp2_df = pd.concat(s_list)
+
+    result_df = temp1_df + '$_{(' + temp2_df + ')}$'
+    result_df.insert(loc=0, column='dataset', value=dataset_list)
+    result_df = result_df.sort_values('dataset')
 
     return result_df
 
@@ -71,8 +123,6 @@ def aggregate_params(param_df, param_names, param_types):
 
             values_list = [x for x in df[name].values if isinstance(x, list)]
 
-            print(df)
-
             # aggregate each list of values into one string
             param_str = ''
             if len(values_list) > 0:
@@ -80,8 +130,6 @@ def aggregate_params(param_df, param_names, param_types):
 
                 for i in range(values.shape[1]):  # per parameter
                     param_vals = []
-
-                    print(i, name, values[:, i], param_names[name][i])
 
                     # format value
                     for x in values[:, i]:
@@ -101,6 +149,56 @@ def aggregate_params(param_df, param_names, param_types):
     return param_df
 
 
+def append_head2head(data_df, attach_df=None, skip_cols=['dataset'], include_ties=False):
+    """
+    Attach head-to-head wins, ties, and losses to the given dataframe.
+
+    Input
+        data_df: pd.DataFrame, Dataframe used to compute head-to-head scores.
+        attach_df: pd.DataFrame, Dataframe to attach results to.
+        skip_cols: list, List of columns to ignore when computing scores.
+        include_ties: bool, If True, include ties with scores.
+
+    Return
+        Dataframe attached to `attach_df` if not None, otherwise scores
+            are appended to `data_df`.
+    """
+    assert 'dataset' in data_df.columns
+    cols = [c for c in data_df.columns if c not in ['dataset']]
+
+    res_list = []
+    for c1 in cols:
+
+        if include_ties:
+            res = {'dataset': f'{c1} W-T-L'}
+        else:
+            res = {'dataset': f'{c1} W-L'}
+
+        for c2 in cols:
+            if c1 == c2:
+                res[c1] = '-'
+                continue
+
+            n_wins = np.sum(data_df[c1] < data_df[c2])
+            n_losses = np.sum(data_df[c1] > data_df[c2])
+
+            if include_ties:
+                n_ties = np.sum(data_df[c1] == data_df[c2])
+                res[c2] = f'{n_wins}-{n_ties}-{n_losses}'
+            else:
+                res[c2] = f'{n_wins}-{n_losses}'
+
+        res_list.append(res)
+    h2h_df = pd.DataFrame(res_list)
+
+    if attach_df is not None:
+        result_df = pd.concat([attach_df, h2h_df])
+    else:
+        result_df = pd.concat([data_df, h2h_df])
+
+    return result_df
+
+
 def get_param_list(name, result):
     """
     Extract parameters selected to obtain this result.
@@ -117,8 +215,6 @@ def get_param_list(name, result):
     param_names = []
     param_types = []
 
-    print(name)
-
     if 'KGBM' in name:
         param_list.append(int(result['model_params']['k_']))
         param_list.append(result['model_params']['min_scale_'])
@@ -128,14 +224,12 @@ def get_param_list(name, result):
         param_names += ['k', 'min_scale', 'n_tree', 'lr', 'max_bin']
         param_types += [int, float, int, float, int]
 
-        # if result['tree_type'] == 'lgb':
-        if 'num_leaves' in result['tree_params']:  # TEMP
+        if result['tree_type'] == 'lgb':
             param_list.append(result['tree_params']['num_leaves'])
             param_names += ['num_leaves']
             param_types += [int]
 
-        # elif result['tree_type'] in ['xgb', 'cb']:
-        if 'max_depth' in result['tree_params']:  # TEMP
+        elif result['tree_type'] in ['xgb', 'cb']:
             md = result['tree_params']['max_depth']
             md = -1 if md is None else md
             param_list.append(md)
@@ -149,14 +243,12 @@ def get_param_list(name, result):
         param_names += ['n_tree', 'lr', 'max_bin']
         param_types += [int, float, int]
 
-        # if result['tree_type'] == 'lgb':
-        if 'num_leaves' in result['model_params']:  # TEMP
+        if result['tree_type'] == 'lgb':
             param_list.append(result['model_params']['num_leaves'])
             param_names += ['num_leaves']
             param_types += [int]
 
-        # elif result['max_depth'] in ['xgb', 'cb']:
-        if 'max_depth' in result['model_params']:  # TEMP
+        elif result['max_depth'] in ['xgb', 'cb']:
             md = result['model_params']['max_depth']
             md = -1 if md is None else md
             param_list.append(md)
@@ -253,6 +345,22 @@ def process(args, out_dir, logger):
     rmse_ms_df = join_mean_sem(rmse_mean_df, rmse_sem_df)
     time_ms_df = join_mean_sem(time_mean_df, time_sem_df)
 
+    # attach head-to-head scores
+    crps_ms_df = append_head2head(data_df=crps_mean_df, attach_df=crps_ms_df)
+    nll_ms_df = append_head2head(data_df=nll_mean_df, attach_df=nll_ms_df)
+    rmse_ms_df = append_head2head(data_df=rmse_mean_df, attach_df=rmse_ms_df)
+    time_ms_df = append_head2head(data_df=time_mean_df, attach_df=time_ms_df)
+
+    # format columns
+    crps_ms_df = format_cols(crps_ms_df)
+    nll_ms_df = format_cols(nll_ms_df)
+    rmse_ms_df = format_cols(rmse_ms_df)
+    time_ms_df = format_cols(time_ms_df)
+
+    # merge specific dataframes
+    crps_rmse_df = crps_ms_df.merge(rmse_ms_df, on='Dataset')
+    nll_rmse_df = nll_ms_df.merge(rmse_ms_df, on='Dataset')
+
     # display
     logger.info(f'\nCRPS (mean):\n{crps_mean_df}')
     logger.info(f'\nNLL (mean):\n{nll_mean_df}')
@@ -277,6 +385,9 @@ def process(args, out_dir, logger):
     nll_ms_df.to_csv(os.path.join(out_dir, 'nll_str.csv'), index=None)
     rmse_ms_df.to_csv(os.path.join(out_dir, 'rmse_str.csv'), index=None)
     time_ms_df.to_csv(os.path.join(out_dir, 'time_str.csv'), index=None)
+
+    crps_rmse_df.to_csv(os.path.join(out_dir, 'crps_rmse_str.csv'), index=None)
+    nll_rmse_df.to_csv(os.path.join(out_dir, 'nll_rmse_str.csv'), index=None)
 
     param_df.to_csv(os.path.join(out_dir, 'param.csv'), index=None)
 
@@ -312,7 +423,7 @@ if __name__ == '__main__':
                                  'wine', 'yacht'])
     parser.add_argument('--skip', type=str, nargs='+', default=['heart'])
     parser.add_argument('--fold', type=int, nargs='+', default=[1, 2, 3, 4, 5])
-    parser.add_argument('--model', type=str, nargs='+', default=['constant', 'kgbm', 'knn', 'ngboost', 'pgbm'])
+    parser.add_argument('--model', type=str, nargs='+', default=['constant', 'knn', 'ngboost', 'pgbm', 'kgbm'])
     parser.add_argument('--tree_frac', type=str, nargs='+', default=[1.0])
     parser.add_argument('--min_scale_pct', type=float, nargs='+', default=[0.0])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
