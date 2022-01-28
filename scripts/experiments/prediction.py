@@ -222,17 +222,29 @@ def experiment(args, logger, out_dir):
     # get data
     X_train, X_test, y_train, y_test, objective = util.get_data(args.data_dir, args.dataset, args.fold)
 
+    if args.tune_frac < 1.0:
+        assert args.tune_frac > 0.0
+        n_tune = int(len(X_train) * args.tune_frac)
+        tune_idxs = rng.choice(np.arange(len(X_train)), size=n_tune, replace=False)
+        X_tune = X_train[tune_idxs].copy()
+        y_tune = y_train[tune_idxs].copy()
+    else:
+        X_tune = X_train.copy()
+        y_tune = y_train.copy()
+
+    X_tune, X_val, y_tune, y_val = train_test_split(X_tune, y_tune,
+                                                    test_size=args.val_frac,
+                                                    random_state=args.random_state)
+
     logger.info('no. train: {:,}'.format(X_train.shape[0]))
+    logger.info('  -> no. tune: {:,}'.format(X_tune.shape[0]))
+    logger.info('  -> no. val.: {:,}'.format(X_val.shape[0]))
     logger.info('no. test: {:,}'.format(X_test.shape[0]))
     logger.info('no. features: {:,}'.format(X_train.shape[1]))
 
     # tune
     logger.info('\nTuning model...')
     start = time.time()
-
-    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train,
-                                                      test_size=args.val_frac,
-                                                      random_state=args.random_state)
 
     model, param_grid = get_model(args, n_train=len(X_train))
 
@@ -248,7 +260,7 @@ def experiment(args, logger, out_dir):
         best_params = None
 
         for i, param_dict in enumerate(param_dicts):
-            temp_model = clone(model).set_params(**param_dict).fit(X_train, y_train)
+            temp_model = clone(model).set_params(**param_dict).fit(X_tune, y_tune)
             y_val_hat = temp_model.predict(X_val)
             param_dict['score'] = mean_squared_error(y_val, y_val_hat)
 
@@ -273,16 +285,16 @@ def experiment(args, logger, out_dir):
 
     elif args.model in ['constant', 'kgbm']:
         if args.tree_type == 'lgb':
-            model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
+            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
                                          eval_metric='mse', early_stopping_rounds=args.n_stopping_rounds)
             best_n_estimators = model_val.best_iteration_
         elif args.tree_type == 'xgb':
-            model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
+            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
                                          early_stopping_rounds=args.n_stopping_rounds)
             best_n_estimators = model_val.best_ntree_limit
         else:
             assert args.tree_type == 'cb'
-            model_val = clone(model).fit(X_train, y_train, eval_set=[(X_val, y_val)],
+            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
                                          early_stopping_rounds=args.n_stopping_rounds)
             best_n_estimators = model_val.tree_count_
 
@@ -290,7 +302,7 @@ def experiment(args, logger, out_dir):
         logger.info(f'\nbest params: {best_params}')
 
     elif args.model == 'pgbm':  # PGBM, only tune no. iterations
-        model_val = clone(model).fit(X_train, y_train, eval_set=(X_val, y_val),
+        model_val = clone(model).fit(X_tune, y_tune, eval_set=(X_val, y_val),
                                      early_stopping_rounds=args.n_stopping_rounds)
         best_n_estimators = model_val.learner_.best_iteration
         best_params = {'n_estimators': best_n_estimators}
@@ -298,7 +310,7 @@ def experiment(args, logger, out_dir):
 
     else:  # NGBoost, only tune no. iterations
         assert args.model == 'ngboost'
-        model_val = clone(model).fit(X_train, y_train, X_val=X_val, Y_val=y_val,
+        model_val = clone(model).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
                                      early_stopping_rounds=args.n_stopping_rounds)
         if model_val.best_val_loss_itr is None:
             best_n_estimators = model_val.n_estimators
@@ -318,7 +330,7 @@ def experiment(args, logger, out_dir):
         start = time.time()
 
         model_val = KGBMWrapper(tree_frac=args.tree_frac, verbose=args.verbose,
-                                logger=logger).fit(model_val, X_train, y_train, X_val=X_val, y_val=y_val)
+                                logger=logger).fit(model_val, X_tune, y_tune, X_val=X_val, y_val=y_val)
         best_k = model_val.k_
         min_scale = model_val.min_scale_
 
@@ -368,9 +380,6 @@ def experiment(args, logger, out_dir):
     # train: build using train+val data with best params
     logger.info('\nTraining...')
     start = time.time()
-
-    X_train = np.vstack([X_train, X_val])
-    y_train = np.hstack([y_train, y_val])
 
     model = clone(model).set_params(**best_params).fit(X_train, y_train)
     if args.model == 'kgbm':  # wrap model
@@ -553,6 +562,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_scale_pct', type=float, default=0.0)  # KNN
 
     # Default settings
+    parser.add_argument('--tune_frac', type=float, default=1.0)  # ALL
     parser.add_argument('--val_frac', type=float, default=0.2)  # ALL
     parser.add_argument('--random_state', type=int, default=1)  # ALL
     parser.add_argument('--verbose', type=int, default=1)  # ALL
