@@ -461,7 +461,7 @@ def experiment(args, logger, out_dir):
         neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
         result['neighbor_idxs'] = neighbor_idxs
         result['neighbor_vals'] = neighbor_vals
-    elif args.custom_dir == 'dist':
+    elif args.custom_dir in ['dist', 'fdist']:
         logger.info('\nPredicting (distribution)...')
         start = time.time()
         neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
@@ -472,8 +472,13 @@ def experiment(args, logger, out_dir):
         start = time.time()
         dist_res = {'nll': {}, 'crps': {}}
         for dist in args.distribution:
+            if args.custom_dir == 'fdist':
+                loc_test, scale_test = loc.copy(), scale.copy()
+            else:
+                loc_test, scale_test = None, None
             nll_d, crps_d = util.eval_dist(y=y_test, samples=neighbor_vals.copy(), dist=dist, nll=True,
-                                           crps=True, min_scale=min_scale, random_state=args.random_state)
+                                           crps=True, min_scale=min_scale, random_state=args.random_state,
+                                           loc=loc_test, scale=scale_test)
             logger.info(f'CRPS ({dist}): {crps_d:.5f}, NLL ({dist}): {nll_d:.5f}')
             dist_res['nll'][dist] = nll_d
             dist_res['crps'][dist] = crps_d

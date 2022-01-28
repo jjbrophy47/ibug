@@ -9,8 +9,8 @@ fold_list=(1 2 3 4 5)
 
 for f in ${fold_list[@]}; do
     for tf in ${tree_frac_list[@]}; do
-        sbatch -a 1-10,12-19,21-22 -c 10 -t 1440  -p 'short' -o ${o}'kgbm-%a.out' $run $f 'kgbm' $t $d $g $c $tf
-        sbatch -a 11,20            -c 10 -t 7200  -p 'long'  -o ${o}'kgbm-%a.out' $run $f 'kgbm' $t $d $g $c $tf
+        sbatch -a 1-10,12-19,21-22 -c 10 -t 1440  -p 'preempt' -o ${o}'kgbm-%a.out' $run $f 'kgbm' $t $d $g $c $tf
+        sbatch -a 11,20            -c 10 -t 4320  -p 'long'  -o ${o}'kgbm-%a.out' $run $f 'kgbm' $t $d $g $c $tf
     done
 done
 

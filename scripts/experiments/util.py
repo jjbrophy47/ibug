@@ -174,7 +174,8 @@ def eval_normal(y, loc, scale, nll=True, crps=False):
 
 
 def eval_dist(y, samples, dist='normal', nll=True, crps=False,
-              min_scale=None, random_state=1, rng=None):
+              min_scale=None, random_state=1, rng=None,
+              loc=None, scale=None):
     """
     Evaluate each predicted normal distribution.
 
@@ -185,6 +186,8 @@ def eval_dist(y, samples, dist='normal', nll=True, crps=False,
         nll: bool, If True, return the avg. neg. log likelihood.
         crps: bool, If True, return the avg. CRPS score.
         random_state: int, Random seed to enhance reproducibility.
+        loc: np.ndarray, 1d array of location values, shape=(no. instances,).
+        scale: np.ndarray, 1d array of scale values, shape=(no. instances,).
 
     Return
         Tuple of scores.
@@ -193,6 +196,9 @@ def eval_dist(y, samples, dist='normal', nll=True, crps=False,
     assert y.ndim == 1
     assert samples.ndim == 2
     assert y.shape[0] == samples.shape[0]
+    if loc is not None:
+        assert scale is not None
+        assert loc.shape == scale.shape == y.shape
 
     # pseudo-random number generator
     if rng is None:
@@ -233,9 +239,22 @@ def eval_dist(y, samples, dist='normal', nll=True, crps=False,
         if dist == 'kde':
             D_obj = D(samples[i], bw_method='scott')
         else:
-            params = D.fit(samples[i])
-            if dist == 'logistic' and params[1] < 0:  # fixes odd error where scale is negative
+            if loc is not None:
+                try:
+                    if dist in ['lognormal', 'student_t', 'weibull']:
+                        params = D.fit(samples[i], floc=loc[i], fscale=scale[i])
+                    else:
+                        params = (loc[i], scale[i])
+                except:
+                    print('Failed using fixed loc. and scale, trying w/o fixed...')
+                    params = D.fit(samples[i])
+            else:
+                params = D.fit(samples[i])
+
+            # fixes odd error where scale is negative
+            if dist == 'logistic' and params[1] < 0:
                 params = (params[0], np.abs(params[1]))
+
             D_obj = D(*params)
 
         # evaluate
