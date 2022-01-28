@@ -426,8 +426,7 @@ def experiment(args, logger, out_dir):
     fig.savefig(os.path.join(out_dir, 'test_pred.png'), bbox_inches='tight')
 
     # save results
-    result = {}
-    result['model'] = args.model
+    result = vars(args)
     result['model_params'] = model.get_params()
     result['rmse'] = rmse
     result['mae'] = mae
@@ -439,8 +438,6 @@ def experiment(args, logger, out_dir):
     result['total_predict_time'] = total_predict_time
     result['total_experiment_time'] = time.time() - begin
     result['max_rss_MB'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6  # MB if OSX, GB if Linux
-    result['val_frac'] = args.val_frac
-    result['tree_type'] = args.tree_type
     if args.delta:
         result['best_delta'] = delta
         result['best_delta_op'] = delta_op
@@ -549,7 +546,7 @@ if __name__ == '__main__':
 
     # Method settings
     parser.add_argument('--delta', type=int, default=1)  # affects ALL
-    parser.add_argument('--gridsearch', type=int, default=0)  # affects constant, KGBM, PGBM
+    parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, KGBM, PGBM
     parser.add_argument('--tree_type', type=str, default='lgb')  # KGBM, constant
     parser.add_argument('--tree_frac', type=float, default=1.0)  # KGBM
     parser.add_argument('--affinity', type=str, default='unweighted')  # KGBM

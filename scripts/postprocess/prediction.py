@@ -12,6 +12,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import sem
+from scipy import stats
 from tqdm import tqdm
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -20,7 +21,7 @@ import util
 from experiments import util as exp_util
 
 
-def format_cols(df):
+def format_cols(df, dataset_map={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}):
     """
     Format columns.
 
@@ -44,11 +45,14 @@ def format_cols(df):
             c = c.capitalize()
         new_cols.append(c)
     df.columns = new_cols
+
+    if 'Dataset' in df.columns:
+        df['Dataset'] = [dataset_map[d] if d in dataset_map else d.capitalize() for d in df['Dataset']]
+
     return df
 
 
-def join_mean_sem(mean_df, sem_df, mask_cols=['dataset'],
-                  fmt='{:.3f}'.format, join_str=' +/- '):
+def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
     """
     Joins floats from two dataframes into one dataframe of strings.
 
@@ -65,12 +69,27 @@ def join_mean_sem(mean_df, sem_df, mask_cols=['dataset'],
     assert np.all(mean_df.columns == sem_df.columns)
     float_cols = [c for c in mean_df.columns if c not in mask_cols]
 
-    formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
-               (['star'], '{:.2f}'.format),
-               (['bike', 'california', 'communities', 'concrete', 'energy',
-                 'facebook', 'kin8nm', 'life', 'meps', 'msd',
-                 'naval', 'obesity', 'power', 'protein',
-                 'superconductor', 'synthetic', 'wine', 'yacht'], '{:.3f}'.format)]
+    if metric == 'crps':
+        formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
+                   (['star'], '{:.2f}'.format),
+                   (['bike', 'california', 'communities', 'concrete', 'energy',
+                     'facebook', 'kin8nm', 'life', 'meps', 'msd',
+                     'naval', 'obesity', 'power', 'protein',
+                     'superconductor', 'synthetic', 'wine', 'yacht'], '{:.3f}'.format)]
+    elif metric == 'nll':
+        formats = [(['ames', 'news', 'wave'], '{:.2f}'.format),
+                   (['bike', 'california', 'communities', 'concrete', 'energy',
+                     'facebook', 'kin8nm', 'life', 'meps', 'msd',
+                     'naval', 'obesity', 'power', 'protein', 'star',
+                     'superconductor', 'synthetic', 'wine', 'yacht'], '{:.3f}'.format)]
+    else:
+        formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
+                   (['facebook', 'meps', 'synthetic'], '{:.2f}'.format),
+                   (['star'], '{:.1f}'.format),
+                   (['bike', 'california', 'communities', 'concrete', 'energy',
+                     'kin8nm', 'life', 'msd',
+                     'naval', 'obesity', 'power', 'protein',
+                     'superconductor', 'wine', 'yacht'], '{:.3f}'.format)]
 
     dataset_map = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
@@ -113,38 +132,51 @@ def aggregate_params(param_df, param_names, param_types):
         Dataframe with combined parameter values.
     """
     param_list = []
+    dataset_map = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
+    res_list = []
     for dataset, df in param_df.groupby(['dataset']):
-        dataset_dict = {'dataset': dataset}
+        dataset_name = dataset.capitalize() if dataset not in dataset_map else dataset_map[dataset]
+        res = {'Dataset': dataset_name}
 
         for name in df.columns:
+
+            # skip columns
             if name in ['dataset', 'fold']:
                 continue
 
+            # error checking
             values_list = [x for x in df[name].values if isinstance(x, list)]
-
-            # aggregate each list of values into one string
-            param_str = ''
             if len(values_list) > 0:
                 values = np.vstack(values_list)
 
                 for i in range(values.shape[1]):  # per parameter
-                    param_vals = []
+                    param_name = param_names[name][i]
+                    param_type = param_types[name][i]
+                    param_vals = [param_type(x) for x in values[:, i]]
 
-                    # format value
-                    for x in values[:, i]:
-                        if param_types[name][i] == float:
-                            param_val = f'{param_types[name][i](x):.3f}'.rstrip('0').rstrip('.')
+                    if param_name == r'$\rho$':
+                        param_val = np.median(param_vals)
+                        if dataset in ['ames', 'news', 'star', 'wave']:
+                            param_str = f'{param_val:.0f}'.rstrip('0').rstrip('.')
+                        elif dataset == 'naval':
+                            param_str = f'{param_val:.0e}'
                         else:
-                            param_val = str(param_types[name][i](x))
-                        param_vals.append(param_val)
+                            param_str = f'{param_val:.3f}'.rstrip('0').rstrip('.')
+                    elif param_name == '$T$' and 'NGBoost' in name:
+                        param_val = int(np.median(param_vals))
+                        param_str = f'{param_val}'
+                    elif param_type == float:
+                        param_val = stats.mode(param_vals)[0][0]
+                        param_str = f'{param_val:.3f}'.rstrip('0').rstrip('.')
+                    else:
+                        param_val = stats.mode(param_vals)[0][0]
+                        param_str = f'{param_val}'
 
-                    param_vals_str = ', '.join(param_vals)
-                    param_str += f'{param_names[name][i]}: {param_vals_str}\n'
+                    res[f'{name}_{param_name}'] = param_str
 
-            dataset_dict[name] = param_str.strip()
-        param_list.append(dataset_dict)
-    param_df = pd.DataFrame(param_list)
+        res_list.append(res)
+    param_df = pd.DataFrame(res_list)
 
     return param_df
 
@@ -216,68 +248,69 @@ def get_param_list(name, result):
     param_types = []
 
     if 'KGBM' in name:
-        param_list.append(int(result['model_params']['k_']))
-        param_list.append(result['model_params']['min_scale_'])
         param_list.append(result['tree_params']['n_estimators'])
         param_list.append(result['tree_params']['learning_rate'])
-        param_list.append(result['tree_params']['max_bin'])
-        param_names += ['k', 'min_scale', 'n_tree', 'lr', 'max_bin']
-        param_types += [int, float, int, float, int]
+        param_names += ['$T$', r'$\eta$']
+        param_types += [int, float]
 
         if result['tree_type'] == 'lgb':
             param_list.append(result['tree_params']['num_leaves'])
-            param_names += ['num_leaves']
+            param_names += ['$h$']
             param_types += [int]
 
         elif result['tree_type'] in ['xgb', 'cb']:
             md = result['tree_params']['max_depth']
             md = -1 if md is None else md
             param_list.append(md)
-            param_names += ['max_depth']
+            param_names += ['$d$']
             param_types += [int]
+
+        param_list.append(int(result['model_params']['k_']))
+        param_list.append(result['model_params']['min_scale_'])
+        param_names += ['$k$', r'$\rho$']
+        param_types += [int, float]
 
     elif 'Constant' in name:
         param_list.append(result['model_params']['n_estimators'])
         param_list.append(result['model_params']['learning_rate'])
-        param_list.append(result['model_params']['max_bin'])
-        param_names += ['n_tree', 'lr', 'max_bin']
-        param_types += [int, float, int]
+        param_names += ['$T$', r'$\eta$']
+        param_types += [int, float]
 
         if result['tree_type'] == 'lgb':
             param_list.append(result['model_params']['num_leaves'])
-            param_names += ['num_leaves']
+            param_names += ['$h$']
             param_types += [int]
 
         elif result['max_depth'] in ['xgb', 'cb']:
             md = result['model_params']['max_depth']
             md = -1 if md is None else md
             param_list.append(md)
-            param_names += ['max_depth']
+            param_names += ['$d$']
             param_types += [int]
 
     elif 'KNN' in name:
         param_list.append(result['model_params']['n_neighbors'])
-        param_names += ['k']
+        param_names += ['$k$']
         param_types += [int]
 
     elif 'NGBoost' in name:
         param_list.append(result['model_params']['n_estimators'])
-        param_names += ['n_tree']
+        param_names += ['$T$']
         param_types += [int]
 
     elif 'PGBM' in name:
         param_list.append(result['model_params']['n_estimators'])
-        param_list.append(result['model_params']['max_leaves'])
         param_list.append(result['model_params']['learning_rate'])
-        param_list.append(result['model_params']['max_bin'])
-        param_names += ['n_tree', 'max_leaves', 'lr', 'max_bin']
-        param_types += [int, int, float, int]
+        param_list.append(result['model_params']['max_leaves'])
+        param_names += ['$T$', r'$\eta$', '$h$']
+        param_types += [int, float, int]
 
     if len(name.split('-')) > 1 and 'D' in name.split('-')[1]:
-        param_list.append(result['best_delta'])
-        param_list.append(result['best_delta_op'])
-        param_names += ['delta', 'delta_op']
-        param_types += [float, str]
+        d_val = result['best_delta']
+        d_op = '+' if result['best_delta_op'] == 'add' else '*'
+        param_list.append(f'{d_val:.0e}({d_op})')
+        param_names += [r'$\Delta$']
+        param_types += [str]
 
     return param_list, param_names, param_types
 
@@ -340,10 +373,10 @@ def process(args, out_dir, logger):
     time_sem_df = time_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
 
     # combine mean and sem into one dataframe
-    crps_ms_df = join_mean_sem(crps_mean_df, crps_sem_df)
-    nll_ms_df = join_mean_sem(nll_mean_df, nll_sem_df)
-    rmse_ms_df = join_mean_sem(rmse_mean_df, rmse_sem_df)
-    time_ms_df = join_mean_sem(time_mean_df, time_sem_df)
+    crps_ms_df = join_mean_sem(crps_mean_df, crps_sem_df, metric='crps')
+    nll_ms_df = join_mean_sem(nll_mean_df, nll_sem_df, metric='nll')
+    rmse_ms_df = join_mean_sem(rmse_mean_df, rmse_sem_df, metric='rmse')
+    time_ms_df = join_mean_sem(time_mean_df, time_sem_df, metric='time')
 
     # attach head-to-head scores
     crps_ms_df = append_head2head(data_df=crps_mean_df, attach_df=crps_ms_df)

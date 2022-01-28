@@ -35,3 +35,4 @@ python3 scripts/experiments/prediction.py \
   --delta $delta \
   --gridsearch $gridsearch \
   --custom_dir $custom_dir \
+  --tree_frac $tree_frac \
