@@ -23,10 +23,6 @@ if [[ ! $tree_frac ]]; then
     tree_frac=1.0
 fi
 
-if [[ ! $tree_frac ]]; then
-    tree_frac=1.0
-fi
-
 . jobs/config.sh
 
 dataset=${datasets[${SLURM_ARRAY_TASK_ID}]}
@@ -38,12 +34,12 @@ else
 fi
 
 python3 scripts/experiments/prediction.py \
-  --dataset $dataset \
-  --fold $fold \
-  --model $model \
-  --tree_type $tree_type \
-  --delta $delta \
-  --gridsearch $gridsearch \
-  --custom_dir $custom_dir \
-  --tree_frac $tree_frac \
-  --tune_frac $tune_frac \
+  --dataset=${dataset} \
+  --fold=${fold} \
+  --model=${model} \
+  --tree_type=${tree_type} \
+  --delta=${delta} \
+  --gridsearch=${gridsearch} \
+  --custom_dir=${custom_dir} \
+  --tree_frac=${tree_frac} \
+  --tune_frac=${tune_frac} \

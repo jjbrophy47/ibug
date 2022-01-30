@@ -63,6 +63,7 @@ def process(args, out_dir, logger):
 
         df = pd.DataFrame(res_list)
         dist_cols = [c for c in df.columns if c not in ['dataset', 'fold']]
+        dist_vals = df[dist_cols].values  # shape=(no. folds, no. distributions)
         dist_mean_df = df[dist_cols].mean(axis=0)
         dist_names = dist_mean_df.index
         dist_mean = dist_mean_df.values
@@ -74,6 +75,7 @@ def process(args, out_dir, logger):
         dist_name = dist_names[min_idx].capitalize()
         dist_name = 'KDE' if dist_name == 'Kde' else dist_name
 
+        data_list = [score_list, dist_vals[:, min_idx]]
         means = [normal_mean, dist_mean[min_idx]]
         sems = [normal_sem, dist_sem[min_idx]]
         names = ['Normal', dist_name]
@@ -91,12 +93,16 @@ def process(args, out_dir, logger):
 
         for j, test_idx in enumerate(test_idxs):
             ax = axs[i][j] if args.combine else axs[j]
-            sns.histplot(neighbor_vals[test_idx], kde=True, stat=stat, ax=ax)
+            sns.kdeplot(neighbor_vals[test_idx], ax=ax)
+            if dataset == 'meps':
+                ax.set_xlim(0, None)
+            # sns.histplot(neighbor_vals[test_idx], kde=True, stat=stat, ax=ax)
             ax.set_title(f'Test Index {test_idx}')
             if i == len(args.dataset) - 1:
                 ax.set_xlabel('Output value')
             if j == 0:
                 ax.set_ylabel(f'({dataset_name})\nNo. nearest train')
+                ax.set_ylabel(f'({dataset_name})\nDensity of ' r'$k$-nearest train')
             else:
                 ax.set_ylabel('')
 
@@ -139,8 +145,8 @@ if __name__ == '__main__':
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--in_dir', type=str, default='temp_dist/')
-    parser.add_argument('--out_dir', type=str, default='output/postprocess/dist/')
-    parser.add_argument('--custom_dir', type=str, default='')
+    parser.add_argument('--out_dir', type=str, default='output/postprocess/')
+    parser.add_argument('--custom_dir', type=str, default='dist')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, nargs='+',

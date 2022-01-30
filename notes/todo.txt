@@ -41,6 +41,39 @@ Influence Estimation
 Uncertainty GBRTs
 ---
 
+- KDD formatting:
+	* Sections should be numbered.
+	* Captions should go above tables.
+	* Captions should go below figures.
+- Background.
+- KGBM.
+- Results to show:
+	* Main results (NLL & RMSE). TENTATIVE.
+	* Auxiliary results:
+		+ Build time comparisons and predict time comparisons.
+		+ Additional GBRT base model results.
+		+ Posterior distribution modeling. TENTATIVE.
+		+ Subsampling efficiency/accuracy tradeoff.
+- Related work.
+	* Predicting confidence intervals using error residuals (conformal predictions). (traditional)
+		+ Typically assumes a normality distribution of the error residuals.
+		+ Taieb et al.
+	* Bayesian Methods. (traditional)
+		+ BART, Bayesian DL models.
+		+ Requires costly sampling operations such as MCMC.
+	* Predict quantiles. (related, but significantly different)
+		+ More focused on probability and ranking than prediction uncertainty.
+		+ Produces a relative ranking of training examples and new predictions.
+		+ QRF (RF), LSF (agnostic), DL Approaches.
+		+ Quantiles are useful on their own.
+		+ Translating quantiles to parametric distributions is NOT straightforward.
+	* Directly model parameters of a parametric distribution.
+		+ GAMLSS (generalized additive models), XGB/LGBM/CB-LSS and NGBoost (GBMs).
+	* PGBMs
+		+ Treat leaf values as stochastic random variables (RVs).
+		+ Add RVs together from leaves the test example traverses.
+- Conclusion.
+
 - Change improve point prediction to competitively. DONE.
 
 - Read LSF paper. DONE.
@@ -114,6 +147,14 @@ Uncertainty GBRTs
 		+ Fast to train.
 		+ Less investment than trying to select a DL architecture,
 		 	which is more of an art.
+
+- Confidence Interval.
+	* Uses empirical samples to quantity the uncertainty of a statistic like the population mean.
+		+ E.g., estimating the mean of a regression output response, its true value.
+- Prediction Interval.
+	* Estimates the uncertainty of an individual data point.
+		+ E.g., Estimating the uncertainty of a model prediction, not its true value.
+	* Is always wider than the confidence interval.
 
 
 V6
