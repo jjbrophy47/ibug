@@ -116,7 +116,7 @@ Uncertainty GBRTs
 	* NGBoost/PGBM/KGBM only provide the data (or aleatoric) uncertainty for a given prediction.
 		+ Maybe quantiles can be computed from the predicted distribution, whether
 			that be parametric or non-parametric?
-- Read conformal predictions paper.
+- Read conformal predictions paper. DONE.
 - Read about M5 prediction dataset. DONE.
 - Read NGBoost paper. DONE.
 	* NGBoost model estimates the parameters of a distribution.

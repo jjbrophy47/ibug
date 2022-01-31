@@ -29,6 +29,14 @@ done
 # scratch pad
 
 for f in ${fold_list[@]}; do
+    for d in ${d_list[@]}; do
+        for g in ${g_list[@]}; do
+            sbatch -a 11 -c 28 -t 1440  -p 'short'  -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $d $g
+        done
+    done
+done
+
+for f in ${fold_list[@]}; do
 
     for d in ${d_list[@]}; do
         sbatch -a 11 -c 10 -t 1440 -p 'short' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $d 0

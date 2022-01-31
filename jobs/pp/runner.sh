@@ -16,7 +16,7 @@ custom_dir=$6
 tree_frac=$7
 
 if [[ ! $custom_dir ]]; then
-    custom_dir=''
+    custom_dir='prediction'
 fi
 
 if [[ ! $tree_frac ]]; then

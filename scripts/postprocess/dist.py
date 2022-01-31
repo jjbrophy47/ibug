@@ -128,7 +128,7 @@ def process(args, out_dir, logger):
 
 def main(args):
 
-    out_dir = os.path.join(args.out_dir, args.custom_dir)
+    out_dir = os.path.join(args.out_dir, args.custom_dir, args.metric)
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
