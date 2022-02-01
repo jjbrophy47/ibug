@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from itertools import product
 
 import numpy as np
@@ -12,10 +13,11 @@ from experiments import util as exp_util
 
 
 # public
-def get_results(args, exp_dir, logger=None, progress_bar=True):
+def get_results(args, exp_dir, logger=None, progress_bar=False, remove_neighbors=False):
     """
     Retrieve results for the multiple methods.
     """
+    start = time.time()
 
     if logger and progress_bar:
         logger.info('\nGathering results...')
@@ -49,6 +51,11 @@ def get_results(args, exp_dir, logger=None, progress_bar=True):
             visited.add(method_id)
             result = _get_result(method_dir)
             if result is not None:
+                if remove_neighbors:
+                    if 'neighbor_idxs' in result:
+                        del result['neighbor_idxs']
+                    if 'neighbor_vals' in result:
+                        del result['neighbor_vals']
                 results.append((method_id, result))
 
     return results
@@ -192,7 +199,7 @@ def get_plot_dicts(markers=False):
 
 
 def plot_settings(family='serif', fontsize=11,
-                  markersize=5, linewidth=None):
+                  markersize=5, linewidth=None, libertine=False):
     """
     Matplotlib settings.
     """
@@ -207,6 +214,14 @@ def plot_settings(family='serif', fontsize=11,
     plt.rc('lines', markersize=markersize)
     if linewidth is not None:
         plt.rc('lines', linewidth=linewidth)
+    if libertine:
+        assert family == 'serif'
+        # plt.rc('text', usetex=True)
+        plt.rc('text.latex', preamble=r"""\usepackage{libertine}""")
+        plt.rc('text.latex', preamble=r"""
+                                      \usepackage{libertine}
+                                      \usepackage[libertine]{newtxmath}
+                                       """)
 
 
 def get_height(width, subplots=(1, 1)):

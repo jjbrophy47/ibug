@@ -197,8 +197,10 @@ def eval_dist(y, samples, dist='normal', nll=True, crps=False,
     assert samples.ndim == 2
     assert y.shape[0] == samples.shape[0]
     if loc is not None:
-        assert scale is not None
-        assert loc.shape == scale.shape == y.shape
+        assert loc.shape == y.shape
+    if scale is not None:
+        assert loc is not None
+        assert scale.shape == loc.shape
 
     # pseudo-random number generator
     if rng is None:
@@ -207,6 +209,8 @@ def eval_dist(y, samples, dist='normal', nll=True, crps=False,
     # get distribution
     if dist == 'normal':
         D = stats.norm
+    elif dist == 'skewnormal':
+        D = stats.skewnorm
     elif dist == 'lognormal':
         D = stats.lognorm
     elif dist == 'laplace':
@@ -239,10 +243,24 @@ def eval_dist(y, samples, dist='normal', nll=True, crps=False,
         if dist == 'kde':
             D_obj = D(samples[i], bw_method='scott')
         else:
-            if loc is not None:
-                try:
-                    if dist in ['lognormal', 'student_t', 'weibull']:
+            # keep location and scale fixed
+            if loc is not None and scale is not None:
+                try:  # fit shape parameter
+                    if dist in ['skewnormal', 'lognormal', 'student_t', 'weibull']:
                         params = D.fit(samples[i], floc=loc[i], fscale=scale[i])
+                    else:
+                        params = (loc[i], scale[i])
+                except:
+                    print('Failed using fixed loc. and scale, trying w/o fixed...')
+                    params = D.fit(samples[i])
+
+            # keep location fixed
+            elif loc is not None:
+                try:  # fit scale and shape parameters
+                    if dist in ['skewnormal', 'lognormal', 'student_t', 'weibull']:
+                        params = D.fit(samples[i], floc=loc[i])
+                    elif dist in ['normal', 'laplce', 'logistic', 'gumbel']:  # fit scale parameter
+                        params = D.fit(samples[i], floc=loc[i])
                     else:
                         params = (loc[i], scale[i])
                 except:

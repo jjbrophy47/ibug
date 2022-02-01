@@ -21,7 +21,7 @@ import util
 from experiments import util as exp_util
 
 
-def format_cols(df, dataset_map={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}):
+def format_cols(df, dataset_map={'Meps': 'MEPS', 'Msd': 'MSD', 'Star': 'STAR'}):
     """
     Format columns.
 
@@ -46,9 +46,6 @@ def format_cols(df, dataset_map={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}):
         new_cols.append(c)
     df.columns = new_cols
 
-    if 'Dataset' in df.columns:
-        df['Dataset'] = [dataset_map[d] if d in dataset_map else d.capitalize() for d in df['Dataset']]
-
     return df
 
 
@@ -68,6 +65,13 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
     """
     assert np.all(mean_df.columns == sem_df.columns)
     float_cols = [c for c in mean_df.columns if c not in mask_cols]
+
+    init_dataset_list = mean_df['dataset'].tolist()
+
+    # get min-value indices
+    vals = mean_df[float_cols].values
+    min_idxs = np.argmin(vals, axis=1)
+    min_val_dict = dict(zip(init_dataset_list, min_idxs))
 
     if metric == 'crps':
         formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
@@ -97,8 +101,14 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
     m_list = []
     s_list = []
     dataset_list = []
+    min_idxs_list = []
 
     for datasets, fmt in formats:
+        datasets = [d for d in datasets if d in init_dataset_list]
+
+        if len(datasets) == 0:
+            continue
+
         idxs = mean_df[mean_df['dataset'].isin(datasets)].index
 
         m_df = mean_df.loc[idxs][float_cols].applymap(fmt).astype(str)
@@ -107,12 +117,15 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
         s_df = sem_df.loc[idxs][float_cols].applymap(fmt).astype(str)
         s_list.append(s_df)
 
+        min_idxs_list += [min_val_dict[d] for d in datasets]
         dataset_list += [dataset_map[d] if d in dataset_map else d.capitalize() for d in datasets]
 
     temp1_df = pd.concat(m_list)
     temp2_df = pd.concat(s_list)
 
     result_df = temp1_df + '$_{(' + temp2_df + ')}$'
+    for i, j in enumerate(min_idxs_list):  # wrap values with the min. val in bf series
+        result_df.iloc[i, j] = '{\\bfseries ' + result_df.iloc[i, j] + '}'
     result_df.insert(loc=0, column='dataset', value=dataset_list)
     result_df = result_df.sort_values('dataset')
 
@@ -460,7 +473,7 @@ if __name__ == '__main__':
     parser.add_argument('--tree_frac', type=str, nargs='+', default=[1.0])
     parser.add_argument('--min_scale_pct', type=float, nargs='+', default=[0.0])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
-    parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted', 'weighted'])
+    parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
     parser.add_argument('--delta', type=int, nargs='+', default=[1])
     parser.add_argument('--gridsearch', type=int, nargs='+', default=[1])
 

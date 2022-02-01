@@ -461,7 +461,7 @@ def experiment(args, logger, out_dir):
         neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
         result['neighbor_idxs'] = neighbor_idxs
         result['neighbor_vals'] = neighbor_vals
-    elif args.custom_dir in ['dist', 'fdist']:
+    elif args.custom_dir in ['fl_dist', 'fls_dist']:
         logger.info('\nPredicting (distribution)...')
         start = time.time()
         neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
@@ -472,7 +472,9 @@ def experiment(args, logger, out_dir):
         start = time.time()
         dist_res = {'nll': {}, 'crps': {}}
         for dist in args.distribution:
-            if args.custom_dir == 'fdist':
+            if args.custom_dir == 'fl_dist':
+                loc_test, scale_test = loc.copy(), None
+            elif args.custom_dir == 'fls_dist':
                 loc_test, scale_test = loc.copy(), scale.copy()
             else:
                 loc_test, scale_test = None, None
@@ -574,8 +576,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, KGBM, constant
     parser.add_argument('--weights', type=str, default='uniform')  # KNN
     parser.add_argument('--distribution', type=str, nargs='+',
-                        default=['normal', 'lognormal', 'laplace', 'student_t',
-                                 'logistic', 'gumbel', 'weibull', 'kde'])
+                        default=['normal', 'skewnormal', 'lognormal', 'laplace',
+                                 'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])
 
     args = parser.parse_args()
     main(args)

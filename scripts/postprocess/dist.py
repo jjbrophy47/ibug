@@ -23,20 +23,22 @@ from experiments import util as exp_util
 
 def process(args, out_dir, logger):
 
+    util.plot_settings(fontsize=21, libertine=True)
+
     rng = np.random.default_rng(args.random_state)
     color, ls, label = util.get_plot_dicts()
     dataset_map = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
     if args.combine:
         n_row = len(args.dataset)
-        n_col = 5
-        fig, axs = plt.subplots(n_row, n_col, figsize=(n_col * 4, n_row * 3))
+        n_col = 6
+        fig, axs = plt.subplots(n_row, n_col, figsize=(n_col * 4, n_row * 3 + 1))
 
     for i, dataset in enumerate(args.dataset):
         if dataset in args.skip:
             continue
 
-        print(f'{dataset}...')
+        logger.info(f'{dataset}...')
 
         # get results
         res_list = []
@@ -83,33 +85,33 @@ def process(args, out_dir, logger):
         # plot neighbor distributions
         neighbor_idxs = res['neighbor_idxs']
         neighbor_vals = res['neighbor_vals']
-        test_idxs = rng.choice(neighbor_idxs.shape[0], size=4, replace=False)
+        test_idxs = rng.choice(neighbor_idxs.shape[0], size=5, replace=False)
 
         dataset_name = dataset_map[dataset] if dataset in dataset_map else dataset.capitalize()
         stat = 'count'
 
         if not args.combine:
-            fig, axs = plt.subplots(1, 5, figsize=(20, 3))
+            fig, axs = plt.subplots(1, 6, figsize=(24, 3))
 
         for j, test_idx in enumerate(test_idxs):
             ax = axs[i][j] if args.combine else axs[j]
             sns.kdeplot(neighbor_vals[test_idx], ax=ax)
             if dataset == 'meps':
                 ax.set_xlim(0, None)
-            # sns.histplot(neighbor_vals[test_idx], kde=True, stat=stat, ax=ax)
             ax.set_title(f'Test Index {test_idx}')
             if i == len(args.dataset) - 1:
                 ax.set_xlabel('Output value')
             if j == 0:
                 ax.set_ylabel(f'({dataset_name})\nNo. nearest train')
-                ax.set_ylabel(f'({dataset_name})\nDensity of ' r'$k$-nearest train')
+                ax.set_ylabel(f'({dataset_name})\n'r'$k$-train density')
             else:
                 ax.set_ylabel('')
 
+        print(means, sems)
         ax = axs[i][-1] if args.combine else axs[-1]
         ax.bar(names, means, yerr=sems)
         ax.axhline(0, color='k', ls='-')
-        ax.set_title('Probabalistic Performance')
+        ax.set_title('Avg. Performance')
         if i == len(args.dataset) - 1:
             ax.set_xlabel('Distribution')
         ax.set_ylabel(args.metric.upper())
@@ -119,8 +121,12 @@ def process(args, out_dir, logger):
             plt.savefig(os.path.join(out_dir, f'{dataset}.png'))
 
     if args.combine:
+        line = plt.Line2D([0.8325, 0.8325], [0.05, 0.95], transform=fig.transFigure,
+                          color='lightgray', linestyle='--', linewidth=3.5)
+        fig.add_artist(line)
+
         plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, f'aggregate.png'))
+        plt.savefig(os.path.join(out_dir, f'aggregate.pdf'))
 
     # save
     logger.info(f'Saving results to {out_dir}...')
@@ -165,7 +171,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', type=int, nargs='+', default=[1])
     parser.add_argument('--gridsearch', type=int, nargs='+', default=[1])
     parser.add_argument('--metric', type=str, default='nll')
-    parser.add_argument('--random_state', type=int, default=1)
+    parser.add_argument('--random_state', type=int, default=2)
     parser.add_argument('--combine', type=int, default=0)
 
     args = parser.parse_args()
