@@ -26,10 +26,11 @@ from experiments import util as exp_util
 def process(args, out_dir, logger):
 
     util.plot_settings(fontsize=21, libertine=True)
-
     color, ls, label = util.get_plot_dicts()
+
     metric_dict = {'crps': 'CRPS', 'nll': 'NLL'}
     metric2_dict = {'build': 'Build', 'pred': 'Predict', 'bpred': 'Total time (s)'}
+    dataset_dict = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
     if args.combine:
         n_row = 2
@@ -140,7 +141,8 @@ def process(args, out_dir, logger):
         ax.fill_between([0, 100], yngboost1, yngboost2, color='purple', alpha=0.1)
 
         xticks = [0, 25, 50, 75, 100]
-        ax.set_title(dataset.capitalize())
+        dataset_name = dataset_dict[dataset] if dataset in dataset_dict else dataset.capitalize()
+        ax.set_title(dataset_name)
         ax.set_xticks(xticks)
         ax.set_xticklabels([])
 

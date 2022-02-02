@@ -461,7 +461,7 @@ def experiment(args, logger, out_dir):
         neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
         result['neighbor_idxs'] = neighbor_idxs
         result['neighbor_vals'] = neighbor_vals
-    elif args.custom_dir in ['fl_dist', 'fls_dist']:
+    elif args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
         logger.info('\nPredicting (distribution)...')
         start = time.time()
         neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)

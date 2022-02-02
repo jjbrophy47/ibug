@@ -33,6 +33,8 @@ def process(args, out_dir, logger):
         n_row = len(args.dataset)
         n_col = 6
         fig, axs = plt.subplots(n_row, n_col, figsize=(n_col * 4, n_row * 3 + 1))
+    else:
+        fig, axs = plt.subplots(1, 6, figsize=(24, 3))
 
     for i, dataset in enumerate(args.dataset):
         if dataset in args.skip:
@@ -90,9 +92,6 @@ def process(args, out_dir, logger):
         dataset_name = dataset_map[dataset] if dataset in dataset_map else dataset.capitalize()
         stat = 'count'
 
-        if not args.combine:
-            fig, axs = plt.subplots(1, 6, figsize=(24, 3))
-
         for j, test_idx in enumerate(test_idxs):
             ax = axs[i][j] if args.combine else axs[j]
             sns.kdeplot(neighbor_vals[test_idx], ax=ax)
@@ -107,7 +106,6 @@ def process(args, out_dir, logger):
             else:
                 ax.set_ylabel('')
 
-        print(means, sems)
         ax = axs[i][-1] if args.combine else axs[-1]
         ax.bar(names, means, yerr=sems)
         ax.axhline(0, color='k', ls='-')
@@ -119,6 +117,8 @@ def process(args, out_dir, logger):
         if not args.combine:
             plt.tight_layout()
             plt.savefig(os.path.join(out_dir, f'{dataset}.png'))
+            for i in range(6):
+                axs[i].clear()
 
     if args.combine:
         line = plt.Line2D([0.8325, 0.8325], [0.05, 0.95], transform=fig.transFigure,

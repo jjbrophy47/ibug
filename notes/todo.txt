@@ -41,6 +41,8 @@ Influence Estimation
 Uncertainty GBRTs
 ---
 
+- Figures 1 and 2 should say "Test NLL" instead of just "NLL".
+
 - KDD formatting:
 	* Sections should be numbered.
 	* Captions should go above tables.
