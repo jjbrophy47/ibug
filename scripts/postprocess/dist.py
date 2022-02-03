@@ -112,7 +112,7 @@ def process(args, out_dir, logger):
         ax.set_title('Avg. Performance')
         if i == len(args.dataset) - 1:
             ax.set_xlabel('Distribution')
-        ax.set_ylabel(args.metric.upper())
+        ax.set_ylabel(f'Test {args.metric.upper()}')
 
         if not args.combine:
             plt.tight_layout()

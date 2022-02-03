@@ -3,13 +3,7 @@ import joblib
 
 import numpy as np
 import pandas as pd
-# import seaborn as sns  # TEMP
-# import matplotlib.pyplot as plt  # TEMP
-# from scipy.integrate import quad  # TEMP
-# from scipy.stats import gaussian_kde  # TEMP
-from scipy.stats import norm  # TEMP
-# from sklearn.neighbors import KernelDensity  # TEMP
-# from sklearn.preprocessing import LabelBinarizer
+from scipy.stats import norm
 
 from .base import Estimator
 from .parsers import util
@@ -206,7 +200,7 @@ class KGBMWrapper(Estimator):
                 affinity[leaf_dict[tree_idx][test_leaves[i, tree_idx]]] += 1
 
             # get k nearest neighbors
-            train_idxs = np.argsort(affinity)[-self.k:]
+            train_idxs = np.argsort(affinity)[-self.k_:]
             train_vals = self.y_train_[train_idxs]
 
             # add to result

@@ -11,5 +11,3 @@ for f in ${fold_list[@]}; do
         sbatch -a 1-22 -c 10 -t 1440  -p 'short' -o ${o}'kgbm-%a.out' $run $f 'kgbm' $t $d $g $c
     done
 done
-
-# scratch pad

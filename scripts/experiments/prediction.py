@@ -39,6 +39,65 @@ from kgbm import KGBMWrapper
 EPSILON = 1e-15
 
 
+def evaluate_posterior(args, model, X, y, min_scale, loc, scale, logger=None, prefix=''):
+    """
+    Model the posterior using different parametric and non-parametric
+        distributions and evaluate their predictive performance.
+
+    Input
+        args: namespace dict, Experiment args.
+        model: KGBM, Fitted model.
+        X: np.ndarray, 2d array of input data.
+        y: np.ndarray, 1d array of ground-truth targets.
+        loc: np.ndarray, 1d array of location values.
+        scale: np.ndarray, 1d array of scale values.
+        logger: logging object, Log updates.
+        prefix: str, Used to identify updates.
+
+    Return
+        3-tuple including a dict of CRPS and NLL results, and 2 2d
+            arrays of neighbor indices and target values, shape=(no. test, k).
+    """
+    assert 'kgbm' in str(model).lower()
+    assert X.ndim == 2 and y.ndim == 1 and loc.ndim == 1 and scale.ndim == 1
+    assert X.shape[0] == len(y) == len(loc) == len(scale)
+    if logger:
+        logger.info(f'\n[{prefix}] Computing k-nearest neighbors...')
+
+    start = time.time()
+    neighbor_idxs, neighbor_vals = model.pred_dist(X, return_kneighbors=True)
+
+    if logger:
+        logger.info(f'time: {time.time() - start:.3f}s')
+        logger.info(f'\n[{prefix}] Evaluating (distributions)...')
+
+    start = time.time()
+    dist_res = {'nll': {}, 'crps': {}}
+
+    for dist in args.distribution:
+        if args.custom_dir == 'fl_dist':
+            loc_copy, scale_copy = loc.copy(), None
+        elif args.custom_dir == 'fls_dist':
+            loc_copy, scale_copy = loc.copy(), scale.copy()
+        else:
+            loc_copy, scale_copy = None, None
+
+        nll_d, crps_d = util.eval_dist(y=y, samples=neighbor_vals.copy(), dist=dist, nll=True,
+                                       crps=True, min_scale=min_scale, random_state=args.random_state,
+                                       loc=loc_copy, scale=scale_copy)
+
+        if logger:
+            logger.info(f'[{prefix} - {dist}] CRPS: {crps_d:.5f}, NLL: {nll_d:.5f}')
+
+        dist_res['nll'][dist] = nll_d
+        dist_res['crps'][dist] = crps_d
+
+    if logger:
+        logger.info(f'[{prefix} time: {time.time() - start:.3f}s')
+
+    return dist_res, neighbor_idxs, neighbor_vals
+
+
 def tune_delta(loc, scale, y, ops=['add', 'mult'],
                delta_vals=[1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3,
                            1e-2, 1e-1, 0.0, 1e0, 1e1, 1e2, 1e3],
@@ -85,7 +144,7 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
     return best_delta, best_op
 
 
-def get_loc_scale(model, model_type, X, y=None, min_scale=None,
+def get_loc_scale(model, model_type, X, y_train=None, min_scale=None,
                   verbose=0, logger=None):
     """
     Predict location and scale for each x in X.
@@ -94,13 +153,13 @@ def get_loc_scale(model, model_type, X, y=None, min_scale=None,
         model: object, uncertainty estimator.
         model_type: str, type of uncertainty estimator.
         X: 2d array of input data.
-        y: 1d array of targets (constant and KNN methods only).
+        y_train: 1d array of targets (constant and KNN methods only).
 
     Return
         Tuple, 2 1d arrays of locations and scales.
     """
     if model_type == 'constant':
-        assert y is not None
+        assert y_train is not None
         loc = model.predict(X)
         scale = np.full(len(X), np.std(y), dtype=np.float32)
 
@@ -108,15 +167,15 @@ def get_loc_scale(model, model_type, X, y=None, min_scale=None,
         loc, scale = model.pred_dist(X)
 
     elif model_type == 'knn':
-        assert y is not None
+        assert y_train is not None
 
         loc = np.zeros(len(X), dtype=np.float32)
         scale = np.zeros(len(X), dtype=np.float32)
 
         for i in range(len(X)):
             train_idxs = model.kneighbors(X[[i]], return_distance=False).flatten()  # shape=(len(X),)
-            loc[i] = np.mean(y[train_idxs])
-            scale[i] = np.std(y[train_idxs]) + EPSILON  # avoid 0 scale
+            loc[i] = np.mean(y_train[train_idxs])
+            scale[i] = np.std(y_train[train_idxs]) + EPSILON  # avoid 0 scale
 
             if min_scale is not None and scale[i] < min_scale:
                 scale[i] = min_scale
@@ -246,7 +305,7 @@ def experiment(args, logger, out_dir):
     logger.info('\nTuning model...')
     start = time.time()
 
-    model, param_grid = get_model(args, n_train=len(X_train))
+    clf, param_grid = get_model(args, n_train=len(X_tune))
 
     if args.model == 'knn' or (args.model in ['constant', 'kgbm', 'pgbm'] and args.gridsearch):
         logger.info('\nmodel: {}, param_grid: {}'.format(args.model, param_grid))
@@ -260,7 +319,7 @@ def experiment(args, logger, out_dir):
         best_params = None
 
         for i, param_dict in enumerate(param_dicts):
-            temp_model = clone(model).set_params(**param_dict).fit(X_tune, y_tune)
+            temp_model = clone(clf).set_params(**param_dict).fit(X_tune, y_tune)
             y_val_hat = temp_model.predict(X_val)
             param_dict['score'] = mean_squared_error(y_val, y_val_hat)
 
@@ -285,33 +344,33 @@ def experiment(args, logger, out_dir):
 
     elif args.model in ['constant', 'kgbm']:
         if args.tree_type == 'lgb':
-            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
-                                         eval_metric='mse', early_stopping_rounds=args.n_stopping_rounds)
+            model_val = clone(clf).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
+                                       eval_metric='mse', early_stopping_rounds=args.n_stopping_rounds)
             best_n_estimators = model_val.best_iteration_
         elif args.tree_type == 'xgb':
-            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
-                                         early_stopping_rounds=args.n_stopping_rounds)
+            model_val = clone(clf).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
+                                       early_stopping_rounds=args.n_stopping_rounds)
             best_n_estimators = model_val.best_ntree_limit
         else:
             assert args.tree_type == 'cb'
-            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
-                                         early_stopping_rounds=args.n_stopping_rounds)
+            model_val = clone(clf).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
+                                       early_stopping_rounds=args.n_stopping_rounds)
             best_n_estimators = model_val.tree_count_
 
         best_params = {'n_estimators': best_n_estimators}
         logger.info(f'\nbest params: {best_params}')
 
     elif args.model == 'pgbm':  # PGBM, only tune no. iterations
-        model_val = clone(model).fit(X_tune, y_tune, eval_set=(X_val, y_val),
-                                     early_stopping_rounds=args.n_stopping_rounds)
+        model_val = clone(clf).fit(X_tune, y_tune, eval_set=(X_val, y_val),
+                                   early_stopping_rounds=args.n_stopping_rounds)
         best_n_estimators = model_val.learner_.best_iteration
         best_params = {'n_estimators': best_n_estimators}
         logger.info(f'\nbest params: {best_params}')
 
     else:  # NGBoost, only tune no. iterations
         assert args.model == 'ngboost'
-        model_val = clone(model).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
-                                     early_stopping_rounds=args.n_stopping_rounds)
+        model_val = clone(clf).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
+                                   early_stopping_rounds=args.n_stopping_rounds)
         if model_val.best_val_loss_itr is None:
             best_n_estimators = model_val.n_estimators
         else:
@@ -356,68 +415,83 @@ def experiment(args, logger, out_dir):
     else:
         tune_time_knn = 0
 
+    # get validation predictions
+    if args.model == 'kgbm':
+        loc_val, scale_val = model_val.loc_val_, model_val.scale_val_
+
+    elif args.model in ['constant', 'ngboost', 'pgbm'] or (args.model == 'knn' and args.min_scale_pct == 0):
+        loc_val, scale_val = get_loc_scale(model_val, args.model, X=X_val, y_train=y_train,
+                                           verbose=args.verbose, logger=logger)
+
     # tune delta
     if args.delta:
+        assert loc_val is not None and scale_val is not None
         logger.info(f'\nTuning delta...')
         start = time.time()
-
-        if args.model == 'kgbm':
-            loc_val, scale_val = model_val.loc_val_, model_val.scale_val_
-
-        elif args.model in ['constant', 'ngboost', 'pgbm'] or (args.model == 'knn' and args.min_scale_pct == 0):
-            loc_val, scale_val = get_loc_scale(model_val, args.model, X=X_val, y=y_train,
-                                               verbose=args.verbose, logger=logger)
-
         delta, delta_op = tune_delta(loc=loc_val, scale=scale_val, y=y_val,
                                      verbose=args.verbose, logger=logger)
-
         tune_time_delta = time.time() - start
         logger.info(f'\nbest delta: {delta}, op: {delta_op}')
         logger.info(f'tune time (delta): {tune_time_delta:.3f}s')
     else:
         tune_time_delta = 0
 
+    # validation: add/multiply delta
+    if args.delta:
+        if delta_op == 'add':
+            scale_val = scale_val + delta
+        elif delta_op == 'mult':
+            scale_val = scale_val * delta
+
+    # validation: evaluate
+    logger.info(f'\n[VAL] Evaluating...')
+    start = time.time()
+    rmse_val, mae_val = util.eval_pred(y_val, model=model_val, X=X_val, logger=None, prefix=args.model)
+    nll_val, crps_val = util.eval_normal(y=y_val, loc=loc_val, scale=scale_val, nll=True, crps=True)
+    logger.info(f'CRPS: {crps_val:.5f}, NLL: {nll_val:.5f}, RMSE: {rmse_val:.5f}, MAE: {mae_val:.5f}')
+    logger.info(f'time: {time.time() - start:.3f}s')
+
     # train: build using train+val data with best params
-    logger.info('\nTraining...')
+    logger.info('\n[TEST] Training...')
     start = time.time()
 
-    model = clone(model).set_params(**best_params).fit(X_train, y_train)
+    model_test = clone(clf).set_params(**best_params).fit(X_train, y_train)
     if args.model == 'kgbm':  # wrap model
-        model = KGBMWrapper(k=best_k, tree_frac=args.tree_frac, min_scale=min_scale,
-                            verbose=args.verbose, logger=logger).fit(model, X_train, y_train)
+        model_test = KGBMWrapper(k=best_k, tree_frac=args.tree_frac, min_scale=min_scale,
+                                 verbose=args.verbose, logger=logger).fit(model_test, X_train, y_train)
 
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')
 
     total_build_time = tune_time + tune_time_kgbm + tune_time_knn + tune_time_delta + train_time
 
-    # predict: compute location and scale
-    logger.info('\nPredicting...')
+    # test: predict, compute location and scale
+    logger.info('\n[TEST] Predicting...')
     start = time.time()
-    loc, scale = get_loc_scale(model, args.model, X=X_test, y=y_train,
-                               min_scale=min_scale, verbose=args.verbose, logger=logger)
+    loc_test, scale_test = get_loc_scale(model_test, args.model, X=X_test, y_train=y_train,
+                                         min_scale=min_scale, verbose=args.verbose, logger=logger)
 
-    # add/multiply delta
+    # test: add/multiply delta
     if args.delta:
         if delta_op == 'add':
-            scale = scale + delta
+            scale_test = scale_test + delta
         elif delta_op == 'mult':
-            scale = scale * delta
+            scale_test = scale_test * delta
 
     total_predict_time = time.time() - start
     logger.info(f'time: {total_predict_time:.3f}s')
 
+    # test: evaluate
+    logger.info(f'\n[TEST] Evaluating...')
+    start = time.time()
+    rmse_test, mae_test = util.eval_pred(y_test, model=model_test, X=X_test, logger=None, prefix=args.model)
+    nll_test, crps_test = util.eval_normal(y=y_test, loc=loc_test, scale=scale_test, nll=True, crps=True)
+    logger.info(f'CRPS: {crps_test:.5f}, NLL: {nll_test:.5f}, RMSE: {rmse_test:.5f}, MAE: {mae_test:.5f}')
+    logger.info(f'time: {time.time() - start:.3f}s')
+
     # display times
     logger.info(f'\ntotal build time: {total_build_time:.3f}s')
     logger.info(f'total predict time: {total_predict_time:.3f}s')
-
-    # evaluate
-    logger.info(f'\nEvaluating...')
-    start = time.time()
-    rmse, mae = util.eval_pred(y_test, model=model, X=X_test, logger=None, prefix=args.model)
-    nll, crps = util.eval_normal(y=y_test, loc=loc, scale=scale, nll=True, crps=True)
-    logger.info(f'CRPS: {crps:.5f}, NLL: {nll:.5f}, RMSE: {rmse:.5f}, MAE: {mae:.5f}')
-    logger.info(f'time: {time.time() - start:.3f}s')
 
     # plot predictions
     test_idxs = np.argsort(y_test)
@@ -425,9 +499,9 @@ def experiment(args, logger, out_dir):
     fig, ax = plt.subplots()
     x = np.arange(len(test_idxs))
     ax.plot(x, y_test[test_idxs], ls='--', color='orange', label='actual')
-    ax.fill_between(x, loc[test_idxs] - scale[test_idxs], loc[test_idxs] + scale[test_idxs],
+    ax.fill_between(x, loc_test[test_idxs] - scale_test[test_idxs], loc_test[test_idxs] + scale_test[test_idxs],
                     label='uncertainty', alpha=0.75)
-    ax.set_title(f'CRPS: {crps:.3f}, NLL: {nll:.3f}, RMSE: {rmse:.3f}')
+    ax.set_title(f'CRPS: {crps_test:.3f}, NLL: {nll_test:.3f}, RMSE: {rmse_test:.3f}')
     ax.set_xlabel('Test index (sorted by output)')
     ax.set_ylabel('Output')
     ax.legend()
@@ -436,16 +510,16 @@ def experiment(args, logger, out_dir):
 
     # save results
     result = vars(args)
-    result['model_params'] = model.get_params()
-    result['rmse'] = rmse
-    result['mae'] = mae
-    result['nll'] = nll
-    result['crps'] = crps
+    result['model_params'] = model_test.get_params()
+    result['rmse'] = rmse_test
+    result['mae'] = mae_test
+    result['nll'] = nll_test
+    result['crps'] = crps_test
+    result['val_res'] = {'rmse': rmse_val, 'mae': mae_val, 'crps': crps_val, 'nll': nll_val}
     result['tune_time'] = tune_time
     result['train_time'] = train_time
     result['total_build_time'] = total_build_time
     result['total_predict_time'] = total_predict_time
-    result['total_experiment_time'] = time.time() - begin
     result['max_rss_MB'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6  # MB if OSX, GB if Linux
     if args.delta:
         result['best_delta'] = delta
@@ -458,43 +532,29 @@ def experiment(args, logger, out_dir):
         result['best_min_scale'] = min_scale
         result['tune_time_knn'] = tune_time_knn
     if args.custom_dir == 'tree_frac':
-        neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
+        assert args.model == 'kgbm'
+        neighbor_idxs, neighbor_vals = model_test.pred_dist(X_test, return_kneighbors=True)
         result['neighbor_idxs'] = neighbor_idxs
         result['neighbor_vals'] = neighbor_vals
     elif args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
-        logger.info('\nPredicting (distribution)...')
-        start = time.time()
-        neighbor_idxs, neighbor_vals = model.pred_dist(X_test, return_kneighbors=True)
-        logger.info(f'time: {time.time() - start:.3f}s')
-
-        # model output distribution using KDE
-        logger.info('\nEvaluating (distributions)...')
-        start = time.time()
-        dist_res = {'nll': {}, 'crps': {}}
-        for dist in args.distribution:
-            if args.custom_dir == 'fl_dist':
-                loc_test, scale_test = loc.copy(), None
-            elif args.custom_dir == 'fls_dist':
-                loc_test, scale_test = loc.copy(), scale.copy()
-            else:
-                loc_test, scale_test = None, None
-            nll_d, crps_d = util.eval_dist(y=y_test, samples=neighbor_vals.copy(), dist=dist, nll=True,
-                                           crps=True, min_scale=min_scale, random_state=args.random_state,
-                                           loc=loc_test, scale=scale_test)
-            logger.info(f'CRPS ({dist}): {crps_d:.5f}, NLL ({dist}): {nll_d:.5f}')
-            dist_res['nll'][dist] = nll_d
-            dist_res['crps'][dist] = crps_d
-        logger.info(f'time: {time.time() - start:.3f}s')
+        assert args.model == 'kgbm'
+        val_dist_res, _, _ = evaluate_posterior(args, model_val, X=X_val, y=y_val, min_scale=min_scale,
+                                                loc=loc_val, scale=scale_val, logger=logger, prefix='VAL')
+        test_dist_res, nb_idxs, nb_vals = evaluate_posterior(args, model_test, X=X_test, y=y_test,
+                                                             min_scale=min_scale, loc=loc_test, scale=scale_test,
+                                                             logger=logger, prefix='TEST')
+        result['val_dist_res'] = val_dist_res
+        result['test_dist_res'] = test_dist_res
+        result['neighbor_idxs'] = nb_idxs
+        result['neighbor_vals'] = nb_vals
 
         # plot output dist. of k nearest neighbors
         test_idxs = rng.choice(np.arange(X_test.shape[0]), size=16)
-
         fig, axs = plt.subplots(4, 4, figsize=(12, 8))
         axs = axs.flatten()
-
         for i, test_idx in enumerate(test_idxs):
             ax = axs[i]
-            sns.histplot(neighbor_vals[test_idx], kde=True, ax=ax)
+            sns.histplot(nb_vals[test_idx], kde=True, ax=ax)
             ax.set_title(f'Test idx.: {test_idx}')
             if i >= 12:
                 ax.set_xlabel('y')
@@ -502,10 +562,7 @@ def experiment(args, logger, out_dir):
                 ax.set_ylabel('Count')
         plt.tight_layout()
         fig.savefig(os.path.join(out_dir, 'kdist.png'), bbox_inches='tight')
-
-        result['neighbor_idxs'] = neighbor_idxs
-        result['neighbor_vals'] = neighbor_vals
-        result['dist_res'] = dist_res
+    result['total_experiment_time'] = time.time() - begin
 
     # Macs show this in bytes, unix machines show this in KB
     logger.info(f"\ntotal experiment time: {result['total_experiment_time']:.3f}s")

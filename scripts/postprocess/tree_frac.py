@@ -147,7 +147,7 @@ def process(args, out_dir, logger):
         ax.set_xticklabels([])
 
         if i == 0:
-            ax.set_ylabel(metric_dict[args.metric])
+            ax.set_ylabel(f'Test {metric_dict[args.metric]}')
             ax.legend(fontsize=15)
 
         # runtime

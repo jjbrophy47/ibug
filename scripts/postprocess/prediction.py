@@ -12,6 +12,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import sem
+from scipy.stats import ttest_rel
 from scipy import stats
 from tqdm import tqdm
 
@@ -69,9 +70,17 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
     init_dataset_list = mean_df['dataset'].tolist()
 
     # get min-value indices
-    vals = mean_df[float_cols].values
-    min_idxs = np.argmin(vals, axis=1)
-    min_val_dict = dict(zip(init_dataset_list, min_idxs))
+    min_val_dict = {}  # schema={[dataset]: [list of min. indicies; e.g., [1, 3]]}
+
+    mean_vals = mean_df[float_cols].values  # shape=(n_dataset, n_method)
+    sem_vals = sem_df[float_cols].values  # shape=(n_dataset, n_method)
+    mean_sem_vals = mean_vals - sem_vals  # shape=(n_dataset, n_method)
+
+    min_vals = np.min(mean_vals, axis=1)  # shape=(n_dataset,)
+
+    for dataset, mean_sem_row, min_val in list(zip(init_dataset_list, mean_sem_vals, min_vals)):
+        min_idxs = np.where(mean_sem_row <= min_val)[0]
+        min_val_dict[dataset] = min_idxs
 
     if metric == 'crps':
         formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
@@ -117,15 +126,17 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
         s_df = sem_df.loc[idxs][float_cols].applymap(fmt).astype(str)
         s_list.append(s_df)
 
-        min_idxs_list += [min_val_dict[d] for d in datasets]
+        for d in datasets:
+            min_idxs_list.append(min_val_dict[d])
         dataset_list += [dataset_map[d] if d in dataset_map else d.capitalize() for d in datasets]
 
     temp1_df = pd.concat(m_list)
     temp2_df = pd.concat(s_list)
 
     result_df = temp1_df + '$_{(' + temp2_df + ')}$'
-    for i, j in enumerate(min_idxs_list):  # wrap values with the min. val in bf series
-        result_df.iloc[i, j] = '{\\bfseries ' + result_df.iloc[i, j] + '}'
+    for i, min_idxs in enumerate(min_idxs_list):  # wrap values with the min. val in bf series
+        for j in min_idxs:
+            result_df.iloc[i, j] = '{\\bfseries ' + result_df.iloc[i, j] + '}'
     result_df.insert(loc=0, column='dataset', value=dataset_list)
     result_df = result_df.sort_values('dataset')
 
@@ -194,7 +205,8 @@ def aggregate_params(param_df, param_names, param_types):
     return param_df
 
 
-def append_head2head(data_df, attach_df=None, skip_cols=['dataset'], include_ties=False):
+def append_head2head(data_df, attach_df=None, include_ties=True,
+                     p_val_threshold=0.05):
     """
     Attach head-to-head wins, ties, and losses to the given dataframe.
 
@@ -203,13 +215,15 @@ def append_head2head(data_df, attach_df=None, skip_cols=['dataset'], include_tie
         attach_df: pd.DataFrame, Dataframe to attach results to.
         skip_cols: list, List of columns to ignore when computing scores.
         include_ties: bool, If True, include ties with scores.
+        p_val_threshold: float, p-value threshold to denote statistical significance.
 
     Return
         Dataframe attached to `attach_df` if not None, otherwise scores
             are appended to `data_df`.
     """
     assert 'dataset' in data_df.columns
-    cols = [c for c in data_df.columns if c not in ['dataset']]
+    assert 'fold' in data_df.columns
+    cols = [c for c in data_df.columns if c not in ['dataset', 'fold']]
 
     res_list = []
     for c1 in cols:
@@ -224,11 +238,21 @@ def append_head2head(data_df, attach_df=None, skip_cols=['dataset'], include_tie
                 res[c1] = '-'
                 continue
 
-            n_wins = np.sum(data_df[c1] < data_df[c2])
-            n_losses = np.sum(data_df[c1] > data_df[c2])
+            n_wins, n_ties, n_losses = 0, 0, 0
+            for dataset, df in data_df.groupby('dataset'):
+                t_stat, p_val = ttest_rel(df[c1], df[c2], nan_policy='omit')
+                c1_mean = np.mean(df[c1])
+                c2_mean = np.mean(df[c2])
+                if c1_mean < c2_mean and p_val < p_val_threshold:
+                    n_wins += 1
+                elif c2_mean < c1_mean and p_val < p_val_threshold:
+                    n_losses += 1
+                else:
+                    if np.isnan(p_val):
+                        print('NAN P_val', dataset, c1, c2)
+                    n_ties += 1
 
             if include_ties:
-                n_ties = np.sum(data_df[c1] == data_df[c2])
                 res[c2] = f'{n_wins}-{n_ties}-{n_losses}'
             else:
                 res[c2] = f'{n_wins}-{n_losses}'
@@ -392,10 +416,10 @@ def process(args, out_dir, logger):
     time_ms_df = join_mean_sem(time_mean_df, time_sem_df, metric='time')
 
     # attach head-to-head scores
-    crps_ms_df = append_head2head(data_df=crps_mean_df, attach_df=crps_ms_df)
-    nll_ms_df = append_head2head(data_df=nll_mean_df, attach_df=nll_ms_df)
-    rmse_ms_df = append_head2head(data_df=rmse_mean_df, attach_df=rmse_ms_df)
-    time_ms_df = append_head2head(data_df=time_mean_df, attach_df=time_ms_df)
+    crps_ms_df = append_head2head(data_df=crps_df, attach_df=crps_ms_df, include_ties=True)
+    nll_ms_df = append_head2head(data_df=nll_df, attach_df=nll_ms_df, include_ties=True)
+    rmse_ms_df = append_head2head(data_df=rmse_df, attach_df=rmse_ms_df, include_ties=True)
+    time_ms_df = append_head2head(data_df=time_df, attach_df=time_ms_df, include_ties=True)
 
     # format columns
     crps_ms_df = format_cols(crps_ms_df)

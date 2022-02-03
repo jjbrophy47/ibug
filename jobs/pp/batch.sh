@@ -28,10 +28,14 @@ done
 
 # scratch pad
 
+fold_list=(1)  # run again with fold_list=(1 2)
+g_list=(1)
+d_list=(1)
+
 for f in ${fold_list[@]}; do
     for d in ${d_list[@]}; do
         for g in ${g_list[@]}; do
-            sbatch -a 11 -c 28 -t 1440  -p 'short'  -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $d $g
+            sbatch -a 20 -c 15 -t 7200  -p 'long'  -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $d $g
         done
     done
 done
