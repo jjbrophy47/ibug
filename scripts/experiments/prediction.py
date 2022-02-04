@@ -161,7 +161,7 @@ def get_loc_scale(model, model_type, X, y_train=None, min_scale=None,
     if model_type == 'constant':
         assert y_train is not None
         loc = model.predict(X)
-        scale = np.full(len(X), np.std(y), dtype=np.float32)
+        scale = np.full(len(X), np.std(y_train), dtype=np.float32)
 
     elif model_type == 'kgbm':
         loc, scale = model.pred_dist(X)
