@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=ProbReg
+#SBATCH --job-name=ProbReg2
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --account=uoml
@@ -45,3 +45,5 @@ python3 scripts/experiments/prediction.py \
   --custom_dir=${custom_dir} \
   --tree_frac=${tree_frac} \
   --tune_frac=${tune_frac} \
+  --out_dir='output2' \
+  --data_dir='data_20folds' \

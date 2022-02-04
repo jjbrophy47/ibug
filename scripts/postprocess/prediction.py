@@ -243,11 +243,13 @@ def append_head2head(data_df, attach_df=None, include_ties=True,
                 t_stat, p_val = ttest_rel(df[c1], df[c2], nan_policy='omit')
                 c1_mean = np.mean(df[c1])
                 c2_mean = np.mean(df[c2])
-                if c1_mean < c2_mean and p_val < p_val_threshold:
+                if t_stat < 0 and p_val < p_val_threshold:
                     n_wins += 1
-                elif c2_mean < c1_mean and p_val < p_val_threshold:
+                elif t_stat > 0 and p_val < p_val_threshold:
                     n_losses += 1
                 else:
+                    # if 'kgbm' in c1.lower() and 'ngboost' in c2.lower():
+                    #     print(dataset, c1, c2, t_stat, p_val, df[c1].values, df[c2].values)
                     if np.isnan(p_val):
                         print('NAN P_val', dataset, c1, c2)
                     n_ties += 1
@@ -357,6 +359,7 @@ def process(args, out_dir, logger):
 
     # get results
     crps_list, nll_list, rmse_list, time_list = [], [], [], []
+    val_nll_list = []
     param_list = []
     param_names = {}
     param_types = {}
@@ -371,19 +374,23 @@ def process(args, out_dir, logger):
 
             crps = {'dataset': dataset, 'fold': fold}
             nll, rmse, tot_time = crps.copy(), crps.copy(), crps.copy()
+            val_nll = crps.copy()
             param = crps.copy()
+
             for method, res in results:
                 name = label[method]
                 crps[name] = res['crps']
                 nll[name] = res['nll']
                 rmse[name] = res['rmse']
                 tot_time[name] = res['total_build_time'] + res['total_predict_time']
+                val_nll[name] = res['val_res']['nll']
                 param[name], param_names[name], param_types[name] = get_param_list(name, res)
 
             crps_list.append(crps)
             nll_list.append(nll)
             rmse_list.append(rmse)
             time_list.append(tot_time)
+            val_nll_list.append(val_nll)
             param_list.append(param)
 
     # compile results
@@ -391,6 +398,7 @@ def process(args, out_dir, logger):
     nll_df = pd.DataFrame(nll_list)
     rmse_df = pd.DataFrame(rmse_list)
     time_df = pd.DataFrame(time_list)
+    val_nll_df = pd.DataFrame(val_nll_list)
     param_df = pd.DataFrame(param_list)
 
     # aggregate hyperparameters
@@ -403,29 +411,34 @@ def process(args, out_dir, logger):
     nll_mean_df = nll_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
     rmse_mean_df = rmse_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
     time_mean_df = time_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    val_nll_mean_df = val_nll_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
 
     crps_sem_df = crps_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
     nll_sem_df = nll_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
     rmse_sem_df = rmse_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
     time_sem_df = time_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    val_nll_sem_df = val_nll_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
 
     # combine mean and sem into one dataframe
     crps_ms_df = join_mean_sem(crps_mean_df, crps_sem_df, metric='crps')
     nll_ms_df = join_mean_sem(nll_mean_df, nll_sem_df, metric='nll')
     rmse_ms_df = join_mean_sem(rmse_mean_df, rmse_sem_df, metric='rmse')
     time_ms_df = join_mean_sem(time_mean_df, time_sem_df, metric='time')
+    val_nll_ms_df = join_mean_sem(val_nll_mean_df, val_nll_sem_df, metric='time')
 
     # attach head-to-head scores
     crps_ms_df = append_head2head(data_df=crps_df, attach_df=crps_ms_df, include_ties=True)
     nll_ms_df = append_head2head(data_df=nll_df, attach_df=nll_ms_df, include_ties=True)
     rmse_ms_df = append_head2head(data_df=rmse_df, attach_df=rmse_ms_df, include_ties=True)
     time_ms_df = append_head2head(data_df=time_df, attach_df=time_ms_df, include_ties=True)
+    val_nll_ms_df = append_head2head(data_df=val_nll_df, attach_df=val_nll_ms_df, include_ties=True)
 
     # format columns
     crps_ms_df = format_cols(crps_ms_df)
     nll_ms_df = format_cols(nll_ms_df)
     rmse_ms_df = format_cols(rmse_ms_df)
     time_ms_df = format_cols(time_ms_df)
+    val_nll_ms_df = format_cols(val_nll_ms_df)
 
     # merge specific dataframes
     crps_rmse_df = crps_ms_df.merge(rmse_ms_df, on='Dataset')
@@ -455,6 +468,7 @@ def process(args, out_dir, logger):
     nll_ms_df.to_csv(os.path.join(out_dir, 'nll_str.csv'), index=None)
     rmse_ms_df.to_csv(os.path.join(out_dir, 'rmse_str.csv'), index=None)
     time_ms_df.to_csv(os.path.join(out_dir, 'time_str.csv'), index=None)
+    val_nll_ms_df.to_csv(os.path.join(out_dir, 'val_nll_str.csv'), index=None)
 
     crps_rmse_df.to_csv(os.path.join(out_dir, 'crps_rmse_str.csv'), index=None)
     nll_rmse_df.to_csv(os.path.join(out_dir, 'nll_rmse_str.csv'), index=None)
@@ -479,7 +493,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--in_dir', type=str, default='temp_prediction/')
     parser.add_argument('--out_dir', type=str, default='output/postprocess/prediction/')
     parser.add_argument('--custom_dir', type=str, default='results')

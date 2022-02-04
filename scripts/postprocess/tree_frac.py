@@ -216,7 +216,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--in_dir', type=str, default='/Volumes/30/kgbm/temp_tree_frac/')
     parser.add_argument('--in_dir2', type=str, default='temp_prediction')
     parser.add_argument('--out_dir', type=str, default='output/postprocess/tree_frac/')

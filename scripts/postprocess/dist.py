@@ -101,8 +101,8 @@ def process(args, out_dir, logger):
             if i == len(args.dataset) - 1:
                 ax.set_xlabel('Output value')
             if j == 0:
-                ax.set_ylabel(f'({dataset_name})\nNo. nearest train')
-                ax.set_ylabel(f'({dataset_name})\n'r'$k$-train density')
+                k = res['model_params']['k_']
+                ax.set_ylabel(f'({dataset_name}, ' r'$k$=' f'{k})' '\n' r'$k$-train density')
             else:
                 ax.set_ylabel('')
 
@@ -149,7 +149,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--in_dir', type=str, default='temp_dist/')
     parser.add_argument('--out_dir', type=str, default='output/postprocess/')
     parser.add_argument('--custom_dir', type=str, default='dist')

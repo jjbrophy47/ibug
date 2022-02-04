@@ -17,8 +17,6 @@ def get_results(args, exp_dir, logger=None, progress_bar=False, remove_neighbors
     """
     Retrieve results for the multiple methods.
     """
-    start = time.time()
-
     if logger and progress_bar:
         logger.info('\nGathering results...')
 

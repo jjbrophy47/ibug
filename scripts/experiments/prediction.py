@@ -531,11 +531,6 @@ def experiment(args, logger, out_dir):
     if args.model == 'knn' and args.min_scale_pct > 0:
         result['best_min_scale'] = min_scale
         result['tune_time_knn'] = tune_time_knn
-    if args.custom_dir == 'tree_frac':
-        assert args.model == 'kgbm'
-        neighbor_idxs, neighbor_vals = model_test.pred_dist(X_test, return_kneighbors=True)
-        result['neighbor_idxs'] = neighbor_idxs
-        result['neighbor_vals'] = neighbor_vals
     elif args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
         assert args.model == 'kgbm'
         val_dist_res, _, _ = evaluate_posterior(args, model_val, X=X_val, y=y_val, min_scale=min_scale,
@@ -545,8 +540,9 @@ def experiment(args, logger, out_dir):
                                                              logger=logger, prefix='TEST')
         result['val_dist_res'] = val_dist_res
         result['test_dist_res'] = test_dist_res
-        result['neighbor_idxs'] = nb_idxs
-        result['neighbor_vals'] = nb_vals
+        if args.fold == 1:
+            result['neighbor_idxs'] = nb_idxs
+            result['neighbor_vals'] = nb_vals
 
         # plot output dist. of k nearest neighbors
         test_idxs = rng.choice(np.arange(X_test.shape[0]), size=16)
