@@ -382,6 +382,8 @@ def experiment(args, logger, out_dir):
 
     # KNN ONLY: tune k (and rho)
     if args.model == 'knn':
+        knn_params = model_val.get_params()
+
         logger.info('\nTuning k (and rho) KNN...')
         start = time.time()
 
@@ -516,8 +518,8 @@ def experiment(args, logger, out_dir):
     if args.model == 'kgbm':
         result['tree_params'] = tree_params
         result['tune_time_kgbm'] = tune_time_kgbm
-    if args.model == 'knn' and args.min_scale_pct > 0:
-        result['best_min_scale'] = min_scale
+    if args.model == 'knn':
+        result['knn_params'] = knn_params
         result['tune_time_knn'] = tune_time_knn
     elif args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
         assert args.model == 'kgbm'
