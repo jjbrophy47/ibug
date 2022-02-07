@@ -524,9 +524,11 @@ class KNNWrapper(Estimator):
             # progress
             if (i + 1) % 100 == 0 and self.verbose > 0:
                 if self.logger:
-                    self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
+                    self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X_train):,}, '
+                                     f'cum. time: {time.time() - start:.3f}s')
                 else:
-                    print(f'[KNN - tuning] {i + 2:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
+                    print(f'[KNN - tuning] {i + 2:,} / {len(X_train):,}, '
+                          f'cum. time: {time.time() - start:.3f}s')
 
         # evaluate
         results = []
