@@ -58,9 +58,16 @@ def process(args, out_dir, logger):
             method, res = results[0]
             assert 'kgbm' in method
 
-            res_dict.update(res['dist_res'][args.metric])
+            if 'dist_res' in res:
+                res_dict.update(res['dist_res'][args.metric])
+            else:
+                res_dict.update(res['test_dist_res'][args.metric])
             res_list.append(res_dict)
             score_list.append(res[args.metric])
+
+            if fold == 1:
+                neighbor_idxs = res['neighbor_idxs']
+                neighbor_vals = res['neighbor_vals']
 
         if not success:
             continue
@@ -85,8 +92,8 @@ def process(args, out_dir, logger):
         names = ['Normal', dist_name]
 
         # plot neighbor distributions
-        neighbor_idxs = res['neighbor_idxs']
-        neighbor_vals = res['neighbor_vals']
+        assert neighbor_idxs is not None
+        assert neighbor_vals is not None
         test_idxs = rng.choice(neighbor_idxs.shape[0], size=5, replace=False)
 
         dataset_name = dataset_map[dataset] if dataset in dataset_map else dataset.capitalize()
@@ -121,7 +128,8 @@ def process(args, out_dir, logger):
                 axs[i].clear()
 
     if args.combine:
-        line = plt.Line2D([0.8325, 0.8325], [0.05, 0.95], transform=fig.transFigure,
+        x = 0.8375
+        line = plt.Line2D([x, x], [0.05, 0.95], transform=fig.transFigure,
                           color='lightgray', linestyle='--', linewidth=3.5)
         fig.add_artist(line)
 
@@ -170,7 +178,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', type=int, nargs='+', default=[1])
     parser.add_argument('--gridsearch', type=int, nargs='+', default=[1])
     parser.add_argument('--metric', type=str, default='nll')
-    parser.add_argument('--random_state', type=int, default=2)
+    parser.add_argument('--random_state', type=int, default=3)
     parser.add_argument('--combine', type=int, default=0)
 
     args = parser.parse_args()

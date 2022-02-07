@@ -34,9 +34,7 @@ sys.path.insert(0, here + '/../')  # for utility
 sys.path.insert(0, here + '/../../')  # for libliner
 import util
 from kgbm import KGBMWrapper
-
-# constants
-EPSILON = 1e-15
+from kgbm import KNNWrapper
 
 
 def evaluate_posterior(args, model, X, y, min_scale, loc, scale, logger=None, prefix=''):
@@ -144,8 +142,7 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
     return best_delta, best_op
 
 
-def get_loc_scale(model, model_type, X, y_train=None, min_scale=None,
-                  verbose=0, logger=None):
+def get_loc_scale(model, model_type, X, y_train=None):
     """
     Predict location and scale for each x in X.
 
@@ -153,7 +150,7 @@ def get_loc_scale(model, model_type, X, y_train=None, min_scale=None,
         model: object, uncertainty estimator.
         model_type: str, type of uncertainty estimator.
         X: 2d array of input data.
-        y_train: 1d array of targets (constant and KNN methods only).
+        y_train: 1d array of targets (constant method only).
 
     Return
         Tuple, 2 1d arrays of locations and scales.
@@ -167,24 +164,7 @@ def get_loc_scale(model, model_type, X, y_train=None, min_scale=None,
         loc, scale = model.pred_dist(X)
 
     elif model_type == 'knn':
-        assert y_train is not None
-
-        loc = np.zeros(len(X), dtype=np.float32)
-        scale = np.zeros(len(X), dtype=np.float32)
-
-        for i in range(len(X)):
-            train_idxs = model.kneighbors(X[[i]], return_distance=False).flatten()  # shape=(len(X),)
-            loc[i] = np.mean(y_train[train_idxs])
-            scale[i] = np.std(y_train[train_idxs]) + EPSILON  # avoid 0 scale
-
-            if min_scale is not None and scale[i] < min_scale:
-                scale[i] = min_scale
-
-            if (i + 1) % 100 == 0 and args.verbose > 0:
-                if logger:
-                    logger.info(f'[KNN - predict]: {i + 1:,} / {len(X):,}')
-                else:
-                    print(f'[KNN - predict]: {i + 1:,} / {len(X):,}')
+        loc, scale = model.pred_dist(X)
 
     elif model_type == 'pgbm':
         _, loc, variance = model.learner_.predict_dist(X.astype(np.float32),
@@ -381,11 +361,11 @@ def experiment(args, logger, out_dir):
     tune_time = time.time() - start
     logger.info('tune time: {:.3f}s'.format(tune_time))
 
-    # KGBM ONLY: tune k
+    # KGBM ONLY: tune k (and rho)
     if args.model == 'kgbm':
         tree_params = model_val.get_params()
 
-        logger.info('\nTuning k (KGBM)...')
+        logger.info('\nTuning k (and rho) (KGBM)...')
         start = time.time()
 
         model_val = KGBMWrapper(tree_frac=args.tree_frac, verbose=args.verbose,
@@ -395,33 +375,34 @@ def experiment(args, logger, out_dir):
 
         tune_time_kgbm = time.time() - start
         logger.info(f'\nbest k: {best_k}')
+        logger.info(f'best rho: {min_scale}')
         logger.info(f'tune time (KGBM): {tune_time_kgbm:.3f}s')
     else:
-        min_scale = None
         tune_time_kgbm = 0
 
-    # KNN ONLY: tune min_scale
-    if args.model == 'knn' and args.min_scale_pct > 0:
-        logger.info('\nTuning KNN...')
+    # KNN ONLY: tune k (and rho)
+    if args.model == 'knn':
+        logger.info('\nTuning k (and rho) KNN...')
         start = time.time()
-        loc_val, scale_val = get_loc_scale(model_val, args.model, X=X_val, y=y_train,
-                                           verbose=args.verbose, logger=logger)
-        idx = int(len(scale_val) * args.min_scale_pct)
-        min_scale = np.argsort(scale_val)[idx]
-        tune_time_knn = time.time() - start
 
-        logger.info(f'\nmin. scale: {min_scale}')
-        logger.info(f'\ntune time (KNN): {tune_time_knn:.3f}s')
+        model_val = KNNWrapper(verbose=args.verbose, logger=logger).fit(model_val, X_tune, y_tune,
+                                                                        X_val=X_val, y_val=y_val)
+        best_k = model_val.k_
+        min_scale = model_val.min_scale_
+
+        tune_time_knn = time.time() - start
+        logger.info(f'\nbest k: {best_k}')
+        logger.info(f'best rho: {min_scale:.3f}')
+        logger.info(f'tune time (KNN): {tune_time_knn:.3f}s')
     else:
         tune_time_knn = 0
 
     # get validation predictions
-    if args.model == 'kgbm':
+    if args.model in ['kgbm', 'knn']:
         loc_val, scale_val = model_val.loc_val_, model_val.scale_val_
 
     elif args.model in ['constant', 'ngboost', 'pgbm'] or (args.model == 'knn' and args.min_scale_pct == 0):
-        loc_val, scale_val = get_loc_scale(model_val, args.model, X=X_val, y_train=y_train,
-                                           verbose=args.verbose, logger=logger)
+        loc_val, scale_val = get_loc_scale(model_val, args.model, X=X_val, y_train=y_train)
 
     # tune delta
     if args.delta:
@@ -457,8 +438,11 @@ def experiment(args, logger, out_dir):
 
     model_test = clone(clf).set_params(**best_params).fit(X_train, y_train)
     if args.model == 'kgbm':  # wrap model
-        model_test = KGBMWrapper(k=best_k, tree_frac=args.tree_frac, min_scale=min_scale,
+        model_test = KGBMWrapper(k=best_k, min_scale=min_scale, tree_frac=args.tree_frac,
                                  verbose=args.verbose, logger=logger).fit(model_test, X_train, y_train)
+    elif args.model == 'knn':  # wrap model
+        model_test = KNNWrapper(k=best_k, min_scale=min_scale, verbose=args.verbose,
+                                logger=logger).fit(model_test, X_train, y_train)
 
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')
@@ -468,8 +452,7 @@ def experiment(args, logger, out_dir):
     # test: predict, compute location and scale
     logger.info('\n[TEST] Predicting...')
     start = time.time()
-    loc_test, scale_test = get_loc_scale(model_test, args.model, X=X_test, y_train=y_train,
-                                         min_scale=min_scale, verbose=args.verbose, logger=logger)
+    loc_test, scale_test = get_loc_scale(model_test, args.model, X=X_test, y_train=y_train)
 
     # test: add/multiply delta
     if args.delta:
@@ -510,6 +493,11 @@ def experiment(args, logger, out_dir):
 
     # save results
     result = vars(args)
+    result['n_train'] = len(X_train)
+    result['n_tune'] = len(X_tune)
+    result['n_val'] = len(X_val)
+    result['n_test'] = len(X_test)
+    result['n_features'] = X_train.shape[1]
     result['model_params'] = model_test.get_params()
     result['rmse'] = rmse_test
     result['mae'] = mae_test

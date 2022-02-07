@@ -3,6 +3,7 @@ Organize results.
 """
 import os
 import sys
+import time
 import argparse
 from datetime import datetime
 from itertools import product
@@ -22,7 +23,57 @@ import util
 from experiments import util as exp_util
 
 
-def format_cols(df, dataset_map={'Meps': 'MEPS', 'Msd': 'MSD', 'Star': 'STAR'}):
+def compute_time_intersect(bdf, pdf, ref_col, skip_cols=[]):
+    """
+    Computes no. predictions required for the total runtime of
+        two methods to intersect (train+predict).
+
+    Input
+        bdf: pd.DataFrame, build time dataframe.
+        pdf: pd.DataFrame, predict time dataframe.
+        ref_col: str, Column to compute relative values to.
+        skip_cols: list, Columns to skip when computing relative values.
+
+    Return
+        pd.DataFrame with additional columns equal to the number
+        of columns (not including `ref_col` or `skip_cols`).
+    """
+    assert 'n_train' in bdf and 'n_test' in pdf
+
+    res_df = bdf[['dataset']].copy()
+    res_df['n'] = bdf['n_train'] + pdf['n_test']
+
+    ns = pdf['n_test']
+
+    cols = [c for c in bdf.columns if c not in skip_cols and c != ref_col]
+    for c in cols:
+        key = f'{ref_col}-{c}'
+        res_df[key] = (bdf[c] - bdf[ref_col]) / ((pdf[ref_col] / ns) - pdf[c] / ns)
+        res_df[key] = res_df[key].apply(lambda x: f'{int(x):,}')
+    return res_df
+
+
+def compute_relative(df, ref_col, skip_cols=[]):
+    """
+    Compute values relative to a specified column.
+
+    Input
+        df: pd.DataFrame, Input dataframe.
+        ref_col: str, Column to compute relative values to.
+        skip_cols: list, Columns to skip when computing relative values.
+
+    Return
+        pd.DataFrame with relative values.
+    """
+    res_df = df.copy()
+    cols = [c for c in df.columns if c not in skip_cols]
+    for c in cols:
+        res_df[c] = df[c] / df[ref_col]
+    return res_df
+
+
+def format_cols(df, format_dataset_col=False,
+                dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}):
     """
     Format columns.
 
@@ -32,34 +83,23 @@ def format_cols(df, dataset_map={'Meps': 'MEPS', 'Msd': 'MSD', 'Star': 'STAR'}):
     Return
         Dataframe with the newly formatted columns.
     """
-    new_cols = []
-    for c in df.columns:
-        if '-' in c:
-            items = c.split('-')
-            c1 = items[0]
-            c2 = items[1].replace('D', '').replace('G', '')
-            if len(c2) == 0:
-                c = c1
-            else:
-                c = f'{c1}-{c2}'
-        else:
-            c = c.capitalize()
-        new_cols.append(c)
-    df.columns = new_cols
-
+    df.columns = [c.capitalize() for c in df.columns]
+    if format_dataset_col:
+        df['Dataset'] = df['Dataset'].apply(lambda x: dmap[x] if x in dmap else x.capitalize())
     return df
 
 
-def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
+def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset'],
+                  exclude_sem=False):
     """
     Joins floats from two dataframes into one dataframe of strings.
 
     Input
         mean_df: pd.DataFrame, dataframe with mean values.
         sem_df: pd.DataFrame, dataframe with SEM values.
+        metric: str, metric to use for deciding formatting.
         mask_cols: list, Columns to not join but included in the result.
-        fmt: object, Format of the float columns.
-        join_str: str, String used to connect the two floats.
+        exclude_sem: bool, If True, do not concatenate dataframes.
 
     Return
         pd.DataFrame object with all string columns.
@@ -95,7 +135,7 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
                      'facebook', 'kin8nm', 'life', 'meps', 'msd',
                      'naval', 'obesity', 'power', 'protein', 'star',
                      'superconductor', 'synthetic', 'wine', 'yacht'], '{:.3f}'.format)]
-    else:
+    elif metric == 'rmse':
         formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
                    (['facebook', 'meps', 'synthetic'], '{:.2f}'.format),
                    (['star'], '{:.1f}'.format),
@@ -103,6 +143,27 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
                      'kin8nm', 'life', 'msd',
                      'naval', 'obesity', 'power', 'protein',
                      'superconductor', 'wine', 'yacht'], '{:.3f}'.format)]
+
+    elif metric == 'btime':
+        formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
+                   (['facebook', 'meps', 'synthetic'], '{:.0f}'.format),
+                   (['star'], '{:.0f}'.format),
+                   (['bike', 'california', 'communities', 'concrete', 'energy',
+                     'kin8nm', 'life', 'msd',
+                     'naval', 'obesity', 'power', 'protein',
+                     'superconductor', 'wine', 'yacht'], '{:.0f}'.format)]
+
+    elif metric == 'ptime':
+        formats = [(['ames', 'news', 'wave'], '{:.2f}'.format),
+                   (['facebook', 'meps', 'synthetic'], '{:.2f}'.format),
+                   (['star'], '{:.2f}'.format),
+                   (['bike', 'california', 'communities', 'concrete', 'energy',
+                     'kin8nm', 'life', 'msd',
+                     'naval', 'obesity', 'power', 'protein',
+                     'superconductor', 'wine', 'yacht'], '{:.2f}'.format)]
+
+    else:
+        raise ValueError(f'Unknown metric {metric}')
 
     dataset_map = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
@@ -133,7 +194,11 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset']):
     temp1_df = pd.concat(m_list)
     temp2_df = pd.concat(s_list)
 
-    result_df = temp1_df + '$_{(' + temp2_df + ')}$'
+    if exclude_sem:
+        result_df = temp1_df
+    else:
+        result_df = temp1_df + '$_{(' + temp2_df + ')}$'
+
     for i, min_idxs in enumerate(min_idxs_list):  # wrap values with the min. val in bf series
         for j in min_idxs:
             result_df.iloc[i, j] = '{\\bfseries ' + result_df.iloc[i, j] + '}'
@@ -358,48 +423,65 @@ def process(args, out_dir, logger):
     color, ls, label = util.get_plot_dicts()
 
     # get results
-    crps_list, nll_list, rmse_list, time_list = [], [], [], []
-    val_nll_list = []
+    crps_list, nll_list, rmse_list = [], [], []
+    btime_list, ptime_list = [], []
     param_list = []
     param_names = {}
     param_types = {}
+    if args.val:
+        val_nll_list = []
 
     for dataset in args.dataset:
+        start = time.time()
+
         if dataset in args.skip:
             continue
+
+        X_train, X_test, _, _, _ = exp_util.get_data(args.data_dir, dataset, fold=1)
 
         for fold in args.fold:
             exp_dir = os.path.join(args.in_dir, dataset, f'fold{fold}')
             results = util.get_results(args, exp_dir, logger, progress_bar=False)
 
             crps = {'dataset': dataset, 'fold': fold}
-            nll, rmse, tot_time = crps.copy(), crps.copy(), crps.copy()
-            val_nll = crps.copy()
+            nll, rmse = crps.copy(), crps.copy()
+            btime = {'dataset': dataset, 'fold': fold, 'n_train': len(X_train)}
+            ptime = {'dataset': dataset, 'fold': fold, 'n_test': len(X_test)}
             param = crps.copy()
+            if args.val:
+                val_nll = crps.copy()
 
             for method, res in results:
                 name = label[method]
                 crps[name] = res['crps']
                 nll[name] = res['nll']
                 rmse[name] = res['rmse']
-                tot_time[name] = res['total_build_time'] + res['total_predict_time']
-                val_nll[name] = res['val_res']['nll']
+                btime[name] = res['total_build_time']
+                ptime[name] = res['total_predict_time']
                 param[name], param_names[name], param_types[name] = get_param_list(name, res)
+                if args.val:
+                    val_nll[name] = res['val_res']['nll']
 
             crps_list.append(crps)
             nll_list.append(nll)
             rmse_list.append(rmse)
-            time_list.append(tot_time)
-            val_nll_list.append(val_nll)
+            btime_list.append(btime)
+            ptime_list.append(ptime)
             param_list.append(param)
+            if args.val:
+                val_nll_list.append(val_nll)
+
+        logger.info(f'{dataset}...{time.time() - start:.3f}s')
 
     # compile results
     crps_df = pd.DataFrame(crps_list)
     nll_df = pd.DataFrame(nll_list)
     rmse_df = pd.DataFrame(rmse_list)
-    time_df = pd.DataFrame(time_list)
-    val_nll_df = pd.DataFrame(val_nll_list)
+    btime_df = pd.DataFrame(btime_list)
+    ptime_df = pd.DataFrame(ptime_list)
     param_df = pd.DataFrame(param_list)
+    if args.val:
+        val_nll_df = pd.DataFrame(val_nll_list)
 
     # aggregate hyperparameters
     param_df = aggregate_params(param_df, param_names, param_types)
@@ -410,45 +492,68 @@ def process(args, out_dir, logger):
     crps_mean_df = crps_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
     nll_mean_df = nll_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
     rmse_mean_df = rmse_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    time_mean_df = time_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    val_nll_mean_df = val_nll_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    btime_mean_df = btime_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    ptime_mean_df = ptime_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    if args.val:
+        val_nll_mean_df = val_nll_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
 
     crps_sem_df = crps_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
     nll_sem_df = nll_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
     rmse_sem_df = rmse_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    time_sem_df = time_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    val_nll_sem_df = val_nll_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    btime_sem_df = btime_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    ptime_sem_df = ptime_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    if args.val:
+        val_nll_sem_df = val_nll_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+
+    assert 'KGBM-LDG' in btime_mean_df
+    skip_cols = ['dataset', 'n_test', 'n_train']
+    ref_col = 'KGBM-LDG'
+    btime_rel_df = compute_relative(df=btime_mean_df, ref_col='KGBM-LDG', skip_cols=skip_cols)
+    ptime_rel_df = compute_relative(df=ptime_mean_df, ref_col='KGBM-LDG', skip_cols=skip_cols)
+    # n_df = compute_time_intersect(bdf=btime_mean_df, pdf=ptime_mean_df, ref_col=ref_col, skip_cols=skip_cols)
 
     # combine mean and sem into one dataframe
     crps_ms_df = join_mean_sem(crps_mean_df, crps_sem_df, metric='crps')
     nll_ms_df = join_mean_sem(nll_mean_df, nll_sem_df, metric='nll')
     rmse_ms_df = join_mean_sem(rmse_mean_df, rmse_sem_df, metric='rmse')
-    time_ms_df = join_mean_sem(time_mean_df, time_sem_df, metric='time')
-    val_nll_ms_df = join_mean_sem(val_nll_mean_df, val_nll_sem_df, metric='time')
+    btime_ms_df = join_mean_sem(btime_mean_df, btime_sem_df, metric='btime', exclude_sem=True)
+    ptime_ms_df = join_mean_sem(ptime_mean_df, ptime_sem_df, metric='ptime', exclude_sem=True)
+    if args.val:
+        val_nll_ms_df = join_mean_sem(val_nll_mean_df, val_nll_sem_df, metric='nll')
 
     # attach head-to-head scores
     crps_ms_df = append_head2head(data_df=crps_df, attach_df=crps_ms_df, include_ties=True)
     nll_ms_df = append_head2head(data_df=nll_df, attach_df=nll_ms_df, include_ties=True)
     rmse_ms_df = append_head2head(data_df=rmse_df, attach_df=rmse_ms_df, include_ties=True)
-    time_ms_df = append_head2head(data_df=time_df, attach_df=time_ms_df, include_ties=True)
-    val_nll_ms_df = append_head2head(data_df=val_nll_df, attach_df=val_nll_ms_df, include_ties=True)
+    if args.val:
+        val_nll_ms_df = append_head2head(data_df=val_nll_df, attach_df=val_nll_ms_df, include_ties=True)
 
     # format columns
     crps_ms_df = format_cols(crps_ms_df)
     nll_ms_df = format_cols(nll_ms_df)
     rmse_ms_df = format_cols(rmse_ms_df)
-    time_ms_df = format_cols(time_ms_df)
-    val_nll_ms_df = format_cols(val_nll_ms_df)
+    btime_ms_df = format_cols(btime_ms_df)
+    ptime_ms_df = format_cols(ptime_ms_df)
+    # n_df = format_cols(n_df, format_dataset_col=True)
+    if args.val:
+        val_nll_ms_df = format_cols(val_nll_ms_df)
 
     # merge specific dataframes
     crps_rmse_df = crps_ms_df.merge(rmse_ms_df, on='Dataset')
     nll_rmse_df = nll_ms_df.merge(rmse_ms_df, on='Dataset')
 
+    # bptime_df = btime_ms_df.merge(ptime_ms_df, on='Dataset')
+    # bptime_df = bptime_df.merge(n_df, on='Dataset').drop(columns=['N_train', 'N_test'])
+    # first_col = bptime_df.pop('N')
+    # bptime_df.insert(1, 'N', first_col)
+    # bptime_df = bptime_df.sort_values('N')
+    # bptime_df['N'] = bptime_df['N'].apply(lambda x: f'{int(x):,}')
+
     # display
     logger.info(f'\nCRPS (mean):\n{crps_mean_df}')
     logger.info(f'\nNLL (mean):\n{nll_mean_df}')
     logger.info(f'\nRMSE (mean):\n{rmse_mean_df}')
-    logger.info(f'\nTotal time (mean):\n{time_mean_df}')
+    logger.info(f'\nBuild time (mean):\n{btime_mean_df}')
     logger.info(f'\nParams:\n{param_df}')
 
     # save
@@ -457,21 +562,26 @@ def process(args, out_dir, logger):
     crps_mean_df.to_csv(os.path.join(out_dir, 'crps_mean.csv'), index=None)
     nll_mean_df.to_csv(os.path.join(out_dir, 'nll_mean.csv'), index=None)
     rmse_mean_df.to_csv(os.path.join(out_dir, 'rmse_mean.csv'), index=None)
-    time_mean_df.to_csv(os.path.join(out_dir, 'time_mean.csv'), index=None)
+    btime_mean_df.to_csv(os.path.join(out_dir, 'btime_mean.csv'), index=None)
+    ptime_mean_df.to_csv(os.path.join(out_dir, 'ptime_mean.csv'), index=None)
 
     crps_sem_df.to_csv(os.path.join(out_dir, 'crps_sem.csv'), index=None)
     nll_sem_df.to_csv(os.path.join(out_dir, 'nll_sem.csv'), index=None)
     rmse_sem_df.to_csv(os.path.join(out_dir, 'rmse_sem.csv'), index=None)
-    time_sem_df.to_csv(os.path.join(out_dir, 'time_sem.csv'), index=None)
+    btime_sem_df.to_csv(os.path.join(out_dir, 'btime_sem.csv'), index=None)
+    ptime_sem_df.to_csv(os.path.join(out_dir, 'ptime_sem.csv'), index=None)
 
     crps_ms_df.to_csv(os.path.join(out_dir, 'crps_str.csv'), index=None)
     nll_ms_df.to_csv(os.path.join(out_dir, 'nll_str.csv'), index=None)
     rmse_ms_df.to_csv(os.path.join(out_dir, 'rmse_str.csv'), index=None)
-    time_ms_df.to_csv(os.path.join(out_dir, 'time_str.csv'), index=None)
-    val_nll_ms_df.to_csv(os.path.join(out_dir, 'val_nll_str.csv'), index=None)
+    btime_ms_df.to_csv(os.path.join(out_dir, 'btime_str.csv'), index=None)
+    ptime_ms_df.to_csv(os.path.join(out_dir, 'ptime_str.csv'), index=None)
+    if args.val:
+        val_nll_ms_df.to_csv(os.path.join(out_dir, 'val_nll_str.csv'), index=None)
 
     crps_rmse_df.to_csv(os.path.join(out_dir, 'crps_rmse_str.csv'), index=None)
     nll_rmse_df.to_csv(os.path.join(out_dir, 'nll_rmse_str.csv'), index=None)
+    # bptime_df.to_csv(os.path.join(out_dir, 'bp_time_str.csv'), index=None)
 
     param_df.to_csv(os.path.join(out_dir, 'param.csv'), index=None)
 
@@ -493,6 +603,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
+    parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--in_dir', type=str, default='temp_prediction/')
     parser.add_argument('--out_dir', type=str, default='output/postprocess/prediction/')
     parser.add_argument('--custom_dir', type=str, default='results')
@@ -513,6 +624,7 @@ if __name__ == '__main__':
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
     parser.add_argument('--delta', type=int, nargs='+', default=[1])
     parser.add_argument('--gridsearch', type=int, nargs='+', default=[1])
+    parser.add_argument('--val', type=int, default=0)
 
     args = parser.parse_args()
     main(args)

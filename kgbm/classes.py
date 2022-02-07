@@ -3,6 +3,7 @@ import joblib
 
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from scipy.stats import norm
 
 from .base import Estimator
@@ -336,62 +337,218 @@ class KGBMWrapper(Estimator):
         return weights
 
 
-class FlexPGBM(Estimator):
+class KNNWrapper(Estimator):
     """
-    Flexible Probabilistic Gradient Boosting Machine.
-        - Inspired by PGBM, this extension allows ANY distribution to be
-            modeled using the k-nearest neighbors to the test example in tree space.
+    K-Nearest neigbors regressor with uncertainty estimation.
+        Wrapper around a KNN regressor model enabling probabilistic forecasting
+        by modeling the output distribution of the k-nearest neighbors to a
+        given test example.
     """
-    def __init__(self, k=100, loc_type='gbm', cv=None, logger=None):
+    def __init__(self, k=100, tree_frac=1.0, loc_type='knn',
+                 k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201, 301,
+                           401, 501, 601, 701], scoring='nll', min_scale=1e-15,
+                 eps=1e-15, random_state=1, verbose=0, logger=None):
         """
         Input
             k: int, no. neighbors to consider for uncertainty estimation.
+            tree_frac: float, Fraction of trees to use for the affinity computation
             loc_type: str, prediction should come from original tree or mean of neighbors.
-            cv: int, If not None, no. cross-validation folds to use to tune k.
+            k_params: list, k values to try during tuning.
+            scoring: str, metric to score probabilistic forecasts.
+            rho: float, Minimum scale value.
+            eps: float, Addendum to scale value.
+            random_state: int, Seed for random number generation to enhance reproducibility.
+            verbose: int, verbosity level.
             logger: object, If not None, output to logger.
         """
-        if cv is None:
-            assert k > 0
-        else:
-            assert cv > 0
-        assert loc_type in ['gbm', 'knn']
+        assert k > 0
+        assert loc_type == 'knn'
+        assert isinstance(k_params, list) and len(k_params) > 0
+        assert scoring in ['nll', 'crps']
+        assert min_scale > 0
+        assert eps > 0
+        assert isinstance(random_state, int) and random_state > 0
+
         self.k = k
         self.loc_type = loc_type
-        self.cv = cv
+        self.k_params = k_params
+        self.scoring = scoring
+        self.min_scale = min_scale
+        self.eps = eps
+        self.random_state = random_state
+        self.verbose = verbose
         self.logger = logger
 
-    def fit(self, model, X, y):
+    def get_params(self):
+        """
+        Return a dict of parameter values.
+        """
+        d = {}
+        d['k'] = self.k
+        d['loc_type'] = self.loc_type
+        d['k_params'] = self.k_params
+        d['scoring'] = self.scoring
+        d['min_scale'] = self.min_scale
+        d['eps'] = self.eps
+        if hasattr(self, 'k_'):
+            d['k_'] = self.k_
+        if hasattr(self, 'min_scale_'):
+            d['min_scale_'] = self.min_scale_
+        return d
+
+    def fit(self, model, X, y, X_val=None, y_val=None):
         """
         - Compute leaf IDs for each x in X.
 
         Input
-            model: tree ensemble.
+            model: KNN regressor.
             X: training data.
             y: training targets.
         """
-        super().fit(model, X, y)
-        X, y = util.check_data(X, y, objective=self.model_.objective)
+        X, y = util.check_data(X, y, objective='regression')
+        self.model_ = model
+
+        # pseudo-random number generator
+        self.rng_ = np.random.default_rng(self.random_state)
 
         # save results
         self.n_train_ = X.shape[0]
         self.y_train_ = y.copy()
-        self.n_boost_ = self.model_.n_boost_
-        self.n_class_ = self.model_.n_class_
 
-        self.model_.update_node_count(X)
+        # tune k
+        k_params = [k for k in self.k_params if k <= len(X)]
 
-        self.leaf_counts_ = self.model_.get_leaf_counts()  # shape=(no. boost, no. class)
-        self.leaf_weights_ = self.model_.get_leaf_weights()  # shape=(total no. leaves,)
-        self.train_leaves_ = self.model_.apply(X)  # shape=(len(X), no. boost, no. class)
-        self.train_weights_ = self._get_leaf_weights(self.train_leaves_)  # shape=(len(X), n_boost, n_class)
+        if X_val is not None and y_val is not None:
+            X_val, y_val = util.check_data(X_val, y_val, objective='regression')
+            assert len(X) == len(y)
+            assert len(X_val) == len(y_val)
+            assert X.shape[1] == X_val.shape[1]
+            loc_val, scale_val, k, min_scale = self._tune_k(X_train=X, y_train=y, X_val=X_val, y_val=y_val,
+                                                            k_params=k_params, scoring=self.scoring)
+            self.loc_val_ = loc_val
+            self.scale_val_ = scale_val
+            self.k_ = k
+            self.min_scale_ = min_scale
+        else:
+            self.k_ = self.k
+            self.min_scale_ = self.min_scale
 
-        # # TEMP: Plotting distribution of leaf values
-        # train_leaves = np.squeeze(self.train_leaves_)[:, -1]  # shape=(n_train,)
-        # print(f'no. leaves: {np.max(train_leaves):,}')
-        # for leaf_idx in range(np.max(train_leaves)):
-        #     train_idxs = np.where(train_leaves == leaf_idx)[0]
-        #     print(len(train_idxs))
-        #     sns.histplot(y[train_idxs], kde=True)
-        #     plt.show()
-        #     if leaf_idx > 50:
-        #         exit(0)
+        best_params = {'n_neighbors': self.k_}
+        self.uncertainty_estimator = clone(model).set_params(**best_params).fit(X, y)
+
+        return self
+
+    def predict(self, X):
+        """
+        Predict using the parsed model.
+
+        Input
+            X: 2d array of data.
+
+        Return
+            2d array of shape=(len(X), no. class).
+        """
+        return self.model_.predict(X)
+
+    def pred_dist(self, X):
+        """
+        Return mean and variance for each x in X.
+
+        Input
+            X: 2d array of data.
+
+        Return
+            - Location and shape, 2 1d arrays of shape=(len(X),).
+                + Location and shape
+        """
+        start = time.time()
+
+        # result objects
+        loc = self.predict(X)  # shape=(len(X))
+        scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X))
+
+        neighbors = self.uncertainty_estimator.kneighbors(X, return_distance=False)  # shape=(len(X), self.k_)
+        for i, train_idxs in enumerate(neighbors):  # per test example
+            train_vals = self.y_train_[train_idxs]
+
+            # add to result
+            scale[i] = np.std(train_vals)
+            if scale[i] < self.min_scale_:  # handle extremely small scale values
+                scale[i] = self.min_scale_
+
+            # display progress
+            if (i + 1) % 100 == 0 and self.verbose > 0:
+                cum_time = time.time() - start
+                if self.logger:
+                    self.logger.info(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+                else:
+                    print(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+
+        # assemble output         
+        result = loc, scale
+
+        return result
+
+    # private
+    def _tune_k(self, X_train, y_train, X_val, y_val, k_params=[3, 5], scoring='nll'):
+        """
+        Tune k-nearest neighbors for probabilistic prediction.
+
+        Input
+            X_train: 2d array of train data.
+            y_train: 1d array of train targets.
+            X_val: 2d array of validation data.
+            y_val: 1d array of validation targets.
+            k_params: list, values of k to evaluate.
+            scoring: str, evaluation metric.
+
+        Return
+            k that has the best validation scores.
+                min_scale associated with k is also returned.
+        """
+        start = time.time()
+
+        loc_vals = np.expand_dims(self.predict(X_val), axis=1)
+        loc = np.tile(loc_vals, len(k_params)).astype(np.float32)  # shape=(len(X), len(k_params))
+        scale = np.zeros((len(X_val), len(k_params)), dtype=np.float32)  # shape=(len(X), len(k_params))
+
+        for i in range(len(X_val)):  # per test example
+            affinity = np.linalg.norm(X_val[i] - X_train, axis=1)  # shape=(len(X_train),)
+            train_idxs = np.argsort(affinity)  # smallest to largest distance
+
+            # evaluate different k
+            for j, k in enumerate(k_params):
+                train_vals_k = y_train[train_idxs[:k]]
+                scale[i, j] = np.std(train_vals_k) + self.eps
+
+            # progress
+            if (i + 1) % 100 == 0 and self.verbose > 0:
+                if self.logger:
+                    self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
+                else:
+                    print(f'[KNN - tuning] {i + 2:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
+
+        # evaluate
+        results = []
+        if scoring == 'nll':
+            for j, k in enumerate(k_params):
+                nll = np.mean([-norm.logpdf(y_val[i], loc=loc[i, j], scale=scale[i, j]) for i in range(len(y_val))])
+                results.append({'k': k, 'score': nll, 'k_idx': j})
+
+            df = pd.DataFrame(results).sort_values('score', ascending=True)
+            best_k = df.astype(object).iloc[0]['k']
+            best_k_idx = df.astype(object).iloc[0]['k_idx']
+
+            if self.verbose > 0:
+                if self.logger:
+                    self.logger.info(f'\n[KNN - tuning] k results:\n{df}')
+                else:
+                    print(f'\n[KNN - tuning] k results:\n{df}')
+        else:
+            raise ValueError(f'Unknown scoring {scoring}')
+
+        loc_val = loc[:, best_k_idx]
+        scale_val = scale[:, best_k_idx]
+        min_scale = np.min(scale_val)
+
+        return loc_val, scale_val, best_k, min_scale
