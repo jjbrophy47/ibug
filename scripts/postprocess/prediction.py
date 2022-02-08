@@ -23,6 +23,102 @@ import util
 from experiments import util as exp_util
 
 
+def get_ax_lims(ax):
+    """
+    Compute min. and max. of axis limits.
+
+    Input
+        ax: Matplotlib.Axes object.
+
+    Return
+        List of 2 items, min. value of both axes, max. values of both axes.
+    """
+    return [np.min([ax.get_xlim(), ax.get_ylim()]),
+            np.max([ax.get_xlim(), ax.get_ylim()])]
+
+
+def plot_runtime(bdf, pdf, out_dir):
+    """
+    Plot train time and avg. predict time per test example scatter plots.
+
+    Input
+        bdf: pd.DataFrame, Average build time dataframe.
+        pdf: pd.DataFrame, Average predict time dataframe.
+        out_dir: str, Output directory.
+    """
+    util.plot_settings(fontsize=15, libertine=True)
+
+    fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
+
+    ax = axs[0]
+    x = bdf['KGBM-LDG']
+    y = bdf['NGBoost-D']
+    ax.scatter(x, y, marker='1')
+    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlim(1e0, 1e5)
+    ax.set_ylim(1e0, 1e5)
+    lims = get_ax_lims(ax)
+    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+    ax.set_xlabel('KGBM')
+    ax.set_ylabel('NGBoost')
+    ax.legend()
+
+    ax = axs[1]
+    x = bdf['KGBM-LDG']
+    y = bdf['PGBM-DG']
+    ax.scatter(x, y, marker='1')
+    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlim(1e0, 1e5)
+    ax.set_ylim(1e0, 1e5)
+    lims = get_ax_lims(ax)
+    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+    ax.set_xlabel('KGBM')
+    ax.set_ylabel('PGBM')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, f'runtime_train.pdf'))
+    plt.close('all')
+
+    fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
+
+    ax = axs[0]
+    x = pdf['KGBM-LDG'] / pdf['n_test']
+    y = pdf['NGBoost-D'] / pdf['n_test']
+    ax.scatter(x, y, marker='1')
+    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlim(1e-5, 1e0)
+    ax.set_ylim(1e-5, 1e0)
+    lims = get_ax_lims(ax)
+    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+    ax.tick_params(axis='both', which='minor')
+    ax.set_xlabel('KGBM')
+    ax.set_ylabel('NGBoost')
+
+    ax = axs[1]
+    x = pdf['KGBM-LDG'] / pdf['n_test']
+    y = pdf['PGBM-DG'] / pdf['n_test']
+    ax.scatter(x, y, marker='1')
+    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlim(1e-5, 1e0)
+    ax.set_ylim(1e-5, 1e0)
+    lims = get_ax_lims(ax)
+    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+    ax.tick_params(axis='x', which='minor')
+    ax.set_xlabel('KGBM')
+    ax.set_ylabel('PGBM')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, f'runtime_predict.pdf'))
+
+
 def compute_time_intersect(bdf, pdf, ref_col, skip_cols=[]):
     """
     Computes no. predictions required for the total runtime of
@@ -393,9 +489,11 @@ def get_param_list(name, result):
             param_types += [int]
 
     elif 'KNN' in name:
-        param_list.append(result['model_params']['n_neighbors'])
-        param_names += ['$k$']
-        param_types += [int]
+        param_list.append(result['knn_params']['n_neighbors'])
+        param_list.append(result['model_params']['k'])
+        param_list.append(result['model_params']['min_scale'])
+        param_names += ['$k_1$', '$k_2$', r'$\rho$']
+        param_types += [int, int, float]
 
     elif 'NGBoost' in name:
         param_list.append(result['model_params']['n_estimators'])
@@ -584,6 +682,8 @@ def process(args, out_dir, logger):
     # bptime_df.to_csv(os.path.join(out_dir, 'bp_time_str.csv'), index=None)
 
     param_df.to_csv(os.path.join(out_dir, 'param.csv'), index=None)
+
+    plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
 
 
 def main(args):

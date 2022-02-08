@@ -375,7 +375,7 @@ def experiment(args, logger, out_dir):
 
         tune_time_kgbm = time.time() - start
         logger.info(f'\nbest k: {best_k}')
-        logger.info(f'best rho: {min_scale}')
+        logger.info(f'best rho: {min_scale:.5f}')
         logger.info(f'tune time (KGBM): {tune_time_kgbm:.3f}s')
     else:
         tune_time_kgbm = 0
@@ -394,7 +394,7 @@ def experiment(args, logger, out_dir):
 
         tune_time_knn = time.time() - start
         logger.info(f'\nbest k: {best_k}')
-        logger.info(f'best rho: {min_scale:.3f}')
+        logger.info(f'best rho: {min_scale:.5f}')
         logger.info(f'tune time (KNN): {tune_time_knn:.3f}s')
     else:
         tune_time_knn = 0

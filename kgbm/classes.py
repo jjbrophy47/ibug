@@ -551,6 +551,12 @@ class KNNWrapper(Estimator):
 
         loc_val = loc[:, best_k_idx]
         scale_val = scale[:, best_k_idx]
-        min_scale = np.min(scale_val)
+
+        # get min. scale
+        candidate_idxs = np.where(scale_val > self.eps)[0]
+        if len(candidate_idxs) > 0:
+            min_scale = np.min(scale_val[candidate_idxs])
+        else:
+            raise ValueError('All validation predictions had 0 variance')
 
         return loc_val, scale_val, best_k, min_scale
