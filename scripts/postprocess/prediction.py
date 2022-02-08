@@ -86,8 +86,8 @@ def plot_runtime(bdf, pdf, out_dir):
     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
 
     ax = axs[0]
-    x = pdf['KGBM-LDG'] / pdf['n_test']
-    y = pdf['NGBoost-D'] / pdf['n_test']
+    x = pdf['KGBM-LDG']
+    y = pdf['NGBoost-D']
     ax.scatter(x, y, marker='1')
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean')
     ax.set_xscale('log')
@@ -101,8 +101,8 @@ def plot_runtime(bdf, pdf, out_dir):
     ax.set_ylabel('NGBoost')
 
     ax = axs[1]
-    x = pdf['KGBM-LDG'] / pdf['n_test']
-    y = pdf['PGBM-DG'] / pdf['n_test']
+    x = pdf['KGBM-LDG']
+    y = pdf['PGBM-DG']
     ax.scatter(x, y, marker='1')
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean')
     ax.set_xscale('log')
@@ -139,12 +139,10 @@ def compute_time_intersect(bdf, pdf, ref_col, skip_cols=[]):
     res_df = bdf[['dataset']].copy()
     res_df['n'] = bdf['n_train'] + pdf['n_test']
 
-    ns = pdf['n_test']
-
     cols = [c for c in bdf.columns if c not in skip_cols and c != ref_col]
     for c in cols:
         key = f'{ref_col}-{c}'
-        res_df[key] = (bdf[c] - bdf[ref_col]) / ((pdf[ref_col] / ns) - pdf[c] / ns)
+        res_df[key] = (bdf[c] - bdf[ref_col]) / (pdf[ref_col] - pdf[c])
         res_df[key] = res_df[key].apply(lambda x: f'{int(x):,}')
     return res_df
 
@@ -168,7 +166,7 @@ def compute_relative(df, ref_col, skip_cols=[]):
     return res_df
 
 
-def format_cols(df, format_dataset_col=False,
+def format_cols(df, format_dataset_names=False,
                 dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}):
     """
     Format columns.
@@ -179,9 +177,8 @@ def format_cols(df, format_dataset_col=False,
     Return
         Dataframe with the newly formatted columns.
     """
-    df.columns = [c.capitalize() for c in df.columns]
-    if format_dataset_col:
-        df['Dataset'] = df['Dataset'].apply(lambda x: dmap[x] if x in dmap else x.capitalize())
+    if format_dataset_names:
+        df['dataset'] = df['dataset'].apply(lambda x: dmap[x] if x in dmap else x.capitalize())
     return df
 
 
@@ -200,8 +197,9 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset'],
     Return
         pd.DataFrame object with all string columns.
     """
-    assert np.all(mean_df.columns == sem_df.columns)
     float_cols = [c for c in mean_df.columns if c not in mask_cols]
+    for float_col in float_cols:
+        assert float_col in mean_df and float_col in sem_df
 
     init_dataset_list = mean_df['dataset'].tolist()
 
@@ -250,18 +248,16 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset'],
                      'superconductor', 'wine', 'yacht'], '{:.0f}'.format)]
 
     elif metric == 'ptime':
-        formats = [(['ames', 'news', 'wave'], '{:.2f}'.format),
-                   (['facebook', 'meps', 'synthetic'], '{:.2f}'.format),
-                   (['star'], '{:.2f}'.format),
+        formats = [(['ames', 'news', 'wave'], '{:.1e}'.format),
+                   (['facebook', 'meps', 'synthetic'], '{:.1e}'.format),
+                   (['star'], '{:.1e}'.format),
                    (['bike', 'california', 'communities', 'concrete', 'energy',
                      'kin8nm', 'life', 'msd',
                      'naval', 'obesity', 'power', 'protein',
-                     'superconductor', 'wine', 'yacht'], '{:.2f}'.format)]
+                     'superconductor', 'wine', 'yacht'], '{:.1e}'.format)]
 
     else:
         raise ValueError(f'Unknown metric {metric}')
-
-    dataset_map = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
     # format rows differently
     m_list = []
@@ -285,7 +281,7 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset'],
 
         for d in datasets:
             min_idxs_list.append(min_val_dict[d])
-        dataset_list += [dataset_map[d] if d in dataset_map else d.capitalize() for d in datasets]
+        dataset_list += datasets
 
     temp1_df = pd.concat(m_list)
     temp2_df = pd.concat(s_list)
@@ -322,7 +318,7 @@ def aggregate_params(param_df, param_names, param_types):
     res_list = []
     for dataset, df in param_df.groupby(['dataset']):
         dataset_name = dataset.capitalize() if dataset not in dataset_map else dataset_map[dataset]
-        res = {'Dataset': dataset_name}
+        res = {'dataset': dataset_name}
 
         for name in df.columns:
 
@@ -364,6 +360,41 @@ def aggregate_params(param_df, param_names, param_types):
     param_df = pd.DataFrame(res_list)
 
     return param_df
+
+
+def append_gmean(data_df, attach_df=None, fmt='int'):
+    """
+    Attach geometric mean to the given dataframe.
+
+    Input
+        data_df: pd.DataFrame, Dataframe used to compute head-to-head scores.
+        attach_df: pd.DataFrame, Dataframe to attach results to.
+        fmt: str, Format for the resulting gmean.
+
+    Return
+        Dataframe attached to `attach_df` if not None, otherwise scores
+            are appended to `data_df`.
+    """
+    res = {'dataset': 'Geo. mean'}
+
+    for c in data_df:
+        if c == 'dataset':
+            continue
+        res[c] = stats.gmean(data_df[c])
+        if fmt == 'int':
+            res[c] = f'{int(res[c])}'
+        elif fmt == 'sci':
+            res[c] = f'{res[c]:.1e}'
+        else:
+            res[c] = f'{res[c]:.3f}'
+    gmean_df = pd.DataFrame([res])
+
+    if attach_df is not None:
+        result_df = pd.concat([attach_df, gmean_df])
+    else:
+        result_df = pd.concat([data_df, gmean_df])
+
+    return result_df
 
 
 def append_head2head(data_df, attach_df=None, include_ties=True,
@@ -409,8 +440,6 @@ def append_head2head(data_df, attach_df=None, include_ties=True,
                 elif t_stat > 0 and p_val < p_val_threshold:
                     n_losses += 1
                 else:
-                    # if 'kgbm' in c1.lower() and 'ngboost' in c2.lower():
-                    #     print(dataset, c1, c2, t_stat, p_val, df[c1].values, df[c2].values)
                     if np.isnan(p_val):
                         print('NAN P_val', dataset, c1, c2)
                     n_ties += 1
@@ -555,7 +584,7 @@ def process(args, out_dir, logger):
                 nll[name] = res['nll']
                 rmse[name] = res['rmse']
                 btime[name] = res['total_build_time']
-                ptime[name] = res['total_predict_time']
+                ptime[name] = res['total_predict_time'] / len(X_test)
                 param[name], param_names[name], param_types[name] = get_param_list(name, res)
                 if args.val:
                     val_nll[name] = res['val_res']['nll']
@@ -603,13 +632,6 @@ def process(args, out_dir, logger):
     if args.val:
         val_nll_sem_df = val_nll_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
 
-    assert 'KGBM-LDG' in btime_mean_df
-    skip_cols = ['dataset', 'n_test', 'n_train']
-    ref_col = 'KGBM-LDG'
-    btime_rel_df = compute_relative(df=btime_mean_df, ref_col='KGBM-LDG', skip_cols=skip_cols)
-    ptime_rel_df = compute_relative(df=ptime_mean_df, ref_col='KGBM-LDG', skip_cols=skip_cols)
-    # n_df = compute_time_intersect(bdf=btime_mean_df, pdf=ptime_mean_df, ref_col=ref_col, skip_cols=skip_cols)
-
     # combine mean and sem into one dataframe
     crps_ms_df = join_mean_sem(crps_mean_df, crps_sem_df, metric='crps')
     nll_ms_df = join_mean_sem(nll_mean_df, nll_sem_df, metric='nll')
@@ -632,20 +654,12 @@ def process(args, out_dir, logger):
     rmse_ms_df = format_cols(rmse_ms_df)
     btime_ms_df = format_cols(btime_ms_df)
     ptime_ms_df = format_cols(ptime_ms_df)
-    # n_df = format_cols(n_df, format_dataset_col=True)
     if args.val:
         val_nll_ms_df = format_cols(val_nll_ms_df)
 
     # merge specific dataframes
-    crps_rmse_df = crps_ms_df.merge(rmse_ms_df, on='Dataset')
-    nll_rmse_df = nll_ms_df.merge(rmse_ms_df, on='Dataset')
-
-    # bptime_df = btime_ms_df.merge(ptime_ms_df, on='Dataset')
-    # bptime_df = bptime_df.merge(n_df, on='Dataset').drop(columns=['N_train', 'N_test'])
-    # first_col = bptime_df.pop('N')
-    # bptime_df.insert(1, 'N', first_col)
-    # bptime_df = bptime_df.sort_values('N')
-    # bptime_df['N'] = bptime_df['N'].apply(lambda x: f'{int(x):,}')
+    crps_rmse_df = crps_ms_df.merge(rmse_ms_df, on='dataset')
+    nll_rmse_df = nll_ms_df.merge(rmse_ms_df, on='dataset')
 
     # display
     logger.info(f'\nCRPS (mean):\n{crps_mean_df}')
@@ -679,11 +693,65 @@ def process(args, out_dir, logger):
 
     crps_rmse_df.to_csv(os.path.join(out_dir, 'crps_rmse_str.csv'), index=None)
     nll_rmse_df.to_csv(os.path.join(out_dir, 'nll_rmse_str.csv'), index=None)
-    # bptime_df.to_csv(os.path.join(out_dir, 'bp_time_str.csv'), index=None)
 
     param_df.to_csv(os.path.join(out_dir, 'param.csv'), index=None)
 
-    plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
+    # runtime
+    logger.info('\nRuntime...')
+    if 'KGBM-LDG' in btime_mean_df and 'NGBoost-D' in btime_mean_df and 'PGBM-DG' in btime_mean_df:
+        plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
+
+        skip_cols = ['dataset', 'n_test', 'n_train']
+        ref_col = 'KGBM-LDG'
+        drop_cols = [c for c in btime_mean_df.columns if 'knn' in c.lower()]
+
+        bm_df = btime_mean_df.drop(columns=drop_cols)
+        pm_df = ptime_mean_df.drop(columns=drop_cols)
+        bs_df = btime_sem_df.drop(columns=drop_cols)
+        ps_df = ptime_sem_df.drop(columns=drop_cols)
+
+        b_ms_df = join_mean_sem(bm_df, ps_df, metric='btime', exclude_sem=True, mask_cols=skip_cols)
+        p_ms_df = join_mean_sem(pm_df, ps_df, metric='ptime', exclude_sem=True, mask_cols=skip_cols)
+
+        int_df = compute_time_intersect(bdf=bm_df, pdf=pm_df, ref_col=ref_col, skip_cols=skip_cols)
+        b_ms_df = append_gmean(data_df=bm_df, attach_df=b_ms_df, fmt='int')
+        p_ms_df = append_gmean(data_df=pm_df, attach_df=p_ms_df, fmt='sci')
+
+        bp_ms_df = b_ms_df.merge(p_ms_df, on='dataset')
+        bp_ms_df = bp_ms_df.merge(int_df, on='dataset', how='left').fillna(-1)
+        bp_ms_df = bp_ms_df.drop(columns=['n_train', 'n_test'])
+
+        first_col = bp_ms_df.pop('n')
+        bp_ms_df.insert(1, 'n', first_col)
+        bp_ms_df = bp_ms_df.sort_values('n')
+        bp_ms_df['n'] = bp_ms_df['n'].apply(lambda x: f'{int(x):,}')
+
+        bp_ms_df = format_cols(bp_ms_df, format_dataset_names=True)
+        bp_ms_df.to_csv(os.path.join(out_dir, 'bp_time_str.csv'), index=None)
+
+        print(bp_ms_df)
+
+    # boxplot
+    logger.info('\nPlotting boxplots...')
+    fig, axs = plt.subplots(5, 5, figsize=(4 * 5, 3 * 5))
+    axs = axs.flatten()
+    i = 0
+    for dataset, gf in nll_df.groupby('dataset'):
+        gf.boxplot([c for c in gf.columns if c not in ['dataset', 'fold']], ax=axs[i])
+        axs[i].set_title(dataset)
+        i += 1
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, 'boxplot.pdf'), bbox_inches='tight')
+
+    # Wilcoxon ranked test
+    logger.info('\nWilocoxon signed rank test (two-tailed):')
+    ref = 'KGBM-LDG'
+    for c in ['KNN-D', 'NGBoost-D', 'PGBM-DG']:
+        if c not in nll_df:
+            continue
+        statistic, p_val = stats.wilcoxon(nll_df[ref], nll_df[c])
+        statistic_m, p_val_m = stats.wilcoxon(nll_mean_df[ref], nll_mean_df[c])
+        logger.info(f'[{ref} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
 
 
 def main(args):

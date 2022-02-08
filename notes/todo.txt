@@ -54,6 +54,9 @@ Uncertainty GBRTs
 - Explain temporary rho and our heuristic for setting rho on validation data.
 - Update prob. regression literature repo.
 - Updates Tables 1, 2, 3, 4 and Figure 2 when results finish.
+- Add CRPS results to Appendix.
+- Put anonymous repo online.
+	* Transfer data w/ 20 folds to hard drive.
 - Add table breaking down total runtime into: train and test.
 	* Add third column showing when PGBM and KGBM amortized time would intersect. DONE.
 		+ Overlap formula: m1 + r1 * x = m2 + r2 * x; solve for x.

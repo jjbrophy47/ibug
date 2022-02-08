@@ -214,7 +214,6 @@ def plot_settings(family='serif', fontsize=11,
         plt.rc('lines', linewidth=linewidth)
     if libertine:
         assert family == 'serif'
-        # plt.rc('text', usetex=True)
         plt.rc('text.latex', preamble=r"""\usepackage{libertine}""")
         plt.rc('text.latex', preamble=r"""
                                       \usepackage{libertine}

@@ -295,7 +295,20 @@ class KGBMWrapper(Estimator):
 
             self.loc_val_ = loc[:, best_k_idx]
             self.scale_val_ = scale[:, best_k_idx]
-            self.min_scale_ = np.min(self.scale_val_)
+
+            # get min. scale
+            candidate_idxs = np.where(self.scale_val_ > self.eps)[0]
+            if len(candidate_idxs) > 0:
+                self.min_scale_ = np.min(self.scale_val_[candidate_idxs])
+            else:
+                warn_msg = f'[KNNWrapper - WARNING] All validation predictions had 0 variance, '
+                warn_msg += f'setting rho (min. variance) to {self.eps}...'
+                warn_msg += f' this may lead to poor results.'
+                if self.logger:
+                    self.logger(warn_msg)
+                else:
+                    print(warn_msg)
+                self.min_scale_ = self.eps
 
             if self.verbose > 0:
                 if self.logger:
@@ -480,9 +493,9 @@ class KNNWrapper(Estimator):
             if (i + 1) % 100 == 0 and self.verbose > 0:
                 cum_time = time.time() - start
                 if self.logger:
-                    self.logger.info(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+                    self.logger.info(f'[KNN - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
                 else:
-                    print(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+                    print(f'[KNN - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
 
         # assemble output         
         result = loc, scale
@@ -524,10 +537,10 @@ class KNNWrapper(Estimator):
             # progress
             if (i + 1) % 100 == 0 and self.verbose > 0:
                 if self.logger:
-                    self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X_train):,}, '
+                    self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X_val):,}, '
                                      f'cum. time: {time.time() - start:.3f}s')
                 else:
-                    print(f'[KNN - tuning] {i + 2:,} / {len(X_train):,}, '
+                    print(f'[KNN - tuning] {i + 2:,} / {len(X_val):,}, '
                           f'cum. time: {time.time() - start:.3f}s')
 
         # evaluate
@@ -557,6 +570,13 @@ class KNNWrapper(Estimator):
         if len(candidate_idxs) > 0:
             min_scale = np.min(scale_val[candidate_idxs])
         else:
-            raise ValueError('All validation predictions had 0 variance')
+            warn_msg = f'[KNNWrapper - WARNING] All validation predictions had 0 variance, '
+            warn_msg += f'setting rho (min. variance) to {self.eps}...'
+            warn_msg += f' this may lead to poor results.'
+            if self.logger:
+                self.logger.info(warn_msg)
+            else:
+                print(warn_msg)
+            min_scale = self.eps
 
         return loc_val, scale_val, best_k, min_scale
