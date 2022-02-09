@@ -126,10 +126,12 @@ class KGBMWrapper(Estimator):
 
         self.leaf_dict_ = leaf_dict
 
-        # randomly select a subset of trees to sample
+        # use first portion of trees to sample
         if self.tree_frac < 1.0:
             n_idxs = int(self.n_boost_ * self.tree_frac)
-            tree_idxs = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)
+            # tree_idxs = np.arange(self.n_boost_)[:n_idxs]  # first trees
+            tree_idxs = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)  # random trees
+            # tree_idxs = np.arange(self.n_boost_)[-n_idxs:]  # last trees
         else:
             tree_idxs = np.arange(self.n_boost_)
         self.tree_idxs_ = tree_idxs

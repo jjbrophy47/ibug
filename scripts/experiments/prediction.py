@@ -368,7 +368,7 @@ def experiment(args, logger, out_dir):
         logger.info('\nTuning k (and rho) (KGBM)...')
         start = time.time()
 
-        model_val = KGBMWrapper(tree_frac=1.0, verbose=argss.verbose,
+        model_val = KGBMWrapper(tree_frac=1.0, verbose=args.verbose,
                                 logger=logger).fit(model_val, X_tune, y_tune, X_val=X_val, y_val=y_val)
         best_k = model_val.k_
         min_scale = model_val.min_scale_
