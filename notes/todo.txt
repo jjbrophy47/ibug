@@ -41,34 +41,47 @@ Influence Estimation
 Uncertainty GBRTs
 ---
 
-- Add paragraph for both NGBoost and PGBM after Sec. 3.1.
-	* Go more high-level about their descriptions in introduction.
-	* Go more in-depth in Sec. 3.1
-- Assimilate notation section into the beginning of Background section.
-	* Add section header for GBRTs.
-- Add more justification of KGBM.
+- Add paragraph for both NGBoost and PGBM after Sec. 3.1. DONE.
+	* Go more high-level about their descriptions in introduction. DONE.
+	* Go more in-depth in Sec. 3.1 DONE.
+	* Remove extra detail in Related Work. DONE.
+- Assimilate notation section into the beginning of Background section. DONE.
+	* Add section header for GBRTs. DONE.
+- Add more justification of KGBM. TODO
 	* Add paragraph at beginning of Sec. 4 to contrast KGBM with other methods.
+	* Describe how KGBM fits in with other approaches like SILO.
+		+ Tree-ensembling + instance-based learning (e.g., KNN, kernel methods, etc.) is good.
+		+ MAPLE = RFs -> similar instances -> linear regression.
+		+ KGBM = GBRTs -> similar instances -> probabilistic distribution.
 	* Illustrative figure for affinity computation, and maybe how that
-		leafds to generating a probabilistic prediction.
-- Wilcoxon signed rank test for numbers in Table 1. hopefully p < 0.01.
-- Explain temporary rho and our heuristic for setting rho on validation data.
+		leads to generating a probabilistic prediction.
+- Wilcoxon signed rank test for numbers in Table 1. hopefully p < 0.01. DONE.
+	* Significant if computing over ALL folds (n = 22 * 20 = 440).
+	* Not significant against NGBoost and PGBM if over mean of folds (n = 22).
+- Explain temporary rho and our heuristic for setting rho on validation data. TODO
 - Update prob. regression literature repo.
-- Updates Tables 1, 2, 3, 4 and Figure 2 when results finish.
-- Add CRPS results to Appendix.
-- Put anonymous repo online.
+- Update tables/figures when results finish. DONE.
+	* Table 1. DONE.
+	* Table 2. DONE. recheck for more cases of good val. performance.
+	* Table 3. DONE.
+	* Table 4. DONE.
+	* Figure 1. DONE.
+	* Figure 2. DONE.
+- Add CRPS results to Appendix. TODO
+- Put anonymous repo online. TODO
 	* Transfer data w/ 20 folds to hard drive.
-- Add table breaking down total runtime into: train and test.
+- Add table breaking down total runtime into: train and test. DONE.
 	* Add third column showing when PGBM and KGBM amortized time would intersect. DONE.
 		+ Overlap formula: m1 + r1 * x = m2 + r2 * x; solve for x.
 			m1/m2: train time.
 			r1/r2: predictions/sec.
 			x = (m2 - m1) / (r1 - r2)
-	* Replace negative values with "N/A" or "-".
-		+ Maybe remove this section all together
-	* Maybe add dimension as well.
-	* Summarize with row at bottom showing the geo. mean over datasets.
+	* Replace negative values with "N/A" or "-". DONE.
+		+ Maybe remove this section all together.
+	* Maybe add dimension as well. DONE.
+	* Summarize with row at bottom showing the geo. mean over datasets. DONE.
 	* Move to Appendix, replace with scatter plot of KGBM vs. M for train
-		and test for M = NGBoost and PGBM (4 plots).
+		and test for M = NGBoost and PGBM (4 plots). DONE.
 - Include value of k in Figure 2, probably next to the dataset. DONE.
 - Figures 1 and 2 should say "Test NLL" instead of just "NLL". DONE.
 - Create Algs. 1 and 2. DONE.

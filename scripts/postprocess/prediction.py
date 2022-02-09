@@ -49,12 +49,13 @@ def plot_runtime(bdf, pdf, out_dir):
     util.plot_settings(fontsize=15, libertine=True)
 
     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
+    s = 75
 
     ax = axs[0]
     x = bdf['KGBM-LDG']
     y = bdf['NGBoost-D']
-    ax.scatter(x, y, marker='1')
-    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean')
+    ax.scatter(x, y, marker='1', s=s)
+    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlim(1e0, 1e5)
@@ -68,8 +69,8 @@ def plot_runtime(bdf, pdf, out_dir):
     ax = axs[1]
     x = bdf['KGBM-LDG']
     y = bdf['PGBM-DG']
-    ax.scatter(x, y, marker='1')
-    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red')
+    ax.scatter(x, y, marker='1', s=s)
+    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', s=s)
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlim(1e0, 1e5)
@@ -88,8 +89,8 @@ def plot_runtime(bdf, pdf, out_dir):
     ax = axs[0]
     x = pdf['KGBM-LDG']
     y = pdf['NGBoost-D']
-    ax.scatter(x, y, marker='1')
-    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean')
+    ax.scatter(x, y, marker='1', s=s)
+    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlim(1e-5, 1e0)
@@ -103,8 +104,8 @@ def plot_runtime(bdf, pdf, out_dir):
     ax = axs[1]
     x = pdf['KGBM-LDG']
     y = pdf['PGBM-DG']
-    ax.scatter(x, y, marker='1')
-    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean')
+    ax.scatter(x, y, marker='1', s=s)
+    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlim(1e-5, 1e0)
@@ -138,6 +139,7 @@ def compute_time_intersect(bdf, pdf, ref_col, skip_cols=[]):
 
     res_df = bdf[['dataset']].copy()
     res_df['n'] = bdf['n_train'] + pdf['n_test']
+    res_df['p'] = bdf['n_features']
 
     cols = [c for c in bdf.columns if c not in skip_cols and c != ref_col]
     for c in cols:
@@ -572,8 +574,8 @@ def process(args, out_dir, logger):
 
             crps = {'dataset': dataset, 'fold': fold}
             nll, rmse = crps.copy(), crps.copy()
-            btime = {'dataset': dataset, 'fold': fold, 'n_train': len(X_train)}
-            ptime = {'dataset': dataset, 'fold': fold, 'n_test': len(X_test)}
+            btime = {'dataset': dataset, 'fold': fold, 'n_train': len(X_train), 'n_features': X_train.shape[1]}
+            ptime = {'dataset': dataset, 'fold': fold, 'n_test': len(X_test), 'n_features': X_train.shape[1]}
             param = crps.copy()
             if args.val:
                 val_nll = crps.copy()
@@ -701,7 +703,7 @@ def process(args, out_dir, logger):
     if 'KGBM-LDG' in btime_mean_df and 'NGBoost-D' in btime_mean_df and 'PGBM-DG' in btime_mean_df:
         plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
 
-        skip_cols = ['dataset', 'n_test', 'n_train']
+        skip_cols = ['dataset', 'n_test', 'n_train', 'n_features']
         ref_col = 'KGBM-LDG'
         drop_cols = [c for c in btime_mean_df.columns if 'knn' in c.lower()]
 
@@ -719,17 +721,17 @@ def process(args, out_dir, logger):
 
         bp_ms_df = b_ms_df.merge(p_ms_df, on='dataset')
         bp_ms_df = bp_ms_df.merge(int_df, on='dataset', how='left').fillna(-1)
-        bp_ms_df = bp_ms_df.drop(columns=['n_train', 'n_test'])
+        bp_ms_df = bp_ms_df.drop(columns=['n_train', 'n_test', 'n_features_x', 'n_features_y'])
 
-        first_col = bp_ms_df.pop('n')
-        bp_ms_df.insert(1, 'n', first_col)
-        bp_ms_df = bp_ms_df.sort_values('n')
+        n_col = bp_ms_df.pop('n')
+        p_col = bp_ms_df.pop('p')
+        bp_ms_df.insert(1, 'n', n_col)
+        bp_ms_df.insert(2, 'p', p_col)
         bp_ms_df['n'] = bp_ms_df['n'].apply(lambda x: f'{int(x):,}')
+        bp_ms_df['p'] = bp_ms_df['p'].apply(lambda x: f'{int(x):,}')
 
         bp_ms_df = format_cols(bp_ms_df, format_dataset_names=True)
         bp_ms_df.to_csv(os.path.join(out_dir, 'bp_time_str.csv'), index=None)
-
-        print(bp_ms_df)
 
     # boxplot
     logger.info('\nPlotting boxplots...')

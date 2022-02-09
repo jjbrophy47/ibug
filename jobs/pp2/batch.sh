@@ -3,7 +3,7 @@ o='jobs/logs/pp2/'
 t='lgb'
 fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
 g_list=(1)
-d_list=(1)
+d_list=(0)
 tree_list=('lgb' 'xgb' 'cb')
 
 for f in ${fold_list[@]}; do
