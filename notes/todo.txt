@@ -41,6 +41,11 @@ Influence Estimation
 Uncertainty GBRTs
 ---
 
+- Compute total no. train instances encountered during a prediction.
+	* For a test instance, record total no. train across all trees.
+		+ And total no. unique train.
+- Add head2head comparison W-T-L for each method against itself w/ and w/o delta.
+	* Describe Delta calibration after section 3 (likely).
 - Add paragraph for both NGBoost and PGBM after Sec. 3.1. DONE.
 	* Go more high-level about their descriptions in introduction. DONE.
 	* Go more in-depth in Sec. 3.1 DONE.
@@ -93,7 +98,7 @@ Uncertainty GBRTs
 - Wine using multinomial for Figure 2. Keep as is for now. DONE.
 	* Actually NO! Because you could use classification instead.
 	* Could do MEPS, MSD, and Wine; but for now, keep it as is.
-- Maybe add summarization plots for tree_frac and dist.
+- Maybe add summarization plots for tree_frac and dist. DONE.
 - Try to send Daniel a draft by Sunday. DONE.
 
 Miscellaneous

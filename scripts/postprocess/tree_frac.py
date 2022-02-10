@@ -29,7 +29,7 @@ def process(args, out_dir, logger):
     color, ls, label = util.get_plot_dicts()
 
     metric_dict = {'crps': 'CRPS', 'nll': 'NLL'}
-    metric2_dict = {'build': 'Build', 'pred': 'Predict', 'bpred': 'Total time (s)'}
+    metric2_dict = {'build': 'Build', 'pred': 'Avg. pred. time (s)', 'bpred': 'Total time (s)'}
     dataset_dict = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
     if args.combine:
@@ -64,18 +64,21 @@ def process(args, out_dir, logger):
 
         for fold in args.fold:
 
+            n_test = None
+
             # get KGBM results for different tree fractions
             exp_dir = os.path.join(args.in_dir, dataset, f'fold{fold}')
             args.model = ['kgbm']
             results = util.get_results(args, exp_dir, logger, remove_neighbors=True)
             for method, res in results:
-                if 'kgbm' in method:
-                    idx = args.tree_frac.index(res['tree_frac'])
-                    crps['kgbm'][fold - 1][idx] = res['crps']
-                    nll['kgbm'][fold - 1][idx] = res['nll']
-                    build['kgbm'][fold - 1][idx] = res['total_build_time']
-                    pred['kgbm'][fold - 1][idx] = res['total_predict_time']
-                    bpred['kgbm'][fold - 1][idx] = res['total_build_time'] + res['total_predict_time']
+                assert 'kgbm' in method
+                n_test = res['n_test']
+                idx = args.tree_frac.index(res['tree_frac'])
+                crps['kgbm'][fold - 1][idx] = res['crps']
+                nll['kgbm'][fold - 1][idx] = res['nll']
+                build['kgbm'][fold - 1][idx] = res['total_build_time']
+                pred['kgbm'][fold - 1][idx] = res['total_predict_time'] / n_test
+                bpred['kgbm'][fold - 1][idx] = res['total_build_time'] + res['total_predict_time']
 
             # get NGBoost and PGBM results
             exp_dir2 = os.path.join(args.in_dir2, dataset, f'fold{fold}')
@@ -86,14 +89,14 @@ def process(args, out_dir, logger):
                     crps['pgbm'][fold - 1] = res['crps']
                     nll['pgbm'][fold - 1] = res['nll']
                     build['pgbm'][fold - 1] = res['total_build_time']
-                    pred['pgbm'][fold - 1] = res['total_predict_time']
+                    pred['pgbm'][fold - 1] = res['total_predict_time'] / n_test
                     bpred['pgbm'][fold - 1] = res['total_build_time'] + res['total_predict_time']
                 elif 'ngboost' in method:
                     crps['ngboost'][fold - 1] = res['crps']
                     nll['ngboost'][fold - 1] = res['nll']
                     build['ngboost'][fold - 1] = res['total_build_time']
                     build['ngboost'][fold - 1] = res['total_build_time'] + res['total_predict_time']
-                    pred['ngboost'][fold - 1] = res['total_predict_time']
+                    pred['ngboost'][fold - 1] = res['total_predict_time'] / n_test
                     bpred['ngboost'][fold - 1] = res['total_build_time'] + res['total_predict_time']
 
         kgbm_dict = {'crps_mean': np.mean(crps['kgbm'], axis=0), 'crps_sem': sem(crps['kgbm'], axis=0),
@@ -148,6 +151,7 @@ def process(args, out_dir, logger):
 
         if i == 0:
             ax.set_ylabel(f'Test {metric_dict[args.metric]}')
+        elif i == 1:
             ax.legend(fontsize=15)
 
         # runtime
@@ -228,7 +232,7 @@ if __name__ == '__main__':
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
     parser.add_argument('--skip', type=str, nargs='+', default=['heart'])
-    parser.add_argument('--fold', type=int, nargs='+', default=[1, 2, 3, 4, 5])
+    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
     parser.add_argument('--model', type=str, nargs='+', default=['kgbm'])
     parser.add_argument('--tree_frac', type=str, nargs='+',
                         default=[0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])

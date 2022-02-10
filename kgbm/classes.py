@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.base import clone
 from scipy.stats import norm
+from scipy.stats import sem
 
 from .base import Estimator
 from .parsers import util
@@ -160,7 +161,7 @@ class KGBMWrapper(Estimator):
         """
         return self.model_.predict(X)
 
-    def pred_dist(self, X, return_kneighbors=False):
+    def pred_dist(self, X, return_kneighbors=False, return_affinity_stats=False):
         """
         Extract distribution for each x in X.
 
@@ -172,13 +173,23 @@ class KGBMWrapper(Estimator):
         Return
             - If return_neighbors=True, return 2 2d arrays of shape=(len(X), self.k_)
                 + Neighbor indices and values.
-            - If return_neighbors=False, return 2 1d arrays of shape=(len(X),)
+            - If return_affinity_stats=True, return a dict containing:
+                + 'cnt_ens': Instance counts at leaves, averaged over test instances.
+                + 'unq_cnt_ens': Unique instance counts at leaves, averaged over test instances.
+                + 'cnt_tree': Instance counts at leaves, averaged over trees then test instances.
+                + 'unq_cnt_tree': Unique instance counts at leaves, averaged over trees then test instances.
+            - Otherwise, return 2 1d arrays of shape=(len(X),)
                 + Location and shape.
 
         Note
             - k-nearest neighbors computed using affinity to
                 the test example.
         """
+        if return_kneighbors:
+            assert not return_affinity_stats
+        elif return_affinity_stats:
+            assert not return_kneighbors
+
         start = time.time()
 
         leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
@@ -191,6 +202,8 @@ class KGBMWrapper(Estimator):
         if return_kneighbors:
             neighbor_idxs = np.zeros((len(X), self.k_), dtype=np.int32)
             neighbor_vals = np.zeros((len(X), self.k_), dtype=np.float32)
+        elif return_affinity_stats:
+            instances = np.zeros((len(X), 2), dtype=np.int32)  # shape=(n_test, 2)
         else:
             loc = np.zeros(len(X), dtype=np.float32)
             scale = np.zeros(len(X), dtype=np.float32)
@@ -210,6 +223,9 @@ class KGBMWrapper(Estimator):
             if return_kneighbors:
                 neighbor_idxs[i, :] = train_idxs
                 neighbor_vals[i, :] = train_vals
+            elif return_affinity_stats:
+                instances[i, 0] = np.sum(affinity)
+                instances[i, 1] = len(np.where(affinity > 0)[0])
             else:
                 loc[i] = np.mean(train_vals)
                 scale[i] = np.std(train_vals)
@@ -227,6 +243,16 @@ class KGBMWrapper(Estimator):
         # assemble output
         if return_kneighbors:
             result = neighbor_idxs, neighbor_vals
+        elif return_affinity_stats:
+            instances_mean = np.mean(instances, axis=0)  # shape=(2,)
+            instances_sem = sem(instances, axis=0)  # shape=(2,)
+            avg_instances = instances / len(self.tree_idxs_)  # shape=(len(X), 2)
+            avg_instances_mean = np.mean(avg_instances, axis=0)  # shape=(2,)
+            avg_instances_sem = sem(avg_instances, axis=0)  # shape=(2,)
+            result = {'cnt_ens': {'mean': instances_mean[0], 'sem': instances_sem[0]},
+                      'cnt_ens_unq': {'mean': instances_mean[1], 'sem': instances_sem[1]},
+                      'cnt_tree': {'mean': avg_instances_mean[0], 'sem': avg_instances_sem[0]},
+                      'cnt_tree_unq': {'mean': avg_instances_mean[1], 'sem': avg_instances_sem[1]}}
         else:
             if self.loc_type == 'gbm':
                 loc[:] = self.predict(X).squeeze()  # shape=(len(X),)            

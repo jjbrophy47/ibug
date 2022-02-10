@@ -421,6 +421,7 @@ def append_head2head(data_df, attach_df=None, include_ties=True,
 
     res_list = []
     for c1 in cols:
+        print(c1)
 
         if include_ties:
             res = {'dataset': f'{c1} W-T-L'}
@@ -440,6 +441,8 @@ def append_head2head(data_df, attach_df=None, include_ties=True,
                 if t_stat < 0 and p_val < p_val_threshold:
                     n_wins += 1
                 elif t_stat > 0 and p_val < p_val_threshold:
+                    if 'kgbm' in c1.lower() and 'ngboost' in c2.lower():
+                        print(c1, c2, dataset, p_val)
                     n_losses += 1
                 else:
                     if np.isnan(p_val):
@@ -773,7 +776,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--data_dir', type=str, default='data')
+    parser.add_argument('--data_dir', type=str, default='data')  # TODO: fix!!
     parser.add_argument('--in_dir', type=str, default='temp_prediction/')
     parser.add_argument('--out_dir', type=str, default='output/postprocess/prediction/')
     parser.add_argument('--custom_dir', type=str, default='results')

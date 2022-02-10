@@ -521,7 +521,9 @@ def experiment(args, logger, out_dir):
     if args.model == 'knn':
         result['knn_params'] = knn_params
         result['tune_time_knn'] = tune_time_knn
-    elif args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
+    if args.custom_dir == 'affinity_stats':
+        result['affinity_dict'] = model_test.pred_dist(X_test, return_affinity_stats=True)
+    if args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
         assert args.model == 'kgbm'
         val_dist_res, _, _ = evaluate_posterior(args, model_val, X=X_val, y=y_val, min_scale=min_scale,
                                                 loc=loc_val, scale=scale_val, logger=logger, prefix='VAL')
