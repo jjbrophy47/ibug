@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 from sklearn.base import clone
 from scipy.stats import norm
-from scipy.stats import sem
 
 from .base import Estimator
 from .parsers import util
@@ -245,14 +244,14 @@ class KGBMWrapper(Estimator):
             result = neighbor_idxs, neighbor_vals
         elif return_affinity_stats:
             instances_mean = np.mean(instances, axis=0)  # shape=(2,)
-            instances_sem = np.std(instances, axis=0)  # shape=(2,)
+            instances_std = np.std(instances, axis=0)  # shape=(2,)
             avg_instances = instances / len(self.tree_idxs_)  # shape=(len(X), 2)
             avg_instances_mean = np.mean(avg_instances, axis=0)  # shape=(2,)
-            avg_instances_sem = np.std(avg_instances, axis=0)  # shape=(2,)
-            result = {'cnt_ens': {'mean': instances_mean[0], 'sem': instances_sem[0]},
-                      'cnt_ens_unq': {'mean': instances_mean[1], 'sem': instances_sem[1]},
-                      'cnt_tree': {'mean': avg_instances_mean[0], 'sem': avg_instances_sem[0]},
-                      'cnt_tree_unq': {'mean': avg_instances_mean[1], 'sem': avg_instances_sem[1]}}
+            avg_instances_std = np.std(avg_instances, axis=0)  # shape=(2,)
+            result = {'cnt_ens': {'mean': instances_mean[0], 'std': instances_std[0]},
+                      'cnt_ens_unq': {'mean': instances_mean[1], 'std': instances_std[1]},
+                      'cnt_tree': {'mean': avg_instances_mean[0], 'std': avg_instances_std[0]},
+                      'cnt_tree_unq': {'mean': avg_instances_mean[1], 'std': avg_instances_std[1]}}
         else:
             if self.loc_type == 'gbm':
                 loc[:] = self.predict(X).squeeze()  # shape=(len(X),)            
