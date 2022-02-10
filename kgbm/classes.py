@@ -245,10 +245,10 @@ class KGBMWrapper(Estimator):
             result = neighbor_idxs, neighbor_vals
         elif return_affinity_stats:
             instances_mean = np.mean(instances, axis=0)  # shape=(2,)
-            instances_sem = sem(instances, axis=0)  # shape=(2,)
+            instances_sem = np.std(instances, axis=0)  # shape=(2,)
             avg_instances = instances / len(self.tree_idxs_)  # shape=(len(X), 2)
             avg_instances_mean = np.mean(avg_instances, axis=0)  # shape=(2,)
-            avg_instances_sem = sem(avg_instances, axis=0)  # shape=(2,)
+            avg_instances_sem = np.std(avg_instances, axis=0)  # shape=(2,)
             result = {'cnt_ens': {'mean': instances_mean[0], 'sem': instances_sem[0]},
                       'cnt_ens_unq': {'mean': instances_mean[1], 'sem': instances_sem[1]},
                       'cnt_tree': {'mean': avg_instances_mean[0], 'sem': avg_instances_sem[0]},
