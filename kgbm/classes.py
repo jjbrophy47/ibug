@@ -3,6 +3,7 @@ import joblib
 
 import numpy as np
 import pandas as pd
+import properscoring as ps
 from sklearn.base import clone
 from scipy.stats import norm
 
@@ -310,40 +311,42 @@ class KGBMWrapper(Estimator):
                     print(f'[KGBM - tuning] {i + 2:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
 
         # evaluate
+        assert scoring in ['nll', 'crps']
+
         results = []
-        if scoring == 'nll':
-            for j, k in enumerate(k_params):
-                nll = np.mean([-norm.logpdf(y[i], loc=loc[i, j], scale=scale[i, j]) for i in range(len(y))])
-                results.append({'k': k, 'score': nll, 'k_idx': j})
+        for j, k in enumerate(k_params):
+            if scoring == 'nll':
+                score = np.mean([-norm.logpdf(y[i], loc=loc[i, j], scale=scale[i, j]) for i in range(len(y))])
+            elif scoring == 'crps':
+                score = np.mean([ps.crps_gaussian(y[i], mu=loc[i, j], sig=scale[i, j]) for i in range(len(y))])
+            results.append({'k': k, 'score': score, 'k_idx': j})
 
-            df = pd.DataFrame(results).sort_values('score', ascending=True)
-            best_k = df.astype(object).iloc[0]['k']
-            best_k_idx = df.astype(object).iloc[0]['k_idx']
+        df = pd.DataFrame(results).sort_values('score', ascending=True)
+        best_k = df.astype(object).iloc[0]['k']
+        best_k_idx = df.astype(object).iloc[0]['k_idx']
 
-            self.loc_val_ = loc[:, best_k_idx]
-            self.scale_val_ = scale[:, best_k_idx]
+        self.loc_val_ = loc[:, best_k_idx]
+        self.scale_val_ = scale[:, best_k_idx]
 
-            # get min. scale
-            candidate_idxs = np.where(self.scale_val_ > self.eps)[0]
-            if len(candidate_idxs) > 0:
-                self.min_scale_ = np.min(self.scale_val_[candidate_idxs])
-            else:
-                warn_msg = f'[KNNWrapper - WARNING] All validation predictions had 0 variance, '
-                warn_msg += f'setting rho (min. variance) to {self.eps}...'
-                warn_msg += f' this may lead to poor results.'
-                if self.logger:
-                    self.logger(warn_msg)
-                else:
-                    print(warn_msg)
-                self.min_scale_ = self.eps
-
-            if self.verbose > 0:
-                if self.logger:
-                    self.logger.info(f'\n[KGBM - tuning] k results:\n{df}')
-                else:
-                    print(f'\n[KGBM - tuning] k results:\n{df}')
+        # get min. scale
+        candidate_idxs = np.where(self.scale_val_ > self.eps)[0]
+        if len(candidate_idxs) > 0:
+            self.min_scale_ = np.min(self.scale_val_[candidate_idxs])
         else:
-            raise ValueError(f'Unknown scoring {scoring}')
+            warn_msg = f'[KNNWrapper - WARNING] All validation predictions had 0 variance, '
+            warn_msg += f'setting rho (min. variance) to {self.eps}...'
+            warn_msg += f' this may lead to poor results.'
+            if self.logger:
+                self.logger(warn_msg)
+            else:
+                print(warn_msg)
+            self.min_scale_ = self.eps
+
+        if self.verbose > 0:
+            if self.logger:
+                self.logger.info(f'\n[KGBM - tuning] k results:\n{df}')
+            else:
+                print(f'\n[KGBM - tuning] k results:\n{df}')
 
         return best_k
 
@@ -571,23 +574,25 @@ class KNNWrapper(Estimator):
                           f'cum. time: {time.time() - start:.3f}s')
 
         # evaluate
+        assert scoring in ['nll', 'crps']
+
         results = []
-        if scoring == 'nll':
-            for j, k in enumerate(k_params):
-                nll = np.mean([-norm.logpdf(y_val[i], loc=loc[i, j], scale=scale[i, j]) for i in range(len(y_val))])
-                results.append({'k': k, 'score': nll, 'k_idx': j})
+        for j, k in enumerate(k_params):
+            if scoring == 'nll':
+                score = np.mean([-norm.logpdf(y_val[i], loc=loc[i, j], scale=scale[i, j]) for i in range(len(y_val))])
+            elif scoring == 'crps':
+                score = np.mean([ps.crps_gaussian(y_val[i], mu=loc[i, j], sig=scale[i, j]) for i in range(len(y_val))])
+            results.append({'k': k, 'score': score, 'k_idx': j})
 
-            df = pd.DataFrame(results).sort_values('score', ascending=True)
-            best_k = df.astype(object).iloc[0]['k']
-            best_k_idx = df.astype(object).iloc[0]['k_idx']
+        df = pd.DataFrame(results).sort_values('score', ascending=True)
+        best_k = df.astype(object).iloc[0]['k']
+        best_k_idx = df.astype(object).iloc[0]['k_idx']
 
-            if self.verbose > 0:
-                if self.logger:
-                    self.logger.info(f'\n[KNN - tuning] k results:\n{df}')
-                else:
-                    print(f'\n[KNN - tuning] k results:\n{df}')
-        else:
-            raise ValueError(f'Unknown scoring {scoring}')
+        if self.verbose > 0:
+            if self.logger:
+                self.logger.info(f'\n[KNN - tuning] k results:\n{df}')
+            else:
+                print(f'\n[KNN - tuning] k results:\n{df}')
 
         loc_val = loc[:, best_k_idx]
         scale_val = scale[:, best_k_idx]

@@ -23,6 +23,12 @@ if [[ ! $tree_frac ]]; then
     tree_frac=1.0
 fi
 
+if [[ $custom_dir = 'crps' ]]; then
+    scoring='crps'
+else
+    scoring='nll'
+fi
+
 . jobs/config.sh
 
 dataset=${datasets[${SLURM_ARRAY_TASK_ID}]}
@@ -47,3 +53,4 @@ python3 scripts/experiments/prediction.py \
   --tune_frac=${tune_frac} \
   --out_dir='output2' \
   --data_dir='data_20folds' \
+  --scoring=${scoring} \

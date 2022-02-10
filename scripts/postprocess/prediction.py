@@ -23,6 +23,55 @@ import util
 from experiments import util as exp_util
 
 
+n_dict = {}
+n_dict['ames'] = 2930
+n_dict['bike'] = 17379
+n_dict['california'] = 20640
+n_dict['communities'] = 1994
+n_dict['concrete'] = 1030
+n_dict['energy'] = 768
+n_dict['facebook'] = 40949
+n_dict['kin8nm'] = 8192
+n_dict['life'] = 2928
+n_dict['meps'] = 15656
+n_dict['msd'] = 515345
+n_dict['naval'] = 11934
+n_dict['news'] = 39644
+n_dict['obesity'] = 48346
+n_dict['power'] = 9568
+n_dict['protein'] = 45730
+n_dict['star'] = 2161
+n_dict['superconductor'] = 21263
+n_dict['synthetic'] = 10000
+n_dict['wave'] = 287999
+n_dict['wine'] = 6497
+n_dict['yacht'] = 308
+
+p_dict = {}
+p_dict['ames'] = 358
+p_dict['bike'] = 37
+p_dict['california'] = 100
+p_dict['communities'] = 100
+p_dict['concrete'] = 8
+p_dict['energy'] = 16
+p_dict['facebook'] = 133
+p_dict['kin8nm'] = 8
+p_dict['life'] = 204
+p_dict['meps'] = 139
+p_dict['msd'] = 90
+p_dict['naval'] = 17
+p_dict['news'] = 58
+p_dict['obesity'] = 100
+p_dict['power'] = 4
+p_dict['protein'] = 9
+p_dict['star'] = 95
+p_dict['superconductor'] = 82
+p_dict['synthetic'] = 100
+p_dict['wave'] = 48
+p_dict['wine'] = 11
+p_dict['yacht'] = 6
+
+
 def get_ax_lims(ax):
     """
     Compute min. and max. of axis limits.
@@ -62,7 +111,7 @@ def plot_runtime(bdf, pdf, out_dir):
     ax.set_ylim(1e0, 1e5)
     lims = get_ax_lims(ax)
     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    ax.set_xlabel('KGBM')
+    ax.set_xlabel('IBUG')
     ax.set_ylabel('NGBoost')
     ax.legend()
 
@@ -77,7 +126,7 @@ def plot_runtime(bdf, pdf, out_dir):
     ax.set_ylim(1e0, 1e5)
     lims = get_ax_lims(ax)
     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    ax.set_xlabel('KGBM')
+    ax.set_xlabel('IBUG')
     ax.set_ylabel('PGBM')
 
     plt.tight_layout()
@@ -98,7 +147,7 @@ def plot_runtime(bdf, pdf, out_dir):
     lims = get_ax_lims(ax)
     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
     ax.tick_params(axis='both', which='minor')
-    ax.set_xlabel('KGBM')
+    ax.set_xlabel('IBUG')
     ax.set_ylabel('NGBoost')
 
     ax = axs[1]
@@ -113,7 +162,7 @@ def plot_runtime(bdf, pdf, out_dir):
     lims = get_ax_lims(ax)
     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
     ax.tick_params(axis='x', which='minor')
-    ax.set_xlabel('KGBM')
+    ax.set_xlabel('IBUG')
     ax.set_ylabel('PGBM')
 
     plt.tight_layout()
@@ -421,7 +470,6 @@ def append_head2head(data_df, attach_df=None, include_ties=True,
 
     res_list = []
     for c1 in cols:
-        print(c1)
 
         if include_ties:
             res = {'dataset': f'{c1} W-T-L'}
@@ -441,8 +489,8 @@ def append_head2head(data_df, attach_df=None, include_ties=True,
                 if t_stat < 0 and p_val < p_val_threshold:
                     n_wins += 1
                 elif t_stat > 0 and p_val < p_val_threshold:
-                    if 'kgbm' in c1.lower() and 'ngboost' in c2.lower():
-                        print(c1, c2, dataset, p_val)
+                    # if 'kgbm' in c1.lower() and 'ngboost' in c2.lower():
+                    #     print(c1, c2, dataset, p_val)
                     n_losses += 1
                 else:
                     if np.isnan(p_val):
@@ -569,7 +617,10 @@ def process(args, out_dir, logger):
         if dataset in args.skip:
             continue
 
-        X_train, X_test, _, _, _ = exp_util.get_data(args.data_dir, dataset, fold=1)
+        n = n_dict[dataset]
+        n_test = int(n * args.test_frac)
+        n_train = n - n_test
+        n_feature = p_dict[dataset]
 
         for fold in args.fold:
             exp_dir = os.path.join(args.in_dir, dataset, f'fold{fold}')
@@ -577,8 +628,8 @@ def process(args, out_dir, logger):
 
             crps = {'dataset': dataset, 'fold': fold}
             nll, rmse = crps.copy(), crps.copy()
-            btime = {'dataset': dataset, 'fold': fold, 'n_train': len(X_train), 'n_features': X_train.shape[1]}
-            ptime = {'dataset': dataset, 'fold': fold, 'n_test': len(X_test), 'n_features': X_train.shape[1]}
+            btime = {'dataset': dataset, 'fold': fold, 'n_train': n_train, 'n_features': n_feature}
+            ptime = {'dataset': dataset, 'fold': fold, 'n_test': n_test, 'n_features': n_feature}
             param = crps.copy()
             if args.val:
                 val_nll = crps.copy()
@@ -589,7 +640,7 @@ def process(args, out_dir, logger):
                 nll[name] = res['nll']
                 rmse[name] = res['rmse']
                 btime[name] = res['total_build_time']
-                ptime[name] = res['total_predict_time'] / len(X_test)
+                ptime[name] = res['total_predict_time'] / n_test
                 param[name], param_names[name], param_types[name] = get_param_list(name, res)
                 if args.val:
                     val_nll[name] = res['val_res']['nll']
@@ -776,9 +827,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--data_dir', type=str, default='data')  # TODO: fix!!
-    parser.add_argument('--in_dir', type=str, default='temp_prediction/')
-    parser.add_argument('--out_dir', type=str, default='output/postprocess/prediction/')
+    parser.add_argument('--data_dir', type=str, default='data')
+    parser.add_argument('--in_dir', type=str, default='temp_output2/prediction/')
+    parser.add_argument('--out_dir', type=str, default='output2/postprocess/prediction/')
     parser.add_argument('--custom_dir', type=str, default='results')
 
     # Experiment settings
@@ -789,7 +840,7 @@ if __name__ == '__main__':
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
     parser.add_argument('--skip', type=str, nargs='+', default=['heart'])
-    parser.add_argument('--fold', type=int, nargs='+', default=[1, 2, 3, 4, 5])
+    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
     parser.add_argument('--model', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'kgbm'])
     parser.add_argument('--tree_frac', type=str, nargs='+', default=[1.0])
     parser.add_argument('--min_scale_pct', type=float, nargs='+', default=[0.0])
@@ -798,6 +849,7 @@ if __name__ == '__main__':
     parser.add_argument('--delta', type=int, nargs='+', default=[1])
     parser.add_argument('--gridsearch', type=int, nargs='+', default=[1])
     parser.add_argument('--val', type=int, default=0)
+    parser.add_argument('--test_frac', type=float, default=0.1)
 
     args = parser.parse_args()
     main(args)

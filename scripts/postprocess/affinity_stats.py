@@ -23,7 +23,7 @@ from experiments import util as exp_util
 
 def process(args, out_dir, logger):
 
-    util.plot_settings(fontsize=21, libertine=True)
+    util.plot_settings(fontsize=15, libertine=True)
 
     rng = np.random.default_rng(args.random_state)
     color, ls, label = util.get_plot_dicts()
@@ -45,31 +45,39 @@ def process(args, out_dir, logger):
             assert 'kgbm' in method
             assert 'affinity_dict' in res
             for k, v in res['affinity_dict'].items():
+                if 'sem' in list(v.keys()):
+                    success = False
+                    break
                 res_dict[f'{k}_mean'] = v['mean']
-                res_dict[f'{k}_sem'] = v['sem']
+                res_dict[f'{k}_std'] = v['std']
+            if not success:
+                break
             res_dict['n_train'] = res['n_train']
-            print(res)
-            res_dict['n_leaves'] = res['tree_params']['num_leaves']
             res_list.append(res_dict)
 
-    df = pd.DataFrame(res_list)[['cnt_tree_mean', 'cnt_tree_sem', 'n_train']]
+    df = pd.DataFrame(res_list)[['dataset', 'fold', 'cnt_tree_mean', 'cnt_tree_std', 'n_train']]
     df['cnt_tree_mean_frac'] = df['cnt_tree_mean'] / df['n_train']
-    df['cnt_tree_sem_frac'] = df['cnt_tree_sem'] / df['n_train']
-    print(df.sort_values('n_train'))
+    df['cnt_tree_std_frac'] = df['cnt_tree_std'] / df['n_train']
+    df = df.sort_values('n_train')
 
-    spearman = spearmanr(df['n_train'], df['cnt_tree_mean_frac'])
-    print(spearman)
+    spearman = spearmanr(df['n_train'], df['cnt_tree_mean_frac'])[0]
 
     fig, ax = plt.subplots()
-    # ax.errorbar(df['n_train'], df['cnt_tree_mean_frac'] * 100, yerr=df['cnt_tree_sem_frac'] * 100, fmt='o')
-    ax.errorbar(df['n_train'], df['cnt_tree_mean'], yerr=df['cnt_tree_sem'], fmt='o')
-    # ax.set_ylim(0, 100)
-    # ax.set_yscale('log')
-    # ax.set_xscale('log')
-    plt.show()
+    ax.errorbar(df['n_train'], df['cnt_tree_mean_frac'] * 100,
+                yerr=df['cnt_tree_std_frac'] * 100, fmt='o',
+                label=f'Spearman={spearman:.3f}')
+    ax.set_ylim(0, 100)
+    ax.set_xscale('log')
+    ax.set_ylabel('% train visited / tree')
+    ax.set_xlabel('No. train')
+    ax.legend(loc='upper left')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, 'plot.pdf'), bbox_inches='tight')
 
     # save
     logger.info(f'Saving results to {out_dir}...')
+    df.to_csv(os.path.join(out_dir, 'result.csv'))
 
 
 def main(args):

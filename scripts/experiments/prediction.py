@@ -26,6 +26,8 @@ from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
 from ngboost import NGBRegressor
+from ngboost.scores import CRPScore
+from ngboost.scores import LogScore
 from scipy.stats import gaussian_kde
 from scipy.stats import lognorm
 
@@ -111,7 +113,8 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
     Return
         1d array of updated scale values.
     """
-    assert scoring == 'nll'
+    assert scoring in ['nll', 'crps']
+    assert ops == ['add', 'mult']
 
     results = []
     for op in ops:
@@ -125,8 +128,11 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
             else:
                 temp_scale = scale * delta
 
-            nll = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=True, crps=False)
-            results.append({'delta': delta, 'op': op, 'score': nll})
+            if scoring == 'nll':
+                score = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=True, crps=False)
+            else:
+                score = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=False, crps=True)
+            results.append({'delta': delta, 'op': op, 'score': score})
 
     df = pd.DataFrame(results).sort_values('score', ascending=True)
 
@@ -198,7 +204,9 @@ def get_model(args, n_train):
         n_train: int, no. training examples.
     """
     if args.model == 'ngboost':
-        model = NGBRegressor(n_estimators=2000, verbose=args.verbose)
+        assert args.scoring in ['nll', 'crps']
+        score = CRPSScore if args.scoring == 'crps' else LogScore
+        model = NGBRegressor(n_estimators=2000, verbose=args.verbose, Score=score)
         params = {'n_estimators': [10, 25, 50, 100, 200, 500, 1000]}
 
     elif args.model == 'pgbm':
@@ -368,7 +376,7 @@ def experiment(args, logger, out_dir):
         logger.info('\nTuning k (and rho) (KGBM)...')
         start = time.time()
 
-        model_val = KGBMWrapper(tree_frac=1.0, verbose=args.verbose,
+        model_val = KGBMWrapper(tree_frac=1.0, verbose=args.verbose, scoring=args.scoring,
                                 logger=logger).fit(model_val, X_tune, y_tune, X_val=X_val, y_val=y_val)
         best_k = model_val.k_
         min_scale = model_val.min_scale_
@@ -387,8 +395,8 @@ def experiment(args, logger, out_dir):
         logger.info('\nTuning k (and rho) KNN...')
         start = time.time()
 
-        model_val = KNNWrapper(verbose=args.verbose, logger=logger).fit(model_val, X_tune, y_tune,
-                                                                        X_val=X_val, y_val=y_val)
+        model_val = KNNWrapper(verbose=args.verbose, logger=logger,
+                               scoring=args.scoring).fit(model_val, X_tune, y_tune, X_val=X_val, y_val=y_val)
         best_k = model_val.k_
         min_scale = model_val.min_scale_
 
@@ -412,7 +420,7 @@ def experiment(args, logger, out_dir):
         logger.info(f'\nTuning delta...')
         start = time.time()
         delta, delta_op = tune_delta(loc=loc_val, scale=scale_val, y=y_val,
-                                     verbose=args.verbose, logger=logger)
+                                     verbose=args.verbose, logger=logger, scoring=args.scoring)
         tune_time_delta = time.time() - start
         logger.info(f'\nbest delta: {delta}, op: {delta_op}')
         logger.info(f'tune time (delta): {tune_time_delta:.3f}s')
@@ -623,6 +631,7 @@ if __name__ == '__main__':
     parser.add_argument('--distribution', type=str, nargs='+',
                         default=['normal', 'skewnormal', 'lognormal', 'laplace',
                                  'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])
+    parser.add_argument('--scoring', type=str, default='nll')
 
     args = parser.parse_args()
     main(args)
