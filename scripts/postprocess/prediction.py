@@ -71,6 +71,30 @@ p_dict['wave'] = 48
 p_dict['wine'] = 11
 p_dict['yacht'] = 6
 
+c_dict = {}
+c_dict['ames'] = 'Ames~\\cite{de2011ames}'
+c_dict['bike'] = 'Bike~\\cite{bike_sharing,Dua:2019}'
+c_dict['california'] = 'California~\\cite{pace1997sparse}'
+c_dict['communities'] = 'Communities~\\cite{Dua:2019,redmond2002data}'
+c_dict['concrete'] = 'Concrete~\\cite{yeh1998modeling,Dua:2019}'
+c_dict['energy'] = 'Energy~\\cite{tsanas2012accurate,Dua:2019}'
+c_dict['facebook'] = 'Facebook~\\cite{Sing1503:Comment,Dua:2019}'
+c_dict['kin8nm'] = 'Kin8nm~\\cite{kin8nm}'
+c_dict['life'] = 'Life~\\cite{life}'
+c_dict['meps'] = 'MEPS~\\cite{cohen2009medical}'
+c_dict['msd'] = 'MSD~\\cite{Bertin-Mahieux2011}'
+c_dict['naval'] = 'Naval~\\cite{Dua:2019,coraddu2016machine}'
+c_dict['news'] = 'News~\\cite{Dua:2019,fernandes2015proactive}'
+c_dict['obesity'] = 'Obesity~\\cite{obesity}'
+c_dict['power'] = 'Power~\\cite{Dua:2019,kaya2012local,tufekci2014prediction}'
+c_dict['protein'] = 'Protein~\\cite{Dua:2019}'
+c_dict['star'] = 'STAR~\\cite{Dua:2019,stock2012introduction}'
+c_dict['superconductor'] = 'Superconductor~\\cite{Dua:2019,hamidieh2018data}'
+c_dict['synthetic'] = 'Synthetic~\\cite{breiman1996bagging,friedman1991multivariate}'
+c_dict['wave'] = 'Wave~\\cite{Dua:2019}'
+c_dict['wine'] = 'Wine~\\cite{cortez2009modeling,Dua:2019}'
+c_dict['yacht'] = 'Yacht~\\cite{Dua:2019}'
+
 
 def get_ax_lims(ax):
     """
@@ -785,6 +809,7 @@ def process(args, out_dir, logger):
         bp_ms_df['p'] = bp_ms_df['p'].apply(lambda x: f'{int(x):,}')
 
         bp_ms_df = format_cols(bp_ms_df, format_dataset_names=True)
+        bp_ms_df['dataset'] = bp_ms_df['dataset'].apply(lambda x: c_dict[x.lower()] if x.lower() in c_dict else x)
         bp_ms_df.to_csv(os.path.join(out_dir, 'bp_time_str.csv'), index=None)
 
     # boxplot
