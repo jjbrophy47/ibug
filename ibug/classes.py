@@ -107,6 +107,16 @@ class IBUGWrapper(Estimator):
 
         self.leaf_counts_ = self.model_.get_leaf_counts()  # shape=(no. boost, no. class)
 
+        # TEMP
+        self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
+        print(self.leaf_weights_, self.leaf_weights_.shape)
+        print(np.mean(self.leaf_weights_), np.std(self.leaf_weights_))
+        print(np.min(self.leaf_weights_), np.max(self.leaf_weights_))
+        import seaborn as sns
+        sns.histplot(self.leaf_weights_, kde=True)
+        plt.show()
+        exit(0)
+
         """
         organize training example leaf IDs
         schema: tree ID -> leaf ID -> train IDs

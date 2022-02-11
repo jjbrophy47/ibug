@@ -110,7 +110,7 @@ def get_ax_lims(ax):
             np.max([ax.get_xlim(), ax.get_ylim()])]
 
 
-def plot_runtime(bdf, pdf, out_dir):
+def plot_runtime(bdf, pdf, out_dir, ref_col='KGBM-LDG'):
     """
     Plot train time and avg. predict time per test example scatter plots.
 
@@ -125,7 +125,7 @@ def plot_runtime(bdf, pdf, out_dir):
     s = 75
 
     ax = axs[0]
-    x = bdf['KGBM-LDG']
+    x = bdf[ref_col]
     y = bdf['NGBoost-D']
     ax.scatter(x, y, marker='1', s=s)
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
@@ -140,7 +140,7 @@ def plot_runtime(bdf, pdf, out_dir):
     ax.legend()
 
     ax = axs[1]
-    x = bdf['KGBM-LDG']
+    x = bdf[ref_col]
     y = bdf['PGBM-DG']
     ax.scatter(x, y, marker='1', s=s)
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', s=s)
@@ -160,7 +160,7 @@ def plot_runtime(bdf, pdf, out_dir):
     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
 
     ax = axs[0]
-    x = pdf['KGBM-LDG']
+    x = pdf[ref_col]
     y = pdf['NGBoost-D']
     ax.scatter(x, y, marker='1', s=s)
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
@@ -175,7 +175,7 @@ def plot_runtime(bdf, pdf, out_dir):
     ax.set_ylabel('NGBoost')
 
     ax = axs[1]
-    x = pdf['KGBM-LDG']
+    x = pdf[ref_col]
     y = pdf['PGBM-DG']
     ax.scatter(x, y, marker='1', s=s)
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
@@ -778,11 +778,11 @@ def process(args, out_dir, logger):
 
     # runtime
     logger.info('\nRuntime...')
-    if 'KGBM-LDG' in btime_mean_df and 'NGBoost-D' in btime_mean_df and 'PGBM-DG' in btime_mean_df:
-        plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
+    ref_col = 'KGBM-LDG'
+    if ref_col in btime_mean_df and 'NGBoost-D' in btime_mean_df and 'PGBM-DG' in btime_mean_df:
+        plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir, ref_col=ref_col)
 
         skip_cols = ['dataset', 'n_test', 'n_train', 'n_features']
-        ref_col = 'KGBM-LDG'
         drop_cols = [c for c in btime_mean_df.columns if 'knn' in c.lower()]
 
         bm_df = btime_mean_df.drop(columns=drop_cols)
@@ -826,13 +826,12 @@ def process(args, out_dir, logger):
 
     # Wilcoxon ranked test
     logger.info('\nWilocoxon signed rank test (two-tailed):')
-    ref = 'KGBM-LDG'
     for c in ['KNN-D', 'NGBoost-D', 'PGBM-DG']:
         if c not in nll_df:
             continue
-        statistic, p_val = stats.wilcoxon(nll_df[ref], nll_df[c])
-        statistic_m, p_val_m = stats.wilcoxon(nll_mean_df[ref], nll_mean_df[c])
-        logger.info(f'[{ref} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
+        statistic, p_val = stats.wilcoxon(nll_df[ref_col], nll_df[c])
+        statistic_m, p_val_m = stats.wilcoxon(nll_mean_df[ref_col], nll_mean_df[c])
+        logger.info(f'[{ref_col} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
 
 
 def main(args):

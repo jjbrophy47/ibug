@@ -23,7 +23,7 @@ from experiments import util as exp_util
 
 def process(args, out_dir, logger):
 
-    util.plot_settings(fontsize=15, libertine=True)
+    util.plot_settings(fontsize=11, libertine=True)
 
     rng = np.random.default_rng(args.random_state)
     color, ls, label = util.get_plot_dicts()
@@ -62,14 +62,15 @@ def process(args, out_dir, logger):
 
     spearman = spearmanr(df['n_train'], df['cnt_tree_mean_frac'])[0]
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(5, 3))
     ax.errorbar(df['n_train'], df['cnt_tree_mean_frac'] * 100,
                 yerr=df['cnt_tree_std_frac'] * 100, fmt='o',
-                label=f'Spearman={spearman:.3f}', ecolor='k', color='blue', lw=1, capsize=1)
+                label=f'Spearman={spearman:.3f}', ecolor='k',
+                color='blue', lw=1, capsize=2)
     ax.set_ylim(0, 100)
     ax.set_xscale('log')
     ax.set_ylabel('% train visited / tree')
-    ax.set_xlabel('No. train')
+    ax.set_xlabel('No. train instances')
     # ax.legend(loc='upper left')
 
     plt.tight_layout()
