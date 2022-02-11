@@ -11,7 +11,7 @@ from .base import Estimator
 from .parsers import util
 
 
-class IBUGWrapper(Estimator):
+class KGBMWrapper(Estimator):
     """
     K-Nearest Neigbors Gradient Boosting Machine.
         Wrapper around any GBM model enabling probabilistic forecasting

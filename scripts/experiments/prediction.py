@@ -35,8 +35,8 @@ here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
 sys.path.insert(0, here + '/../../')  # for libliner
 import util
-from ibug import IBUGWrapper
-from ibug import KNNWrapper
+from kgbm import KGBMWrapper
+from kgbm import KNNWrapper
 
 
 def evaluate_posterior(args, model, X, y, min_scale, loc, scale, logger=None, prefix=''):
