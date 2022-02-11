@@ -13,3 +13,7 @@ for f in ${fold_list[@]}; do
     sbatch -a 11,20            -c 15 -t 7200 -p 'long'  -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $d $g $c
     sbatch -a 1-22             -c 4  -t 500  -p 'short' -o ${o}'kgbm-%a.out'     $run $f 'kgbm'     $t $d $g $c
 done
+
+for f in ${fold_list[@]}; do
+    sbatch -a 1             -c 4  -t 500  -p 'short' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $d $g $c
+done

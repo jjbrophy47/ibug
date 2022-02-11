@@ -1,2 +1,2 @@
-from .classes import IBUGWrapper
+from .classes import KGBMWrapper
 from .classes import KNNWrapper
