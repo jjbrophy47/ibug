@@ -20,16 +20,17 @@ class IBUGWrapper(Estimator):
         by modeling the output distribution of the k-nearest neighbors to a
         given test example in the learnt tree-kernel space.
     """
-    def __init__(self, k=100, tree_frac=1.0, tree_sample_order='random', loc_type='gbm',
-                 affinity='unweighted', min_scale=1e-15, eps=1e-15, scoring='nll',
+    def __init__(self, k=100, tree_subsample_frac=1.0, tree_subsample_order='random',
+                 instance_subsample_frac=1.0, affinity='unweighted', min_scale=1e-15,
+                 eps=1e-15, scoring='nll',
                  k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201, 301,
                            401, 501, 601, 701], random_state=1, verbose=0, logger=None):
         """
         Input
             k: int, no. neighbors to consider for uncertainty estimation.
-            tree_frac: float, Fraction of trees to use for the affinity computation
-            tree_sample_order: str, Order to sample trees in; {'random', 'ascending', 'descending'}.
-            loc_type: str, prediction should come from original tree or mean of neighbors.
+            tree_subsample_frac: float, Fraction of trees to use for the affinity computation.
+            tree_subsample_order: str, Order to sample trees in; {'random', 'ascending', 'descending'}.
+            instance_subsample_frac: float, Fraction of instances to subsample for the affinity computation.
             affinity: str, If 'weighted', weight affinity by leaf weights.
             min_scale: float, Minimum scale value.
             eps: float, Addendum to scale value.
@@ -40,31 +41,35 @@ class IBUGWrapper(Estimator):
             logger: object, If not None, output to logger.
         """
         assert k > 0
-        assert tree_frac > 0 and tree_frac <= 1.0
-        assert tree_sample_order in ['random', 'ascending', 'descending']
-        assert loc_type in ['gbm', 'knn']
+        assert tree_subsample_frac > 0 and tree_subsample_frac <= 1.0
+        assert tree_subsample_order in ['random', 'ascending', 'descending']
+        assert instance_subsample_frac > 0 and tree_subsample_frac <= 1.0
         assert affinity in ['unweighted', 'weighted']
-        assert isinstance(k_params, list) and len(k_params) > 0
         assert scoring in ['nll', 'crps']
         assert min_scale > 0
         assert eps > 0
+        assert isinstance(k_params, list) and len(k_params) > 0
         assert isinstance(random_state, int) and random_state > 0
+        assert isinstance(verbose, int) and verbose >= 0
 
         self.k = k
-        self.tree_frac = tree_frac
+        self.tree_subsample_frac = tree_subsample_frac
         self.tree_sample_order = tree_sample_order
-        self.loc_type = loc_type
+        self.instance_sample_frac = instance_sample_frac
         self.affinity = affinity
-        self.k_params = k_params
         self.scoring = scoring
         self.min_scale = min_scale
         self.eps = eps
+        self.k_params = k_params
         self.random_state = random_state
         self.verbose = verbose
         self.logger = logger
 
         if affinity == 'weighted':
             raise ValueError("'unweighted' affinity not yet implemented!")
+
+        if instance_subsample_frac < 1.0:
+            raise ValueError("Instance subsampling not yet implemented!")
 
     def __getstate__(self):
         """
@@ -102,9 +107,9 @@ class IBUGWrapper(Estimator):
         """
         d = {}
         d['k'] = self.k
-        d['tree_frac'] = self.tree_frac
+        d['tree_subsample_frac'] = self.tree_subsample_frac
         d['tree_sample_order'] = self.tree_sample_order
-        d['loc_type'] = self.loc_type
+        d['instance_subsample_frac'] = self.instance_subsample_frac
         d['affinity'] = self.affinity
         d['min_scale'] = self.min_scale
         d['eps'] = self.eps
@@ -260,8 +265,8 @@ class IBUGWrapper(Estimator):
         elif return_affinity_stats:
             instances = np.zeros((len(X), 2), dtype=np.int32)  # shape=(n_test, 2)
         else:
-            loc = np.zeros(len(X), dtype=np.float32)
-            scale = np.zeros(len(X), dtype=np.float32)
+            loc = self.predict(X).squeeze()  # shape=(len(X),)
+            scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X),)
 
         for i in range(test_leaves.shape[0]):  # per test example
             affinity[:] = 0  # reset affinity
@@ -282,7 +287,6 @@ class IBUGWrapper(Estimator):
                 instances[i, 0] = np.sum(affinity)
                 instances[i, 1] = len(np.where(affinity > 0)[0])
             else:
-                loc[i] = np.mean(train_vals)
                 scale[i] = np.std(train_vals)
                 if scale[i] <= self.min_scale_:  # handle extremely small scale values
                     scale[i] = self.min_scale_
@@ -309,8 +313,6 @@ class IBUGWrapper(Estimator):
                       'cnt_tree': {'mean': avg_instances_mean[0], 'std': avg_instances_std[0]},
                       'cnt_tree_unq': {'mean': avg_instances_mean[1], 'std': avg_instances_std[1]}}
         else:
-            if self.loc_type == 'gbm':
-                loc[:] = self.predict(X).squeeze()  # shape=(len(X),)            
             result = loc, scale
 
         return result
@@ -335,10 +337,7 @@ class IBUGWrapper(Estimator):
         test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost, n_class)
 
         scale = np.zeros((len(X), len(k_params)), dtype=np.float32)
-        if self.loc_type == 'gbm':        
-            loc = np.tile(self.model_.predict(X), len(k_params)).astype(np.float32)  # shape=(len(X), n_k)
-        else:
-            loc = np.zeros((len(X), len(k_params)), dtype=np.float32)
+        loc = np.tile(self.model_.predict(X), len(k_params)).astype(np.float32)  # shape=(len(X), n_k)
 
         # gather predictions
         vals = self.y_train_
@@ -355,8 +354,6 @@ class IBUGWrapper(Estimator):
             for j, k in enumerate(k_params):
                 vals_knn = vals[train_idxs[-k:]]
                 scale[i, j] = np.std(vals_knn) + self.eps
-                if self.loc_type != 'gbm':
-                    loc[i, j] = np.mean(vals_knn)
 
             # progress
             if (i + 1) % 100 == 0 and self.verbose > 0:
@@ -439,7 +436,7 @@ class KNNWrapper(Estimator):
         by modeling the output distribution of the k-nearest neighbors to a
         given test example.
     """
-    def __init__(self, k=100, tree_frac=1.0, loc_type='knn',
+    def __init__(self, k=100,
                  k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201, 301,
                            401, 501, 601, 701], scoring='nll', min_scale=1e-15,
                  eps=1e-15, random_state=1, verbose=0, logger=None):
@@ -457,7 +454,6 @@ class KNNWrapper(Estimator):
             logger: object, If not None, output to logger.
         """
         assert k > 0
-        assert loc_type == 'knn'
         assert isinstance(k_params, list) and len(k_params) > 0
         assert scoring in ['nll', 'crps']
         assert min_scale > 0
@@ -465,11 +461,10 @@ class KNNWrapper(Estimator):
         assert isinstance(random_state, int) and random_state > 0
 
         self.k = k
-        self.loc_type = loc_type
-        self.k_params = k_params
-        self.scoring = scoring
         self.min_scale = min_scale
         self.eps = eps
+        self.scoring = scoring
+        self.k_params = k_params
         self.random_state = random_state
         self.verbose = verbose
         self.logger = logger
@@ -480,18 +475,23 @@ class KNNWrapper(Estimator):
         """
         d = {}
         d['k'] = self.k
-        d['loc_type'] = self.loc_type
-        d['k_params'] = self.k_params
-        d['scoring'] = self.scoring
         d['min_scale'] = self.min_scale
         d['eps'] = self.eps
-        if hasattr(self, 'k_'):
-            d['k_'] = self.k_
-        if hasattr(self, 'min_scale_'):
-            d['min_scale_'] = self.min_scale_
+        d['scoring'] = self.scoring
+        d['k_params'] = self.k_params
+        d['random_state'] = self.random_state
+        d['verbose'] = self.verbose
         if hasattr(self, 'base_model_params_'):
             d['base_model_params_'] = self.model_.get_params()
         return d
+
+    def set_params(self, **params):
+        """
+        Set the parameters of this model.
+        """
+        for key, value in params.items():
+            setattr(self, key, value)
+        return self
 
     def fit(self, model, X, y, X_val=None, y_val=None):
         """
@@ -499,11 +499,14 @@ class KNNWrapper(Estimator):
 
         Input
             model: KNN regressor.
-            X: training data.
-            y: training targets.
+            X: 2d array of training data.
+            y: 1d array of training targets.
+            X_val: 2d array of validation data.
+            y_val: 1d array of validation targets.
         """
         X, y = util.check_data(X, y, objective='regression')
         self.model_ = model
+        self.base_model_params_ = self.model_.get_params()
 
         # pseudo-random number generator
         self.rng_ = np.random.default_rng(self.random_state)

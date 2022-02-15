@@ -4,6 +4,7 @@ Utility methods.
 import os
 import sys
 import shutil
+import joblib
 import logging
 import hashlib
 import numpy as np
@@ -118,8 +119,9 @@ def save_model(model, model_type, out_dir, fn):
         np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
 
     elif model_type == 'knn':
-        model_state = model.__getstate__()
-        np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+        joblib.dump(model, os.path.join(out_dir, f'{fn}.pkl'))
+        # model_state = model.__getstate__()
+        # np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
 
     else:
         raise ValueError(f'Unknown model_type {model_type}')
@@ -149,8 +151,7 @@ def load_model(model_type, in_dir, fn):
         model = IBUGWrapper().__setstate__(model_state)
 
     elif model_type == 'knn':
-        model_state = np.load(os.path.join(in_dir, f'{fn}.npy'), allow_pickle=True)[()]
-        model = KNNWrapper().__setstate__(model_state)
+        model = joblib.load(os.path.join(in_dir, f'{fn}.pkl'))
 
     else:
         raise ValueError(f'Unknown model_type {model_type}')

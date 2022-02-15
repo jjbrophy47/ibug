@@ -507,7 +507,7 @@ def experiment(args, logger, out_dir):
     util.save_model(model=model_val, model_type=args.model_type, out_dir=out_dir, fn='model_val')
     util.save_model(model=model_test, model_type=args.model_type, out_dir=out_dir, fn='model_test')
 
-    print(model_test.get_params())
+    mt = util.load_model(model_type=args.model_type, in_dir=out_dir, fn='model_test')
 
 
 def main(args):
