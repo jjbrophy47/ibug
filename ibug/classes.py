@@ -54,8 +54,8 @@ class IBUGWrapper(Estimator):
 
         self.k = k
         self.tree_subsample_frac = tree_subsample_frac
-        self.tree_sample_order = tree_sample_order
-        self.instance_sample_frac = instance_sample_frac
+        self.tree_subsample_order = tree_subsample_order
+        self.instance_subsample_frac = instance_subsample_frac
         self.affinity = affinity
         self.scoring = scoring
         self.min_scale = min_scale
@@ -108,7 +108,7 @@ class IBUGWrapper(Estimator):
         d = {}
         d['k'] = self.k
         d['tree_subsample_frac'] = self.tree_subsample_frac
-        d['tree_sample_order'] = self.tree_sample_order
+        d['tree_subsample_order'] = self.tree_subsample_order
         d['instance_subsample_frac'] = self.instance_subsample_frac
         d['affinity'] = self.affinity
         d['min_scale'] = self.min_scale
@@ -135,8 +135,10 @@ class IBUGWrapper(Estimator):
 
         Input
             model: tree ensemble.
-            X: training data.
-            y: training targets.
+            X: 2d array of training data.
+            y: 1d array of training targets.
+            X_val: 2d array of validation data.
+            y_val: 1d array of validation targets.
         """
         super().fit(model, X, y)
         X, y = util.check_data(X, y, objective=self.model_.objective)
@@ -183,17 +185,17 @@ class IBUGWrapper(Estimator):
         self.leaf_dict_ = leaf_dict
 
         # use portion of trees to sample
-        if self.tree_frac < 1.0:
-            n_idxs = int(self.n_boost_ * self.tree_frac)
+        if self.tree_subsample_frac < 1.0:
+            n_idxs = int(self.n_boost_ * self.tree_subsample_frac)
 
-            if self.tree_sample_order == 'ascending':
+            if self.tree_subsample_order == 'ascending':
                 self.tree_idxs_ = np.arange(self.n_boost_)[:n_idxs]  # first to last
 
-            elif self.tree_sample_order == 'random':
+            elif self.tree_subsample_order == 'random':
                 self.tree_idxs_ = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)  # random trees
 
             else:
-                assert self.tree_sample_order == 'descending'
+                assert self.tree_subsample_order == 'descending'
                 self.tree_idxs_ = np.arange(self.n_boost_)[::-1][:n_idxs]  # last to first
         else:
             self.tree_idxs_ = np.arange(self.n_boost_)

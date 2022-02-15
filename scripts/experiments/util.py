@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
 from scipy import stats
+from ngboost import NGBRegressor
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -112,7 +113,7 @@ def save_model(model, model_type, out_dir, fn):
         np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
 
     elif model_type == 'pgbm':
-        model.save(os.path.join(out_dir, f'{fn}.pt'))
+        joblib.dump(model, os.path.join(out_dir, f'{fn}.pkl'))
 
     elif model_type == 'ibug':
         model_state = model.__getstate__()
@@ -120,8 +121,9 @@ def save_model(model, model_type, out_dir, fn):
 
     elif model_type == 'knn':
         joblib.dump(model, os.path.join(out_dir, f'{fn}.pkl'))
-        # model_state = model.__getstate__()
-        # np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+
+    elif model_type == 'constant':
+        joblib.dump(model, os.path.join(out_dir, f'{fn}.pkl'))
 
     else:
         raise ValueError(f'Unknown model_type {model_type}')
@@ -140,17 +142,20 @@ def load_model(model_type, in_dir, fn):
     """
     if model_type == 'ngboost':
         model_state = np.load(os.path.join(in_dir, f'{fn}.npy'), allow_pickle=True)[()]
-        model = NGBRegressor().__setstate__(model_state)
+        model = NGBRegressor()
+        model.__setstate__(model_state)
 
     elif model_type == 'pgbm':
-        fp = os.path.join(in_dir, 'model.pt')
-        model = PGBMRegressor(init_model=fp)
+        model = joblib.load(os.path.join(in_dir, f'{fn}.pkl'))
 
     elif model_type == 'ibug':
         model_state = np.load(os.path.join(in_dir, f'{fn}.npy'), allow_pickle=True)[()]
         model = IBUGWrapper().__setstate__(model_state)
 
     elif model_type == 'knn':
+        model = joblib.load(os.path.join(in_dir, f'{fn}.pkl'))
+
+    elif model_type == 'constant':
         model = joblib.load(os.path.join(in_dir, f'{fn}.pkl'))
 
     else:
@@ -444,8 +449,9 @@ def get_method_identifier(model, exp_params):
         settings['tree_type'] = exp_params['tree_type']
 
     elif model == 'ibug':
-        settings['tree_frac'] = exp_params['tree_frac']
-        settings['tree_sample_order'] = exp_params['tree_sample_order']
+        settings['tree_subsample_frac'] = exp_params['tree_subsample_frac']
+        settings['tree_subsample_order'] = exp_params['tree_subsample_order']
+        settings['instance_subsample_frac'] = exp_params['instance_subsample_frac']
         settings['affinity'] = exp_params['affinity']
         settings['tree_type'] = exp_params['tree_type']
 

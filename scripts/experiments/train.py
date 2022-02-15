@@ -4,6 +4,7 @@ Model performance.
 import os
 import sys
 import time
+import ngboost
 import resource
 import argparse
 import warnings
@@ -40,7 +41,7 @@ from ibug import KNNWrapper
 
 
 def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
-               gridsearch=True, n_stopping_rounds=25, logger=None):
+               scoring='nll', gridsearch=True, n_stopping_rounds=25, logger=None):
     """
     Hyperparameter tuning.
 
@@ -51,6 +52,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         X_val: 2d array of evaluation data.
         y_val: 1d array of evaluation targets.
         tree_type: str, GBRT type.
+        scoring: str, Evaluation metric.
         gridsearch: bool, If True, do gridsearch tuning.
         n_stopping_rounds: int, No. iterations to run without improved validation scoring.
             Only used when gridsearch is False.
@@ -65,14 +67,14 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
     tune_dict = {}
 
     # get model and candidate parameters
-    model = get_model(model_type=model_type, tree_type=tree_type)
+    model = get_model(model_type=model_type, tree_type=tree_type, scoring=scoring)
     param_grid = get_params(model_type=model_type, tree_type=tree_type, n_train=len(X_tune))
 
     # gridsearch
     if model_type == 'knn' or (model_type in ['constant', 'ibug', 'pgbm'] and gridsearch):
 
         if logger:
-            logger.info('\nmodel: {}, param_grid: {}'.format(args.model_type, param_grid))
+            logger.info('\nmodel: {}, param_grid: {}'.format(model_type, param_grid))
 
         cv_results = []
         best_score = None
@@ -127,7 +129,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
     # PGBM, only tune no. iterations
     elif model_type == 'pgbm':
         model_val = clone(model).fit(X_tune, y_tune, eval_set=(X_val, y_val),
-                                     early_stopping_rounds=args.n_stopping_rounds)
+                                     early_stopping_rounds=n_stopping_rounds)
         best_n_estimators = model_val.learner_.best_iteration
         best_params = {'n_estimators': best_n_estimators}
 
@@ -135,7 +137,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
     else:
         assert model_type == 'ngboost'
         model_val = clone(model).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
-                                     early_stopping_rounds=args.n_stopping_rounds)
+                                     early_stopping_rounds=n_stopping_rounds)
         if model_val.best_val_loss_itr is None:
             best_n_estimators = model_val.n_estimators
         else:
@@ -150,7 +152,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         logger.info(f"tune time (model): {tune_dict['tune_time_model']:.3f}s")
 
     # IBUG and KNN ONLY: tune k (and min. scale)
-    tune_time_extra = 0
+    tune_dict['tune_time_extra'] = 0
     if model_type in ['ibug', 'knn']:
         best_params_wrapper = {}
         WrapperClass = IBUGWrapper if model_type == 'ibug' else KNNWrapper
@@ -159,7 +161,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             logger.info('\nTuning k and min. scale...')
 
         start = time.time()
-        model_val_wrapper = WrapperClass(scoring=args.scoring, verbose=args.verbose,
+        model_val_wrapper = WrapperClass(scoring=scoring, verbose=args.verbose,
                                          logger=logger).fit(model_val, X_tune, y_tune,
                                                             X_val=X_val, y_val=y_val)
         best_params_wrapper = {'k': model_val_wrapper.k_,
@@ -177,7 +179,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
     if model_type in ['ibug', 'knn']:
         loc_val, scale_val = model_val_wrapper.loc_val_, model_val_wrapper.scale_val_
     elif model_type in ['constant', 'ngboost', 'pgbm']:
-        loc_val, scale_val = get_loc_scale(model_val, model_type, X=X_val, y_train=y_train)
+        loc_val, scale_val = get_loc_scale(model_val, model_type, X=X_val, y_train=y_tune)
     tune_dict['loc_val'] = loc_val
     tune_dict['scale_val'] = scale_val
 
@@ -431,7 +433,8 @@ def experiment(args, logger, out_dir):
     start = time.time()
     tune_dict = tune_model(model_type=args.model_type,
                            X_tune=X_tune, y_tune=y_tune, X_val=X_val, y_val=y_val,
-                           tree_type=args.tree_type, n_stopping_rounds=args.n_stopping_rounds,
+                           tree_type=args.tree_type, scoring=args.scoring,
+                           n_stopping_rounds=args.n_stopping_rounds,
                            gridsearch=args.gridsearch, logger=logger)
     tune_time_model = tune_dict['tune_time_model']
     tune_time_extra = tune_dict['tune_time_extra']
@@ -479,26 +482,22 @@ def experiment(args, logger, out_dir):
     logger.info(f'\ntune+train time: {tune_train_time:.3f}s')
 
     # save results
-    result = vars(args)
-    result['n_train'] = len(X_train)
-    result['n_tune'] = len(X_tune)
-    result['n_val'] = len(X_val)
-    result['n_test'] = len(X_test)
-    result['n_feature'] = X_train.shape[1]
+    result = {}
+    result['args'] = vars(args)
+    result['data'] = {'n_train': len(X_train), 'n_tune': len(X_tune),
+                      'n_val': len(X_val), 'n_test': len(X_test), 'n_feature': X_train.shape[1]}
     result['model_params'] = model_test.get_params()
-    result['tune_time_model'] = tune_time_model
-    result['tune_time_extra'] = tune_time_extra
-    result['tune_time_delta'] = tune_time_delta
-    result['train_time'] = train_time
-    result['tune_train_time'] = tune_train_time
-    result['best_delta'] = delta
-    result['best_delta_op'] = delta_op
-    result['max_rss_MB'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6  # MB if OSX, GB if Linux
-    result['total_experiment_time'] = time.time() - begin
+    result['timing'] = {'tune_model': tune_time_model, 'tune_extra': tune_time_extra,
+                        'tune_delta': tune_time_delta, 'train': train_time, 'tune_train': tune_train_time}
+    result['delta'] = {'best_delta': delta, 'best_op': delta_op}
+    result['saved_models'] = {'model_val': os.path.join(out_dir, 'model_val'),
+                              'model_test': os.path.join(out_dir, 'model_test')}
+    result['misc'] = {'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
+                      'total_experiment_time': time.time() - begin}
 
     # Macs show this in bytes, unix machines show this in KB
-    logger.info(f"\ntotal experiment time: {result['total_experiment_time']:.3f}s")
-    logger.info(f"max_rss (MB): {result['max_rss_MB']:.1f}")
+    logger.info(f"\ntotal experiment time: {result['misc']['total_experiment_time']:.3f}s")
+    logger.info(f"max_rss (MB): {result['misc']['max_RSS']:.1f}")
     logger.info(f"\nresults:\n{result}")
     logger.info(f"\nsaving results and models to {os.path.join(out_dir, 'results.npy')}")
 
@@ -508,6 +507,9 @@ def experiment(args, logger, out_dir):
     util.save_model(model=model_test, model_type=args.model_type, out_dir=out_dir, fn='model_test')
 
     mt = util.load_model(model_type=args.model_type, in_dir=out_dir, fn='model_test')
+
+    print(model_test.get_params())
+    print(mt.get_params())
 
 
 def main(args):
@@ -558,8 +560,9 @@ if __name__ == '__main__':
     # Method settings
     parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, IBUG, PGBM
     parser.add_argument('--tree_type', type=str, default='lgb')  # IBUG, constant
-    parser.add_argument('--tree_frac', type=float, default=1.0)  # IBUG
-    parser.add_argument('--tree_sample_order', type=str, default='random')  # IBUG
+    parser.add_argument('--tree_subsample_frac', type=float, default=1.0)  # IBUG
+    parser.add_argument('--tree_subsample_order', type=str, default='random')  # IBUG
+    parser.add_argument('--instance_subsample_frac', type=float, default=1.0)  # IBUG
     parser.add_argument('--affinity', type=str, default='unweighted')  # IBUG
 
     # Default settings
