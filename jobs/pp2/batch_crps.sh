@@ -15,5 +15,5 @@ for f in ${fold_list[@]}; do
 done
 
 for f in ${fold_list[@]}; do
-    sbatch -a 1             -c 4  -t 500  -p 'short' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $d $g $c
+    sbatch -a 1-22             -c 4  -t 500  -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $d $g $c
 done

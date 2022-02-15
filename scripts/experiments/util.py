@@ -96,6 +96,49 @@ def reset_stdout_stderr(logfile, stdout, stderr):
     logfile.close()
 
 
+def save_model(model, model_type, out_dir, fn):
+    """
+    Save model in a picklable format.
+    """
+    if model_type == 'ngboost':
+        model_state = model.__getstate__()
+        np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+    elif model_type == 'pgbm':
+        model.save(os.path.join(out_dir, f'{fn}.pt'))
+    elif model_type == 'ibug':
+        model_state = model.__getstate__()
+        np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+    elif model_type == 'knn':
+        model_state = model.__getstate__()
+        np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+    else:
+        raise ValueError(f'Unknown model_type {model_type}')
+
+
+def load_model(model_type, in_dir):
+    """
+    Save model in a picklable format.
+    """
+    if model_type == 'ngboost':
+        model_state = np.load(os.path.join(out_dir, 'model.npy'), allow_pickle=True)[()]
+        model = NGBRegressor()
+        model.__setstate__(model_state)
+    elif model_type == 'pgbm':
+        fp = os.path.join(out_dir, 'model.pt')
+        model = PGBMRegressor(init_model=fp)
+    elif model_type == 'ibug':
+        model_state = np.load(os.path.join(out_dir, 'model.npy'), allow_pickle=True)[()]
+        model = IBUGWrapper()
+        model.__setstate__(model_state)
+        np.save(os.path.join(out_dir, 'model.npy'), model_state)
+    elif model_type == 'knn':
+        model_state = np.load(os.path.join(out_dir, 'model.npy'), allow_pickle=True)[()]
+        model = KNNWrapper()
+        model.__setstate__(model_state)
+    else:
+        raise ValueError(f'Unknown model_type {model_type}')
+
+
 def get_data(data_dir, dataset, fold=1, feature=False):
     """
     Return train and test data for the specified dataset.
@@ -380,18 +423,13 @@ def get_method_identifier(model, exp_params):
     if model == 'constant':
         settings['tree_type'] = exp_params['tree_type']
 
-    elif model == 'kgbm':
+    elif model == 'ibug':
         settings['tree_frac'] = exp_params['tree_frac']
+        settings['tree_sample_order'] = exp_params['tree_sample_order']
         settings['affinity'] = exp_params['affinity']
         settings['tree_type'] = exp_params['tree_type']
 
-    elif model == 'knn':
-        settings['min_scale_pct'] = exp_params['min_scale_pct']
-
-    if exp_params['delta']:
-        settings['delta'] = exp_params['delta']
-
-    if exp_params['gridsearch'] and model in ['constant', 'kgbm', 'pgbm']:
+    if exp_params['gridsearch'] and model in ['constant', 'ibug', 'pgbm']:
         settings['gridsearch'] = exp_params['gridsearch']
 
     if len(settings) > 0:

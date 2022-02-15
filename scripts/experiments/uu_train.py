@@ -39,65 +39,6 @@ from ibug import IBUGWrapper
 from ibug import KNNWrapper
 
 
-def evaluate_posterior(args, model, X, y, min_scale, loc, scale, logger=None, prefix=''):
-    """
-    Model the posterior using different parametric and non-parametric
-        distributions and evaluate their predictive performance.
-
-    Input
-        args: namespace dict, Experiment args.
-        model: IBUG, Fitted model.
-        X: np.ndarray, 2d array of input data.
-        y: np.ndarray, 1d array of ground-truth targets.
-        loc: np.ndarray, 1d array of location values.
-        scale: np.ndarray, 1d array of scale values.
-        logger: logging object, Log updates.
-        prefix: str, Used to identify updates.
-
-    Return
-        3-tuple including a dict of CRPS and NLL results, and 2 2d
-            arrays of neighbor indices and target values, shape=(no. test, k).
-    """
-    assert 'ibug' in str(model).lower()
-    assert X.ndim == 2 and y.ndim == 1 and loc.ndim == 1 and scale.ndim == 1
-    assert X.shape[0] == len(y) == len(loc) == len(scale)
-    if logger:
-        logger.info(f'\n[{prefix}] Computing k-nearest neighbors...')
-
-    start = time.time()
-    neighbor_idxs, neighbor_vals = model.pred_dist(X, return_kneighbors=True)
-
-    if logger:
-        logger.info(f'time: {time.time() - start:.3f}s')
-        logger.info(f'\n[{prefix}] Evaluating (distributions)...')
-
-    start = time.time()
-    dist_res = {'nll': {}, 'crps': {}}
-
-    for dist in args.distribution:
-        if args.custom_dir == 'fl_dist':
-            loc_copy, scale_copy = loc.copy(), None
-        elif args.custom_dir == 'fls_dist':
-            loc_copy, scale_copy = loc.copy(), scale.copy()
-        else:
-            loc_copy, scale_copy = None, None
-
-        nll_d, crps_d = util.eval_dist(y=y, samples=neighbor_vals.copy(), dist=dist, nll=True,
-                                       crps=True, min_scale=min_scale, random_state=args.random_state,
-                                       loc=loc_copy, scale=scale_copy)
-
-        if logger:
-            logger.info(f'[{prefix} - {dist}] CRPS: {crps_d:.5f}, NLL: {nll_d:.5f}')
-
-        dist_res['nll'][dist] = nll_d
-        dist_res['crps'][dist] = crps_d
-
-    if logger:
-        logger.info(f'[{prefix} time: {time.time() - start:.3f}s')
-
-    return dist_res, neighbor_idxs, neighbor_vals
-
-
 def tune_delta(loc, scale, y, ops=['add', 'mult'],
                delta_vals=[1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3,
                            1e-2, 1e-1, 0.0, 1e0, 1e1, 1e2, 1e3],
@@ -205,7 +146,7 @@ def get_model(args, n_train):
     """
     if args.model == 'ngboost':
         assert args.scoring in ['nll', 'crps']
-        score = CRPSScore if args.scoring == 'crps' else LogScore
+        score = CRPScore if args.scoring == 'crps' else LogScore
         model = NGBRegressor(n_estimators=2000, verbose=args.verbose, Score=score)
         params = {'n_estimators': [10, 25, 50, 100, 200, 500, 1000]}
 
@@ -295,13 +236,13 @@ def experiment(args, logger, out_dir):
 
     clf, param_grid = get_model(args, n_train=len(X_tune))
 
+    # base model, tune using gridsearch
     if args.model == 'knn' or (args.model in ['constant', 'ibug', 'pgbm'] and args.gridsearch):
         logger.info('\nmodel: {}, param_grid: {}'.format(args.model, param_grid))
 
         cv_results = []
         param_dicts = list(product_dict(**param_grid))
 
-        # gridsearch
         best_score = None
         best_model = None
         best_params = None
@@ -330,6 +271,7 @@ def experiment(args, logger, out_dir):
         assert best_model is not None
         model_val = best_model
 
+    # base model, only tune no. iterations
     elif args.model in ['constant', 'ibug']:
         if args.tree_type == 'lgb':
             model_val = clone(clf).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
@@ -348,14 +290,16 @@ def experiment(args, logger, out_dir):
         best_params = {'n_estimators': best_n_estimators}
         logger.info(f'\nbest params: {best_params}')
 
-    elif args.model == 'pgbm':  # PGBM, only tune no. iterations
+    # PGBM, only tune no. iterations
+    elif args.model == 'pgbm':
         model_val = clone(clf).fit(X_tune, y_tune, eval_set=(X_val, y_val),
                                    early_stopping_rounds=args.n_stopping_rounds)
         best_n_estimators = model_val.learner_.best_iteration
         best_params = {'n_estimators': best_n_estimators}
         logger.info(f'\nbest params: {best_params}')
 
-    else:  # NGBoost, only tune no. iterations
+    # NGBoost, only tune no. iterations
+    else:
         assert args.model == 'ngboost'
         model_val = clone(clf).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
                                    early_stopping_rounds=args.n_stopping_rounds)
@@ -509,11 +453,8 @@ def experiment(args, logger, out_dir):
     result['n_test'] = len(X_test)
     result['n_features'] = X_train.shape[1]
     result['model_params'] = model_test.get_params()
-    result['rmse'] = rmse_test
-    result['mae'] = mae_test
-    result['nll'] = nll_test
-    result['crps'] = crps_test
     result['val_res'] = {'rmse': rmse_val, 'mae': mae_val, 'crps': crps_val, 'nll': nll_val}
+    result['test_res'] = {'rmse': rmse_test, 'mae': mae_test, 'crps': crps_test, 'nll': nll_test}
     result['tune_time'] = tune_time
     result['train_time'] = train_time
     result['total_build_time'] = total_build_time
@@ -543,21 +484,6 @@ def experiment(args, logger, out_dir):
         if args.fold == 1:
             result['neighbor_idxs'] = nb_idxs
             result['neighbor_vals'] = nb_vals
-
-        # plot output dist. of k nearest neighbors
-        test_idxs = rng.choice(np.arange(X_test.shape[0]), size=16)
-        fig, axs = plt.subplots(4, 4, figsize=(12, 8))
-        axs = axs.flatten()
-        for i, test_idx in enumerate(test_idxs):
-            ax = axs[i]
-            sns.histplot(nb_vals[test_idx], kde=True, ax=ax)
-            ax.set_title(f'Test idx.: {test_idx}')
-            if i >= 12:
-                ax.set_xlabel('y')
-            elif i in [0, 4, 8, 12]:
-                ax.set_ylabel('Count')
-        plt.tight_layout()
-        fig.savefig(os.path.join(out_dir, 'kdist.png'), bbox_inches='tight')
     result['total_experiment_time'] = time.time() - begin
 
     # Macs show this in bytes, unix machines show this in KB
@@ -605,8 +531,8 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--out_dir', type=str, default='output')
-    parser.add_argument('--custom_dir', type=str, default='prediction')
+    parser.add_argument('--out_dir', type=str, default='output/experiments/')
+    parser.add_argument('--custom_dir', type=str, default='predict')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='concrete')

@@ -11,34 +11,35 @@ from .base import Estimator
 from .parsers import util
 
 
-class KGBMWrapper(Estimator):
+class IBUGWrapper(Estimator):
     """
     K-Nearest Neigbors Gradient Boosting Machine.
         Wrapper around any GBM model enabling probabilistic forecasting
         by modeling the output distribution of the k-nearest neighbors to a
         given test example in the learnt tree-kernel space.
     """
-    def __init__(self, k=100, tree_frac=1.0, loc_type='gbm', affinity='unweighted',
+    def __init__(self, k=100, tree_frac=1.0, tree_sample_order='random', loc_type='gbm',
+                 affinity='unweighted', min_scale=1e-15, eps=1e-15, scoring='nll',
                  k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121, 151, 201, 301,
-                           401, 501, 601, 701], scoring='nll', min_scale=1e-15,
-                 eps=1e-15, random_state=1, verbose=0, logger=None):
+                           401, 501, 601, 701], random_state=1, verbose=0, logger=None):
         """
         Input
             k: int, no. neighbors to consider for uncertainty estimation.
             tree_frac: float, Fraction of trees to use for the affinity computation
+            tree_sample_order: str, Order to sample trees in; {'random', 'ascending', 'descending'}.
             loc_type: str, prediction should come from original tree or mean of neighbors.
-            tree_frac: str, prediction should come from original tree or mean of neighbors.
             affinity: str, If 'weighted', weight affinity by leaf weights.
-            k_params: list, k values to try during tuning.
-            scoring: str, metric to score probabilistic forecasts.
             min_scale: float, Minimum scale value.
             eps: float, Addendum to scale value.
+            scoring: str, metric to score probabilistic forecasts.
+            k_params: list, k values to try during tuning.
             random_state: int, Seed for random number generation to enhance reproducibility.
             verbose: int, verbosity level.
             logger: object, If not None, output to logger.
         """
         assert k > 0
         assert tree_frac > 0 and tree_frac <= 1.0
+        assert tree_sample_order in ['random', 'ascending', 'descending']
         assert loc_type in ['gbm', 'knn']
         assert affinity in ['unweighted', 'weighted']
         assert isinstance(k_params, list) and len(k_params) > 0
@@ -49,6 +50,7 @@ class KGBMWrapper(Estimator):
 
         self.k = k
         self.tree_frac = tree_frac
+        self.tree_sample_order = tree_sample_order
         self.loc_type = loc_type
         self.affinity = affinity
         self.k_params = k_params
@@ -62,6 +64,20 @@ class KGBMWrapper(Estimator):
         if affinity == 'weighted':
             raise ValueError("'unweighted' affinity not yet implemented!")
 
+    def __getstate__(self):
+        """
+        Return object state as dict.
+        """
+        state = self.__dict__.copy()
+        return state
+
+    def __setstate__(self, state_dict):
+        """
+        Set object state.
+        """
+        self.__dict__ = state_dict
+        return state
+
     def get_params(self):
         """
         Return a dict of parameter values.
@@ -69,17 +85,28 @@ class KGBMWrapper(Estimator):
         d = {}
         d['k'] = self.k
         d['tree_frac'] = self.tree_frac
+        d['tree_sample_order'] = self.tree_sample_order
         d['loc_type'] = self.loc_type
         d['affinity'] = self.affinity
-        d['k_params'] = self.k_params
-        d['scoring'] = self.scoring
         d['min_scale'] = self.min_scale
         d['eps'] = self.eps
+        d['scoring'] = self.scoring
+        d['k_params'] = self.k_params
         if hasattr(self, 'k_'):
             d['k_'] = self.k_
         if hasattr(self, 'min_scale_'):
             d['min_scale_'] = self.min_scale_
+        if hasattr(self, 'base_model_params_'):
+            d['base_model_params'] = self.base_model_params_
         return d
+
+    def set_params(self, **params):
+        """
+        Set the parameters of this model.
+        """
+        for key, value in params.items():
+            setattr(self, key, value)
+        return self
 
     def fit(self, model, X, y, X_val=None, y_val=None):
         """
@@ -102,20 +129,21 @@ class KGBMWrapper(Estimator):
         self.n_boost_ = self.model_.n_boost_
         self.n_class_ = self.model_.n_class_
         self.scale_bias_ = np.std(y)
+        self.base_model_params_ = model.get_params()
 
         self.model_.update_node_count(X)
 
         self.leaf_counts_ = self.model_.get_leaf_counts()  # shape=(no. boost, no. class)
 
         # TEMP
-        self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
-        print(self.leaf_weights_, self.leaf_weights_.shape)
-        print(np.mean(self.leaf_weights_), np.std(self.leaf_weights_))
-        print(np.min(self.leaf_weights_), np.max(self.leaf_weights_))
-        import seaborn as sns
-        sns.histplot(self.leaf_weights_, kde=True)
-        plt.show()
-        exit(0)
+        # self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
+        # print(self.leaf_weights_, self.leaf_weights_.shape)
+        # print(np.mean(self.leaf_weights_), np.std(self.leaf_weights_))
+        # print(np.min(self.leaf_weights_), np.max(self.leaf_weights_))
+        # import seaborn as sns
+        # sns.histplot(self.leaf_weights_, kde=True)
+        # plt.show()
+        # exit(0)
 
         """
         organize training example leaf IDs
@@ -140,9 +168,13 @@ class KGBMWrapper(Estimator):
         # use portion of trees to sample
         if self.tree_frac < 1.0:
             n_idxs = int(self.n_boost_ * self.tree_frac)
-            # tree_idxs = np.arange(self.n_boost_)[:n_idxs]  # first trees
-            tree_idxs = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)  # random trees
-            # tree_idxs = np.arange(self.n_boost_)[-n_idxs:]  # last trees
+            if self.tree_sample_order == 'ascending':
+                tree_idxs = np.arange(self.n_boost_)[:n_idxs]  # first to last
+            elif self.tree_sample_order == 'random':
+                tree_idxs = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)  # random trees
+            else:
+                assert self.tree_sample_order == 'descending'
+                tree_idxs = np.arange(self.n_boost_)[::-1][:n_idxs]  # last to first
         else:
             tree_idxs = np.arange(self.n_boost_)
         self.tree_idxs_ = tree_idxs
@@ -447,6 +479,8 @@ class KNNWrapper(Estimator):
             d['k_'] = self.k_
         if hasattr(self, 'min_scale_'):
             d['min_scale_'] = self.min_scale_
+        if hasattr(self, 'base_model_params_'):
+            d['base_model_params_'] = self.model_.get_params()
         return d
 
     def fit(self, model, X, y, X_val=None, y_val=None):

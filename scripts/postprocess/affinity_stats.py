@@ -20,6 +20,54 @@ sys.path.insert(0, here + '/../')
 import util
 from experiments import util as exp_util
 
+ld_mean = {}
+ld_mean['ames'] = 68.0322580645161
+ld_mean['bike'] = 205.11475409836
+ld_mean['california'] = 479.354838709677
+ld_mean['communities'] = 46.2903225806451
+ld_mean['concrete'] = 49.4
+ld_mean['energy'] = 36.8073614722944
+ld_mean['facebook'] = 323.989010989011
+ld_mean['kin8nm'] = 190.225806451612
+ld_mean['life'] = 140.533333333333
+ld_mean['meps'] = 751.466666666666
+ld_mean['msd'] = 407.736263736263
+ld_mean['naval'] = 277.16129032258
+ld_mean['news'] = 1902.86666666666
+ld_mean['obesity'] = 2320.53333333333
+ld_mean['power'] = 222.193548387096
+ld_mean['protein'] = 361.813186813186
+ld_mean['star'] = 50.16129032258065
+ld_mean['superconductor'] = 1020.53333333333
+ld_mean['synthetic'] = 480
+ld_mean['wave'] = 1382.3333333333333
+ld_mean['wine'] = 51.3956043956043
+ld_mean['yacht'] = 27.2167487684729
+
+ld_std = {}
+ld_std['ames'] = 118.95464108994
+ld_std['bike'] = 1141.32608016189
+ld_std['california'] = 1879.54437039486
+ld_std['communities'] = 68.6011142335858
+ld_std['concrete'] = 64.5097160640679
+ld_std['energy'] = 18.1715952114117
+ld_std['facebook'] = 2441.57204291341
+ld_std['kin8nm'] = 716.586938591427
+ld_std['life'] = 350.999606394207
+ld_std['meps'] = 2223.15002302788
+ld_std['msd'] = 1163.22170221396
+ld_std['naval'] = 1163.22170221396
+ld_std['news'] = 3960.14240697926
+ld_std['obesity'] = 7102.92576115567
+ld_std['power'] = 895.875225663918
+ld_std['protein'] = 2597.94260121134
+ld_std['star'] = 72.45865863537838
+ld_std['superconductor'] = 1601.17294708875
+ld_std['synthetic'] = 786.718625176752
+ld_std['wave'] = 3208.4166814939867
+ld_std['wine'] = 151.25203390665
+ld_std['yacht'] = 5.16833054873821
+
 
 def process(args, out_dir, logger):
 
@@ -35,7 +83,8 @@ def process(args, out_dir, logger):
 
         success = True
         for fold in args.fold:
-            res_dict = {'dataset': dataset, 'fold': fold}
+            res_dict = {'dataset': dataset, 'fold': fold,
+                        'ld_mean': ld_mean[dataset], 'ld_std': ld_std[dataset]}
             exp_dir = os.path.join(args.in_dir, dataset, f'fold{fold}')
             results = util.get_results(args, exp_dir, logger, progress_bar=False)
             if len(results) != 1:
@@ -55,15 +104,18 @@ def process(args, out_dir, logger):
             res_dict['n_train'] = res['n_train']
             res_list.append(res_dict)
 
-    df = pd.DataFrame(res_list)[['dataset', 'fold', 'cnt_tree_mean', 'cnt_tree_std', 'n_train']]
+    cols = ['dataset', 'fold', 'cnt_tree_mean', 'cnt_tree_std', 'n_train', 'ld_mean', 'ld_std']
+    df = pd.DataFrame(res_list)[cols]
     df['cnt_tree_mean_frac'] = df['cnt_tree_mean'] / df['n_train']
     df['cnt_tree_std_frac'] = df['cnt_tree_std'] / df['n_train']
+    # df['ld_mean_frac'] = df['ld_mean'] / df['n_train']
+    # df['ld_std_frac'] = df['ld_std'] / df['n_train']
     df = df.sort_values('n_train')
 
     spearman = spearmanr(df['n_train'], df['cnt_tree_mean_frac'])[0]
 
     fig, ax = plt.subplots(figsize=(5, 3))
-    ax.errorbar(df['n_train'], df['cnt_tree_mean_frac'] * 100,
+    ax.errorbar(df['n_train'] * 100, df['cnt_tree_mean_frac'] * 100,
                 yerr=df['cnt_tree_std_frac'] * 100, fmt='o',
                 label=f'Spearman={spearman:.3f}', ecolor='k',
                 color='blue', lw=1, capsize=2)
@@ -105,7 +157,7 @@ if __name__ == '__main__':
     # Experiment settings
     parser.add_argument('--dataset', type=str, nargs='+',
                         default=['ames', 'bike', 'california', 'communities', 'concrete',
-                                 'energy', 'facebook', 'heart', 'kin8nm', 'life', 'meps',
+                                 'energy', 'facebook', 'kin8nm', 'life', 'meps',
                                  'msd', 'naval', 'obesity', 'news', 'power', 'protein',
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])

@@ -35,8 +35,8 @@ here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
 sys.path.insert(0, here + '/../../')  # for libliner
 import util
-from kgbm import KGBMWrapper
-from kgbm import KNNWrapper
+from ibug import IBUGWrapper
+from ibug import KNNWrapper
 
 
 def evaluate_posterior(args, model, X, y, min_scale, loc, scale, logger=None, prefix=''):
@@ -58,7 +58,7 @@ def evaluate_posterior(args, model, X, y, min_scale, loc, scale, logger=None, pr
         3-tuple including a dict of CRPS and NLL results, and 2 2d
             arrays of neighbor indices and target values, shape=(no. test, k).
     """
-    assert 'kgbm' in str(model).lower()
+    assert 'ibug' in str(model).lower()
     assert X.ndim == 2 and y.ndim == 1 and loc.ndim == 1 and scale.ndim == 1
     assert X.shape[0] == len(y) == len(loc) == len(scale)
     if logger:
@@ -166,7 +166,7 @@ def get_loc_scale(model, model_type, X, y_train=None):
         loc = model.predict(X)
         scale = np.full(len(X), np.std(y_train), dtype=np.float32)
 
-    elif model_type == 'kgbm':
+    elif model_type == 'ibug':
         loc, scale = model.pred_dist(X)
 
     elif model_type == 'knn':
@@ -223,7 +223,7 @@ def get_model(args, n_train):
         params = {'n_neighbors': [3, 5, 7, 11, 15, 31, 61, 91, 121, 151, 201, 301, 401, 501, 601, 701]}
         params['n_neighbors'] = [k for k in params['n_neighbors'] if k <= n_train]
 
-    elif args.model in ['constant', 'kgbm']:
+    elif args.model in ['constant', 'ibug']:
 
         if args.tree_type == 'lgb':
             model = LGBMRegressor(n_estimators=2000, learning_rate=0.1, max_depth=-1,
@@ -295,7 +295,7 @@ def experiment(args, logger, out_dir):
 
     clf, param_grid = get_model(args, n_train=len(X_tune))
 
-    if args.model == 'knn' or (args.model in ['constant', 'kgbm', 'pgbm'] and args.gridsearch):
+    if args.model == 'knn' or (args.model in ['constant', 'ibug', 'pgbm'] and args.gridsearch):
         logger.info('\nmodel: {}, param_grid: {}'.format(args.model, param_grid))
 
         cv_results = []
@@ -330,7 +330,7 @@ def experiment(args, logger, out_dir):
         assert best_model is not None
         model_val = best_model
 
-    elif args.model in ['constant', 'kgbm']:
+    elif args.model in ['constant', 'ibug']:
         if args.tree_type == 'lgb':
             model_val = clone(clf).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
                                        eval_metric='mse', early_stopping_rounds=args.n_stopping_rounds)
@@ -369,24 +369,24 @@ def experiment(args, logger, out_dir):
     tune_time = time.time() - start
     logger.info('tune time: {:.3f}s'.format(tune_time))
 
-    # IBUG ONLY: tune k (and rho)
-    if args.model == 'kgbm':
+    # KGBM ONLY: tune k (and rho)
+    if args.model == 'ibug':
         tree_params = model_val.get_params()
 
-        logger.info('\nTuning k (and rho) (IBUG)...')
+        logger.info('\nTuning k (and rho) (KGBM)...')
         start = time.time()
 
-        model_val = IBUGWrapper(tree_frac=1.0, verbose=args.verbose, scoring=args.scoring,
+        model_val = KGBMWrapper(tree_frac=1.0, verbose=args.verbose, scoring=args.scoring,
                                 logger=logger).fit(model_val, X_tune, y_tune, X_val=X_val, y_val=y_val)
         best_k = model_val.k_
         min_scale = model_val.min_scale_
 
-        tune_time_kgbm = time.time() - start
+        tune_time_ibug = time.time() - start
         logger.info(f'\nbest k: {best_k}')
         logger.info(f'best rho: {min_scale:.5f}')
-        logger.info(f'tune time (IBUG): {tune_time_kgbm:.3f}s')
+        logger.info(f'tune time (KGBM): {tune_time_ibug:.3f}s')
     else:
-        tune_time_kgbm = 0
+        tune_time_ibug = 0
 
     # KNN ONLY: tune k (and rho)
     if args.model == 'knn':
@@ -408,7 +408,7 @@ def experiment(args, logger, out_dir):
         tune_time_knn = 0
 
     # get validation predictions
-    if args.model in ['kgbm', 'knn']:
+    if args.model in ['ibug', 'knn']:
         loc_val, scale_val = model_val.loc_val_, model_val.scale_val_
 
     elif args.model in ['constant', 'ngboost', 'pgbm'] or (args.model == 'knn' and args.min_scale_pct == 0):
@@ -447,8 +447,8 @@ def experiment(args, logger, out_dir):
     start = time.time()
 
     model_test = clone(clf).set_params(**best_params).fit(X_train, y_train)
-    if args.model == 'kgbm':  # wrap model
-        model_test = IBUGWrapper(k=best_k, min_scale=min_scale, tree_frac=args.tree_frac,
+    if args.model == 'ibug':  # wrap model
+        model_test = KGBMWrapper(k=best_k, min_scale=min_scale, tree_frac=args.tree_frac,
                                  verbose=args.verbose, logger=logger).fit(model_test, X_train, y_train)
     elif args.model == 'knn':  # wrap model
         model_test = KNNWrapper(k=best_k, min_scale=min_scale, verbose=args.verbose,
@@ -457,7 +457,7 @@ def experiment(args, logger, out_dir):
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')
 
-    total_build_time = tune_time + tune_time_kgbm + tune_time_knn + tune_time_delta + train_time
+    total_build_time = tune_time + tune_time_ibug + tune_time_knn + tune_time_delta + train_time
 
     # test: predict, compute location and scale
     logger.info('\n[TEST] Predicting...')
@@ -523,16 +523,16 @@ def experiment(args, logger, out_dir):
         result['best_delta'] = delta
         result['best_delta_op'] = delta_op
         result['tune_time_delta'] = tune_time_delta
-    if args.model == 'kgbm':
+    if args.model == 'ibug':
         result['tree_params'] = tree_params
-        result['tune_time_kgbm'] = tune_time_kgbm
+        result['tune_time_ibug'] = tune_time_ibug
     if args.model == 'knn':
         result['knn_params'] = knn_params
         result['tune_time_knn'] = tune_time_knn
     if args.custom_dir == 'affinity_stats':
         result['affinity_dict'] = model_test.pred_dist(X_test, return_affinity_stats=True)
     if args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
-        assert args.model == 'kgbm'
+        assert args.model == 'ibug'
         val_dist_res, _, _ = evaluate_posterior(args, model_val, X=X_val, y=y_val, min_scale=min_scale,
                                                 loc=loc_val, scale=scale_val, logger=logger, prefix='VAL')
         test_dist_res, nb_idxs, nb_vals = evaluate_posterior(args, model_test, X=X_test, y=y_test,
@@ -605,20 +605,20 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--out_dir', type=str, default='output')
-    parser.add_argument('--custom_dir', type=str, default='prediction')
+    parser.add_argument('--out_dir', type=str, default='output/experiments/')
+    parser.add_argument('--custom_dir', type=str, default='predict')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='concrete')
     parser.add_argument('--fold', type=int, default=1)
-    parser.add_argument('--model', type=str, default='kgbm')
+    parser.add_argument('--model', type=str, default='ibug')
 
     # Method settings
     parser.add_argument('--delta', type=int, default=1)  # affects ALL
-    parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, IBUG, PGBM
-    parser.add_argument('--tree_type', type=str, default='lgb')  # IBUG, constant
-    parser.add_argument('--tree_frac', type=float, default=1.0)  # IBUG
-    parser.add_argument('--affinity', type=str, default='unweighted')  # IBUG
+    parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, KGBM, PGBM
+    parser.add_argument('--tree_type', type=str, default='lgb')  # KGBM, constant
+    parser.add_argument('--tree_frac', type=float, default=1.0)  # KGBM
+    parser.add_argument('--affinity', type=str, default='unweighted')  # KGBM
     parser.add_argument('--min_scale_pct', type=float, default=0.0)  # KNN
 
     # Default settings
@@ -626,7 +626,7 @@ if __name__ == '__main__':
     parser.add_argument('--val_frac', type=float, default=0.2)  # ALL
     parser.add_argument('--random_state', type=int, default=1)  # ALL
     parser.add_argument('--verbose', type=int, default=1)  # ALL
-    parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
+    parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, KGBM, constant
     parser.add_argument('--weights', type=str, default='uniform')  # KNN
     parser.add_argument('--distribution', type=str, nargs='+',
                         default=['normal', 'skewnormal', 'lognormal', 'laplace',
