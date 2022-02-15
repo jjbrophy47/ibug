@@ -33,7 +33,7 @@ from scipy.stats import lognorm
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
-sys.path.insert(0, here + '/../../')  # for libliner
+sys.path.insert(0, here + '/../../')  # for ibug
 import util
 from ibug import IBUGWrapper
 from ibug import KNNWrapper
@@ -506,6 +506,8 @@ def experiment(args, logger, out_dir):
     np.save(os.path.join(out_dir, 'results.npy'), result)
     util.save_model(model=model_val, model_type=args.model_type, out_dir=out_dir, fn='model_val')
     util.save_model(model=model_test, model_type=args.model_type, out_dir=out_dir, fn='model_test')
+
+    print(model_test.get_params())
 
 
 def main(args):

@@ -61,6 +61,15 @@ cdef class _Tree64:
             self._dealloc(self.root_)
             free(self.root_)
 
+    def __reduce__(self):
+        """
+        Rebuild object.
+        """
+        return (_Tree64, (self.children_left, self.children_right,
+                          self.feature, self.threshold, self.leaf_vals,
+                          self.lt_op))
+
+
     cpdef np.ndarray predict(self, DTYPE_t[:, :] X):
         """
         Predict leaf values for x in X.

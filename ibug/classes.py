@@ -9,6 +9,8 @@ from scipy.stats import norm
 
 from .base import Estimator
 from .parsers import util
+from .parsers.tree import Tree
+from .parsers.tree import TreeEnsemble
 
 
 class IBUGWrapper(Estimator):
@@ -69,14 +71,30 @@ class IBUGWrapper(Estimator):
         Return object state as dict.
         """
         state = self.__dict__.copy()
+        del state['model_']
+        state['model_dict_'] = self.model_.__getstate__()
         return state
 
     def __setstate__(self, state_dict):
         """
         Set object state.
         """
-        self.__dict__ = state_dict
-        return state
+        model_dict = state_dict['model_dict_']
+        del state_dict['model_dict_']
+
+        self.__dict__ = state_dict.copy()
+
+        # rebuild trees
+        trees = np.zeros(shape=model_dict['trees_arr_dict'].shape, dtype=np.object)
+        for i in range(trees.shape[0]):
+            trees[i, 0] = Tree(**model_dict['trees_arr_dict'][i, 0])
+
+        # rebuild ensemble
+        model_dict['trees'] = trees
+        del model_dict['trees_arr_dict']
+        self.model_ = TreeEnsemble(**model_dict)
+
+        return self
 
     def get_params(self):
         """
@@ -92,12 +110,10 @@ class IBUGWrapper(Estimator):
         d['eps'] = self.eps
         d['scoring'] = self.scoring
         d['k_params'] = self.k_params
-        if hasattr(self, 'k_'):
-            d['k_'] = self.k_
-        if hasattr(self, 'min_scale_'):
-            d['min_scale_'] = self.min_scale_
+        d['random_state'] = self.random_state
+        d['verbose'] = self.verbose
         if hasattr(self, 'base_model_params_'):
-            d['base_model_params'] = self.base_model_params_
+            d['base_model_params_'] = self.base_model_params_
         return d
 
     def set_params(self, **params):
@@ -128,12 +144,10 @@ class IBUGWrapper(Estimator):
         self.y_train_ = y.copy()
         self.n_boost_ = self.model_.n_boost_
         self.n_class_ = self.model_.n_class_
-        self.scale_bias_ = np.std(y)
         self.base_model_params_ = model.get_params()
-
-        self.model_.update_node_count(X)
-
-        self.leaf_counts_ = self.model_.get_leaf_counts()  # shape=(no. boost, no. class)
+        if self.affinity == 'weighted':
+            self.model_.update_node_count(X)
+            self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
 
         # TEMP
         # self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
@@ -159,29 +173,28 @@ class IBUGWrapper(Estimator):
         leaf_dict = {}
         for boost_idx in range(train_leaves.shape[1]):
             leaf_dict[boost_idx] = {}
-
             for leaf_idx in range(leaf_counts[boost_idx]):
                 leaf_dict[boost_idx][leaf_idx] = np.where(train_leaves[:, boost_idx] == leaf_idx)[0]
-
         self.leaf_dict_ = leaf_dict
 
         # use portion of trees to sample
         if self.tree_frac < 1.0:
             n_idxs = int(self.n_boost_ * self.tree_frac)
+
             if self.tree_sample_order == 'ascending':
-                tree_idxs = np.arange(self.n_boost_)[:n_idxs]  # first to last
+                self.tree_idxs_ = np.arange(self.n_boost_)[:n_idxs]  # first to last
+
             elif self.tree_sample_order == 'random':
-                tree_idxs = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)  # random trees
+                self.tree_idxs_ = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)  # random trees
+
             else:
                 assert self.tree_sample_order == 'descending'
-                tree_idxs = np.arange(self.n_boost_)[::-1][:n_idxs]  # last to first
+                self.tree_idxs_ = np.arange(self.n_boost_)[::-1][:n_idxs]  # last to first
         else:
-            tree_idxs = np.arange(self.n_boost_)
-        self.tree_idxs_ = tree_idxs
+            self.tree_idxs_ = np.arange(self.n_boost_)
 
         # tune k
         k_params = [k for k in self.k_params if k <= len(X)]
-
         if X_val is not None and y_val is not None:
             X_val, y_val = util.check_data(X_val, y_val, objective=self.model_.objective)
             self.k_ = self._tune_k(X=X_val, y=y_val, k_params=k_params, scoring=self.scoring)
@@ -409,14 +422,11 @@ class IBUGWrapper(Estimator):
         weights = np.zeros(leaf_idxs.shape, dtype=util.dtype_t)  # shape=(no. examples, no. boost, no. class)
 
         n_prev_leaves = 0
-
         for b_idx in range(self.n_boost_):
 
             for c_idx in range(self.n_class_):
                 leaf_count = leaf_counts[b_idx, c_idx]
-
                 weights[:, b_idx, c_idx] = leaf_weights[n_prev_leaves:][leaf_idxs[:, b_idx, c_idx]]
-
                 n_prev_leaves += leaf_count
 
         return weights

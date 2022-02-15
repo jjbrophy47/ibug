@@ -35,21 +35,34 @@ class Tree(object):
         """
         util.set_dtype_t(is_float32)
 
-        children_left = np.array(children_left, dtype=np.intp)
-        children_right = np.array(children_right, dtype=np.intp)
-        feature = np.array(feature, dtype=np.intp)
-        threshold = np.array(threshold, dtype=util.dtype_t)
-        leaf_vals = np.array(leaf_vals, dtype=util.dtype_t)
+        self.children_left = np.array(children_left, dtype=np.intp)
+        self.children_right = np.array(children_right, dtype=np.intp)
+        self.feature = np.array(feature, dtype=np.intp)
+        self.threshold = np.array(threshold, dtype=util.dtype_t)
+        self.leaf_vals = np.array(leaf_vals, dtype=util.dtype_t)
+        self.lt_op = lt_op
+        self.is_float32 = is_float32
 
-        if is_float32:
-            self.tree_ = _Tree32(children_left, children_right, feature, threshold,
-                                 leaf_vals, lt_op)
+        if self.is_float32:
+            self.tree_ = _Tree32(self.children_left, self.children_right, self.feature,
+                                 self.threshold, self.leaf_vals, self.lt_op)
         else:
-            self.tree_ = _Tree64(children_left, children_right, feature, threshold,
-                                 leaf_vals, lt_op)
+            self.tree_ = _Tree64(self.children_left, self.children_right, self.feature,
+                                 self.threshold, self.leaf_vals, self.lt_op)
 
     def __str__(self):
+        """
+        Return string representation of tree.
+        """
         return self.tree_.tree_str()
+
+    def __getstate__(self):
+        """
+        Get object state.
+        """
+        state = self.__dict__.copy()
+        del state['tree_']
+        return state
 
     def predict(self, X):
         """
@@ -146,12 +159,17 @@ class TreeEnsemble(object):
             assert self.trees.shape[1] > 2
             assert len(self.bias) == self.trees.shape[1]
 
-    def __str__(self):
+    def __getstate__(self):
         """
-        Return string representation of model.
+        Return dict of current object state.
         """
-        params = self.get_params()
-        return str(params)
+        state = self.__dict__.copy()
+        del state['trees']
+
+        state['trees_arr_dict'] = np.zeros(shape=self.trees.shape, dtype=np.object)
+        for i in range(self.trees.shape[0]):
+            state['trees_arr_dict'][i, 0] = self.trees[i, 0].__getstate__()
+        return state
 
     def get_params(self):
         """
@@ -164,6 +182,7 @@ class TreeEnsemble(object):
         params['learning_rate'] = self.learning_rate
         params['l2_leaf_reg'] = self.l2_leaf_reg
         params['factor'] = self.factor
+        return params
 
     def predict(self, X):
         """

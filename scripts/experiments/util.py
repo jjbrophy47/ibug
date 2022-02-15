@@ -14,6 +14,12 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
 from scipy import stats
 
+here = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, here + '/../')  # for utility
+sys.path.insert(0, here + '/../../')  # for ibug
+from ibug import IBUGWrapper
+from ibug import KNNWrapper
+
 # constants
 dtype_t = np.float64
 
@@ -103,40 +109,53 @@ def save_model(model, model_type, out_dir, fn):
     if model_type == 'ngboost':
         model_state = model.__getstate__()
         np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+
     elif model_type == 'pgbm':
         model.save(os.path.join(out_dir, f'{fn}.pt'))
+
     elif model_type == 'ibug':
         model_state = model.__getstate__()
         np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+
     elif model_type == 'knn':
         model_state = model.__getstate__()
         np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+
     else:
         raise ValueError(f'Unknown model_type {model_type}')
 
 
-def load_model(model_type, in_dir):
+def load_model(model_type, in_dir, fn):
     """
-    Save model in a picklable format.
+    Load saved model.
+
+    Input
+        model_type: str, Probabilistic estimator.
+        in_dir: str, Directory where the model is saved.
+        fn: str, Model filename.
+
+    Return loaded model.
     """
     if model_type == 'ngboost':
-        model_state = np.load(os.path.join(out_dir, 'model.npy'), allow_pickle=True)[()]
-        model = NGBRegressor()
-        model.__setstate__(model_state)
+        model_state = np.load(os.path.join(in_dir, f'{fn}.npy'), allow_pickle=True)[()]
+        model = NGBRegressor().__setstate__(model_state)
+
     elif model_type == 'pgbm':
-        fp = os.path.join(out_dir, 'model.pt')
+        fp = os.path.join(in_dir, 'model.pt')
         model = PGBMRegressor(init_model=fp)
+
     elif model_type == 'ibug':
-        model_state = np.load(os.path.join(out_dir, 'model.npy'), allow_pickle=True)[()]
-        model = IBUGWrapper()
-        model.__setstate__(model_state)
-        np.save(os.path.join(out_dir, 'model.npy'), model_state)
+        model_state = np.load(os.path.join(in_dir, f'{fn}.npy'), allow_pickle=True)[()]
+        model = IBUGWrapper().__setstate__(model_state)
+
     elif model_type == 'knn':
-        model_state = np.load(os.path.join(out_dir, 'model.npy'), allow_pickle=True)[()]
-        model = KNNWrapper()
-        model.__setstate__(model_state)
+        model_state = np.load(os.path.join(in_dir, f'{fn}.npy'), allow_pickle=True)[()]
+        model = KNNWrapper().__setstate__(model_state)
+
     else:
         raise ValueError(f'Unknown model_type {model_type}')
+
+    return model
 
 
 def get_data(data_dir, dataset, fold=1, feature=False):
@@ -439,6 +458,61 @@ def get_method_identifier(model, exp_params):
         method_name = model
 
     return method_name
+
+
+def compare_dict(d1, d2, skip_keys=[]):
+    """
+    Compare equality of two dict objects.
+
+    Input
+        d1, dict: Dictionary 1.
+        d2, dict: Dictionary 2.
+        skip_keys, list: List of keys to skip.
+
+    Return True if dicts are equal, else false.
+    """
+    is_equal = True
+
+    if d1.keys() != d2.keys():
+        is_equal = False
+    else:
+        for k, v in d1.items():
+
+            if k in skip_keys:
+                continue
+
+            # recursive comparison
+            if type(d1[k]) == dict:
+                if not compare_dict(d1[k], d2[k], skip_keys=skip_keys):
+                    is_equal = False
+                    break
+
+            # compare arrays
+            elif type(d1[k]) == np.ndarray:
+                d1a = d1[k].flatten()
+                d2a = d2[k].flatten()
+
+                # array of dicts
+                if type(d1a[0]) == dict:
+                    for i in range(len(d1a)):
+                        if not compare_dict(d1a[i], d2a[i], skip_keys=skip_keys):
+                            is_equal = False
+                            break
+
+                elif not np.all(d1[k] == d2[k]):
+                    is_equal = False
+                    break
+
+                if not is_equal:
+                    break
+
+            # other dtypes
+            else:
+                if d1[k] != d2[k]:
+                    is_equal = False
+                    break
+
+    return is_equal
 
 
 # private
