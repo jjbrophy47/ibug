@@ -189,6 +189,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
 def tune_delta(loc, scale, y, ops=['add', 'mult'],
                delta_vals=[1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3,
                            1e-2, 1e-1, 0.0, 1e0, 1e1, 1e2, 1e3],
+               multipliers=[1.0, 2.5, 5.0],
                scoring='nll', verbose=0, logger=None):
     """
     Add or multiply detla to scale values.
@@ -213,24 +214,25 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
     results = []
     for op in ops:
         for delta in delta_vals:
+            for multiplier in multipliers:
 
-            if op == 'mult' and delta == 0.0:
-                continue
+                if op == 'mult' and delta == 0.0:
+                    continue
 
-            if op == 'add':
-                temp_scale = scale + delta
-            else:
-                temp_scale = scale * delta
+                if op == 'add':
+                    temp_scale = scale + (delta * multiplier)
+                else:
+                    temp_scale = scale * (delta * multiplier)
 
-            if scoring == 'nll':
-                score = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=True, crps=False)
-            else:
-                score = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=False, crps=True)
-            results.append({'delta': delta, 'op': op, 'score': score})
+                if scoring == 'nll':
+                    score = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=True, crps=False)
+                else:
+                    score = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=False, crps=True)
+                results.append({'delta': delta, 'op': op, 'multiplier': multiplier, 'score': score})
 
     df = pd.DataFrame(results).sort_values('score', ascending=True)
 
-    best_delta = df.iloc[0]['delta']
+    best_delta = df.iloc[0]['delta'] * df.iloc[0]['multiplier']
     best_op = df.iloc[0]['op']
 
     if verbose > 0:
