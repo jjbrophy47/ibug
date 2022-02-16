@@ -469,6 +469,11 @@ def experiment(args, logger, out_dir):
         best_params_wrapper = tune_dict['best_params_wrapper']
         WrapperClass = tune_dict['WrapperClass']
 
+        if args.model_type == 'ibug':  # additional settings for fully trained model
+            best_params_wrapper['tree_subsample_frac'] = args.tree_subsample_frac
+            best_params_wrapper['tree_subsample_order'] = args.tree_subsample_order
+            best_params_wrapper['instance_subsample_frac'] = args.instance_subsample_frac
+
         base_model_test = clone(base_model_val).set_params(**best_params).fit(X_train, y_train)
         model_test = WrapperClass(verbose=args.verbose, logger=logger).set_params(**best_params_wrapper)\
             .fit(base_model_test, X_train, y_train)

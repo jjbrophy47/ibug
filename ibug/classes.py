@@ -156,6 +156,11 @@ class IBUGWrapper(Estimator):
             self.model_.update_node_count(X)
             self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
 
+        # subsample a portion of training instances at each leaf
+        n_sample = self.n_train_
+        if self.instance_subsample_frac < 1.0:
+            n_sample = int(self.n_train_ * self.instance_subsample_frac)
+
         # TEMP
         # self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
         # print(self.leaf_weights_, self.leaf_weights_.shape)
@@ -181,10 +186,12 @@ class IBUGWrapper(Estimator):
         for boost_idx in range(train_leaves.shape[1]):
             leaf_dict[boost_idx] = {}
             for leaf_idx in range(leaf_counts[boost_idx]):
-                leaf_dict[boost_idx][leaf_idx] = np.where(train_leaves[:, boost_idx] == leaf_idx)[0]
+                train_idxs = np.where(train_leaves[:, boost_idx] == leaf_idx)[0]
+                self.rng_.shuffle(train_idxs)
+                leaf_dict[boost_idx][leaf_idx] = train_idxs[:n_sample]
         self.leaf_dict_ = leaf_dict
 
-        # use portion of trees to sample
+        # subsample a portion of trees
         if self.tree_subsample_frac < 1.0:
             n_idxs = int(self.n_boost_ * self.tree_subsample_frac)
 
