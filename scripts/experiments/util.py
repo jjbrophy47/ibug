@@ -467,6 +467,17 @@ def get_method_identifier(model, exp_params):
     return method_name
 
 
+def product_dict(**kwargs):
+    """
+    Return cross-product iterable of dicts given
+    a set of named lists.
+    """
+    keys = kwargs.keys()
+    vals = kwargs.values()
+    for instance in itertools.product(*vals):
+        yield dict(zip(keys, instance))
+
+
 def compare_dict(d1, d2, skip_keys=[]):
     """
     Compare equality of two dict objects.

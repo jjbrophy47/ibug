@@ -81,7 +81,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         best_model = None
         best_params = None
 
-        param_dicts = list(product_dict(**param_grid))
+        param_dicts = list(util.product_dict(**param_grid))
         for i, param_dict in enumerate(param_dicts):
             temp_model = clone(model).set_params(**param_dict).fit(X_tune, y_tune)
             y_val_hat = temp_model.predict(X_val)
@@ -282,17 +282,6 @@ def get_loc_scale(model, model_type, X, y_train=None, delta=None, delta_op=None)
     return loc, scale
 
 
-def product_dict(**kwargs):
-    """
-    Return cross-product iterable of dicts given
-    a set of named lists.
-    """
-    keys = kwargs.keys()
-    vals = kwargs.values()
-    for instance in itertools.product(*vals):
-        yield dict(zip(keys, instance))
-
-
 def get_params(model_type, n_train, tree_type=None):
     """
     Return dict of parameters values to try for gridsearch.
@@ -468,11 +457,6 @@ def experiment(args, logger, out_dir):
         model_val = tune_dict['model_val_wrapper']
         best_params_wrapper = tune_dict['best_params_wrapper']
         WrapperClass = tune_dict['WrapperClass']
-
-        if args.model_type == 'ibug':  # additional settings for fully trained model
-            best_params_wrapper['tree_subsample_frac'] = args.tree_subsample_frac
-            best_params_wrapper['tree_subsample_order'] = args.tree_subsample_order
-            best_params_wrapper['instance_subsample_frac'] = args.instance_subsample_frac
 
         base_model_test = clone(base_model_val).set_params(**best_params).fit(X_train, y_train)
         model_test = WrapperClass(verbose=args.verbose, logger=logger).set_params(**best_params_wrapper)\
