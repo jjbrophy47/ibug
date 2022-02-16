@@ -223,35 +223,24 @@ class IBUGWrapper(Estimator):
         """
         return self.model_.predict(X)
 
-    def pred_dist(self, X, return_kneighbors=False, return_affinity_stats=False):
+    def pred_dist(self, X, return_kneighbors=False):
         """
         Extract distribution for each x in X.
 
         Input
             X: 2d array of data.
-            return_kneighbors: bool, If True, return neighbor indices and values
+            return_kneighbors: bool, If True, also return neighbor indices and values
                 for each x in X.
 
         Return
-            - If return_neighbors=True, return 2 2d arrays of shape=(len(X), self.k_)
+            - Location and shape: 2 1d arrays of shape=(len(X),)
+            - If return_neighbors=True, return 2 additional 2d arrays of shape=(len(X), self.k_)
                 + Neighbor indices and values.
-            - If return_affinity_stats=True, return a dict containing:
-                + 'cnt_ens': Instance counts at leaves, averaged over test instances.
-                + 'unq_cnt_ens': Unique instance counts at leaves, averaged over test instances.
-                + 'cnt_tree': Instance counts at leaves, averaged over trees then test instances.
-                + 'unq_cnt_tree': Unique instance counts at leaves, averaged over trees then test instances.
-            - Otherwise, return 2 1d arrays of shape=(len(X),)
-                + Location and shape.
 
         Note
             - k-nearest neighbors computed using affinity to
                 the test example.
         """
-        if return_kneighbors:
-            assert not return_affinity_stats
-        elif return_affinity_stats:
-            assert not return_kneighbors
-
         start = time.time()
 
         leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
@@ -261,14 +250,11 @@ class IBUGWrapper(Estimator):
         affinity = np.zeros(self.n_train_, dtype=np.float32)  # shape=(n_train,)        
 
         # result objects
+        loc = self.predict(X).squeeze()  # shape=(len(X),)
+        scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X),)
         if return_kneighbors:
-            neighbor_idxs = np.zeros((len(X), self.k_), dtype=np.int32)
-            neighbor_vals = np.zeros((len(X), self.k_), dtype=np.float32)
-        elif return_affinity_stats:
-            instances = np.zeros((len(X), 2), dtype=np.int32)  # shape=(n_test, 2)
-        else:
-            loc = self.predict(X).squeeze()  # shape=(len(X),)
-            scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X),)
+            neighbor_idxs = np.zeros((len(X), self.k_), dtype=np.int32)  # shape=(len(X), k)
+            neighbor_vals = np.zeros((len(X), self.k_), dtype=np.float32)  # shape=(len(X), k)
 
         for i in range(test_leaves.shape[0]):  # per test example
             affinity[:] = 0  # reset affinity
@@ -282,16 +268,12 @@ class IBUGWrapper(Estimator):
             train_vals = self.y_train_[train_idxs]
 
             # add to result
+            scale[i] = np.std(train_vals)
+            if scale[i] <= self.min_scale_:  # handle extremely small scale values
+                scale[i] = self.min_scale_
             if return_kneighbors:
                 neighbor_idxs[i, :] = train_idxs
                 neighbor_vals[i, :] = train_vals
-            elif return_affinity_stats:
-                instances[i, 0] = np.sum(affinity)
-                instances[i, 1] = len(np.where(affinity > 0)[0])
-            else:
-                scale[i] = np.std(train_vals)
-                if scale[i] <= self.min_scale_:  # handle extremely small scale values
-                    scale[i] = self.min_scale_
 
             # display progress
             if (i + 1) % 100 == 0 and self.verbose > 0:
@@ -302,22 +284,107 @@ class IBUGWrapper(Estimator):
                     print(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
 
         # assemble output
+        result = (loc, scale)
         if return_kneighbors:
-            result = neighbor_idxs, neighbor_vals
-        elif return_affinity_stats:
-            instances_mean = np.mean(instances, axis=0)  # shape=(2,)
-            instances_std = np.std(instances, axis=0)  # shape=(2,)
-            avg_instances = instances / len(self.tree_idxs_)  # shape=(len(X), 2)
-            avg_instances_mean = np.mean(avg_instances, axis=0)  # shape=(2,)
-            avg_instances_std = np.std(avg_instances, axis=0)  # shape=(2,)
-            result = {'cnt_ens': {'mean': instances_mean[0], 'std': instances_std[0]},
-                      'cnt_ens_unq': {'mean': instances_mean[1], 'std': instances_std[1]},
-                      'cnt_tree': {'mean': avg_instances_mean[0], 'std': avg_instances_std[0]},
-                      'cnt_tree_unq': {'mean': avg_instances_mean[1], 'std': avg_instances_std[1]}}
-        else:
-            result = loc, scale
+            result += (neighbor_idxs, neighbor_vals)
 
         return result
+
+    # def pred_dist(self, X, return_kneighbors=False, return_affinity_stats=False):
+    #     """
+    #     Extract distribution for each x in X.
+
+    #     Input
+    #         X: 2d array of data.
+    #         return_kneighbors: bool, If True, return neighbor indices and values
+    #             for each x in X.
+
+    #     Return
+    #         - If return_neighbors=True, return 2 2d arrays of shape=(len(X), self.k_)
+    #             + Neighbor indices and values.
+    #         - If return_affinity_stats=True, return a dict containing:
+    #             + 'cnt_ens': Instance counts at leaves, averaged over test instances.
+    #             + 'unq_cnt_ens': Unique instance counts at leaves, averaged over test instances.
+    #             + 'cnt_tree': Instance counts at leaves, averaged over trees then test instances.
+    #             + 'unq_cnt_tree': Unique instance counts at leaves, averaged over trees then test instances.
+    #         - Otherwise, return 2 1d arrays of shape=(len(X),)
+    #             + Location and shape.
+
+    #     Note
+    #         - k-nearest neighbors computed using affinity to
+    #             the test example.
+    #     """
+    #     if return_kneighbors:
+    #         assert not return_affinity_stats
+    #     elif return_affinity_stats:
+    #         assert not return_kneighbors
+
+    #     start = time.time()
+
+    #     leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
+    #     test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
+
+    #     # intermediate tracker
+    #     affinity = np.zeros(self.n_train_, dtype=np.float32)  # shape=(n_train,)        
+
+    #     # result objects
+    #     if return_kneighbors:
+    #         neighbor_idxs = np.zeros((len(X), self.k_), dtype=np.int32)
+    #         neighbor_vals = np.zeros((len(X), self.k_), dtype=np.float32)
+    #     elif return_affinity_stats:
+    #         instances = np.zeros((len(X), 2), dtype=np.int32)  # shape=(n_test, 2)
+    #     else:
+    #         loc = self.predict(X).squeeze()  # shape=(len(X),)
+    #         scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X),)
+
+    #     for i in range(test_leaves.shape[0]):  # per test example
+    #         affinity[:] = 0  # reset affinity
+
+    #         # compute affinity
+    #         for tree_idx in self.tree_idxs_:  # per tree
+    #             affinity[leaf_dict[tree_idx][test_leaves[i, tree_idx]]] += 1
+
+    #         # get k nearest neighbors
+    #         train_idxs = np.argsort(affinity)[-self.k_:]
+    #         train_vals = self.y_train_[train_idxs]
+
+    #         # add to result
+    #         if return_kneighbors:
+    #             neighbor_idxs[i, :] = train_idxs
+    #             neighbor_vals[i, :] = train_vals
+    #         elif return_affinity_stats:
+    #             instances[i, 0] = np.sum(affinity)
+    #             instances[i, 1] = len(np.where(affinity > 0)[0])
+    #         else:
+    #             scale[i] = np.std(train_vals)
+    #             if scale[i] <= self.min_scale_:  # handle extremely small scale values
+    #                 scale[i] = self.min_scale_
+
+    #         # display progress
+    #         if (i + 1) % 100 == 0 and self.verbose > 0:
+    #             cum_time = time.time() - start
+    #             if self.logger:
+    #                 self.logger.info(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+    #             else:
+    #                 print(f'[KGBM - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+
+    #     # assemble output
+    #     if return_kneighbors:
+    #         result = neighbor_idxs, neighbor_vals
+    #     elif return_affinity_stats:
+    #         instances_mean = np.mean(instances, axis=0)  # shape=(2,)
+    #         instances_std = np.std(instances, axis=0)  # shape=(2,)
+    #         avg_instances = instances / len(self.tree_idxs_)  # shape=(len(X), 2)
+    #         avg_instances_mean = np.mean(avg_instances, axis=0)  # shape=(2,)
+    #         avg_instances_std = np.std(avg_instances, axis=0)  # shape=(2,)
+    #         result = {'cnt_ens': {'mean': instances_mean[0], 'std': instances_std[0]},
+    #                   'cnt_ens_unq': {'mean': instances_mean[1], 'std': instances_std[1]},
+    #                   'cnt_tree': {'mean': avg_instances_mean[0], 'std': avg_instances_std[0]},
+    #                   'cnt_tree_unq': {'mean': avg_instances_mean[1], 'std': avg_instances_std[1]}}
+    #     else:
+    #         result = loc, scale
+
+    #     return result
 
     # private
     def _tune_k(self, X, y, k_params=[3, 5], scoring='nll'):
