@@ -18,6 +18,6 @@ done
 
 for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
-        sbatch -a 1-22 -c 4 -t 1440  -p 'short' -o ${o}'kgbm-%a.out' $run $f 'kgbm' $tree $g
+        sbatch -a 1-22 -c 4 -t 1440  -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $g
     done
 done
