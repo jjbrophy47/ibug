@@ -11,7 +11,8 @@ fold=$1
 model=$2
 tree_type=$3
 gridsearch=$4
-custom_dir=$5
+scoring=$5
+custom_dir=$6
 
 if [[ ! $custom_dir ]]; then
     custom_dir='default'
@@ -37,3 +38,4 @@ python3 scripts/experiments/train.py \
   --gridsearch=${gridsearch} \
   --custom_dir=${custom_dir} \
   --tune_frac=${tune_frac} \
+  --scoring=${scoring} \

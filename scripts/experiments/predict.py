@@ -274,15 +274,15 @@ def experiment(args, in_dir, out_dir, logger):
         logger.info(f'time: {time.time() - start:.3f}s')
 
         # posterior modeling
-        if args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
+        if args.custom_out_dir in ['dist', 'fl_dist', 'fls_dist']:
             logger.info('\n\nPOSTERIOR MODELING')
             val_res = eval_posterior(model=model_val, X=X_val, y=y_val, min_scale=model_val.min_scale_,
                                      loc=loc_val, scale=scale_val_delta, distribution_list=args.distribution,
-                                     fixed_params=args.custom_dir, random_state=args.random_state,
+                                     fixed_params=args.custom_out_dir, random_state=args.random_state,
                                      logger=logger, prefix='VAL')
             test_res = eval_posterior(model=model_test, X=X_test, y=y_test, min_scale=model_test.min_scale_,
                                       loc=loc_test, scale=scale_test_delta, distribution_list=args.distribution,
-                                      fixed_params=args.custom_dir, random_state=args.random_state,
+                                      fixed_params=args.custom_out_dir, random_state=args.random_state,
                                       logger=logger, prefix='TEST')
             result['val_posterior'] = val_res['performance']
             result['test_posterior'] = test_res['performance']
@@ -309,6 +309,7 @@ def main(args):
     method_name = util.get_method_identifier(args.model_type, train_args)
 
     in_dir = os.path.join(args.in_dir,
+                          args.custom_in_dir,
                           args.dataset,
                           args.scoring,
                           f'fold{args.fold}',
@@ -318,7 +319,7 @@ def main(args):
     method_name = util.get_method_identifier(args.model_type, vars(args))
 
     out_dir = os.path.join(args.out_dir,
-                           args.custom_dir,
+                           args.custom_out_dir,
                            args.dataset,
                            args.scoring,
                            f'fold{args.fold}',
@@ -350,7 +351,8 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--in_dir', type=str, default='output/experiments/train/')
     parser.add_argument('--out_dir', type=str, default='output/experiments/predict')
-    parser.add_argument('--custom_dir', type=str, default='default')
+    parser.add_argument('--custom_in_dir', type=str, default='default')
+    parser.add_argument('--custom_out_dir', type=str, default='default')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='concrete')
