@@ -538,8 +538,8 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--out_dir', type=str, default='output/experiments/')
-    parser.add_argument('--custom_dir', type=str, default='train')
+    parser.add_argument('--out_dir', type=str, default='output/experiments/train/')
+    parser.add_argument('--custom_dir', type=str, default='default')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='concrete')
