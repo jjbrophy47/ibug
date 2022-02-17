@@ -41,6 +41,75 @@ from ibug import KNNWrapper
 from train import get_loc_scale
 
 
+def eval_posterior(model, X, y, min_scale, loc, scale, distribution_list,
+                   fixed_params, random_state=1, logger=None, prefix=''):
+    """
+    Model the posterior using different parametric and non-parametric
+        distributions and evaluate their predictive performance.
+
+    Input
+        model: IBUG, Fitted model.
+        X: np.ndarray, 2d array of input data.
+        y: np.ndarray, 1d array of ground-truth targets.
+        loc: np.ndarray, 1d array of location values.
+        scale: np.ndarray, 1d array of scale values.
+        min_scale: float, Minimum scale value.
+        distribution_list: list, List of distributions to try.
+        fixed_params: str, Selects which parameters of the distribution to keep fixed.
+        random_state: int, Random seed.
+        logger: logging object, Log updates.
+        prefix: str, Used to identify updates.
+
+    Return
+        3-tuple including a dict of CRPS and NLL results, and 2 2d
+            arrays of neighbor indices and target values, shape=(no. test, k).
+    """
+    assert 'ibug' in str(model).lower()
+    assert X.ndim == 2 and y.ndim == 1 and loc.ndim == 1 and scale.ndim == 1
+    assert X.shape[0] == len(y) == len(loc) == len(scale)
+
+    if logger:
+        logger.info(f'\n[{prefix}] Computing k-nearest neighbors...')
+
+    start = time.time()
+    loc, scale, neighbor_idxs, neighbor_vals = model.pred_dist(X, return_kneighbors=True)
+    if logger:
+        logger.info(f'time: {time.time() - start:.3f}s')
+        logger.info(f'\n[{prefix}] Evaluating distributions...')
+
+    start = time.time()
+    dist_res = {'nll': {}, 'crps': {}}
+
+    for dist in distribution_list:
+
+        # select fixed parameters
+        if fixed_params == 'fl_dist':
+            loc_copy, scale_copy = loc.copy(), None
+
+        elif fixed_params == 'fls_dist':
+            loc_copy, scale_copy = loc.copy(), scale.copy()
+
+        else:
+            loc_copy, scale_copy = None, None
+
+        nll, crps = util.eval_dist(y=y, samples=neighbor_vals.copy(), dist=dist, nll=True,
+                                   crps=True, min_scale=min_scale, random_state=random_state,
+                                   loc=loc_copy, scale=scale_copy)
+
+        if logger:
+            logger.info(f'[{prefix} - {dist}] CRPS: {crps:.5f}, NLL: {nll:.5f}')
+
+        dist_res['nll'][dist] = nll
+        dist_res['crps'][dist] = crps
+
+    if logger:
+        logger.info(f'[{prefix} time: {time.time() - start:.3f}s')
+
+    # assemble output
+    result = {'performance': dist_res, 'neighbors': {'idxs': neighbor_idxs, 'y_vals': neighbor_vals}}
+    return result
+
+
 def calibrate_variance(scale_arr, delta, op):
     """
     Add or multiply all values in `scale_arr` by `delta`.
@@ -196,8 +265,29 @@ def experiment(args, in_dir, out_dir, logger):
     result['misc'] = {'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
                       'total_experiment_time': time.time() - begin}
     if args.model_type == 'ibug':
+
+        # collecting statistics
+        logger.info('\n\nLEAF STATISTICS')
+        start = time.time()
         result['affinity_count'] = model_test.get_affinity_stats(X_test)
         result['leaf_density'] = model_test.get_leaf_stats()
+        logger.info(f'time: {time.time() - start:.3f}s')
+
+        # posterior modeling
+        if args.custom_dir in ['dist', 'fl_dist', 'fls_dist']:
+            logger.info('\n\nPOSTERIOR MODELING')
+            val_res = eval_posterior(model=model_val, X=X_val, y=y_val, min_scale=model_val.min_scale_,
+                                     loc=loc_val, scale=scale_val_delta, distribution_list=args.distribution,
+                                     fixed_params=args.custom_dir, random_state=args.random_state,
+                                     logger=logger, prefix='VAL')
+            test_res = eval_posterior(model=model_test, X=X_test, y=y_test, min_scale=model_test.min_scale_,
+                                      loc=loc_test, scale=scale_test_delta, distribution_list=args.distribution,
+                                      fixed_params=args.custom_dir, random_state=args.random_state,
+                                      logger=logger, prefix='TEST')
+            result['val_posterior'] = val_res['performance']
+            result['test_posterior'] = test_res['performance']
+            if args.fold == 1:
+                result['neighbors'] = test_res['neighbors']
 
     # Macs show this in bytes, unix machines show this in KB
     logger.info(f"\ntotal experiment time: {result['misc']['total_experiment_time']:.3f}s")
@@ -259,8 +349,8 @@ if __name__ == '__main__':
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--in_dir', type=str, default='output/experiments/train/')
-    parser.add_argument('--out_dir', type=str, default='output/experiments/')
-    parser.add_argument('--custom_dir', type=str, default='predict')
+    parser.add_argument('--out_dir', type=str, default='output/experiments/predict')
+    parser.add_argument('--custom_dir', type=str, default='default')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='concrete')
@@ -282,6 +372,9 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', type=int, default=2)  # ALL
     parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
     parser.add_argument('--scoring', type=str, default='nll')
+    parser.add_argument('--distribution', type=str, nargs='+',
+                        default=['normal', 'skewnormal', 'lognormal', 'laplace',
+                                 'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])
 
     args = parser.parse_args()
     main(args)

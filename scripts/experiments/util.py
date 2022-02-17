@@ -254,6 +254,7 @@ def eval_dist(y, samples, dist='normal', nll=True, crps=False,
         dist: str, distribution to model.
         nll: bool, If True, return the avg. neg. log likelihood.
         crps: bool, If True, return the avg. CRPS score.
+        min_scale: float, Minimum scale value to avoid 0 variance.
         random_state: int, Random seed to enhance reproducibility.
         loc: np.ndarray, 1d array of location values, shape=(no. instances,).
         scale: np.ndarray, 1d array of scale values, shape=(no. instances,).
