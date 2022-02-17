@@ -21,3 +21,5 @@ for f in ${fold_list[@]}; do
         sbatch -a 1-22 -c 4 -t 1440  -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $g
     done
 done
+
+sbatch -a 22             -c 4 -t 10 -p 'short' -o ${o}'knn-%a.out'      $run 1 'knn'      $t $g
