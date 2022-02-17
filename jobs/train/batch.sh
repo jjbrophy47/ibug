@@ -8,12 +8,12 @@ tree_list=('lgb' 'xgb' 'cb')
 for f in ${fold_list[@]}; do
     sbatch -a 1-22             -c 4 -t 1440 -p 'short' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $g
     sbatch -a 1-22             -c 4 -t 1440 -p 'short' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $g
+    sbatch -a 1-22             -c 4 -t 1440 -p 'short' -o ${o}'constant-%a.out' $run $f 'constant' $t $g
 done
 
 for f in ${fold_list[@]}; do
-    sbatch -a 1-22             -c 4  -t 1440  -p 'short' -o ${o}'constant-%a.out' $run $f 'constant' $t $g
-    sbatch -a 1-10,12-19,21-22 -c 7  -t 1440  -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $g
-    sbatch -a 11,20            -c 15 -t 7200  -p 'long'  -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $g
+    sbatch -a 1-6,8-10,12,14-19,21-22 -c 7  -t 1440  -p 'short' -o ${o}'pgbm-%a.out' $run $f 'pgbm' $t $g
+    sbatch -a 7,11,13,20              -c 15 -t 7200  -p 'long'  -o ${o}'pgbm-%a.out' $run $f 'pgbm' $t $g
 done
 
 for f in ${fold_list[@]}; do

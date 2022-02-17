@@ -37,4 +37,3 @@ python3 scripts/experiments/train.py \
   --gridsearch=${gridsearch} \
   --custom_dir=${custom_dir} \
   --tune_frac=${tune_frac} \
-  --scoring=${scoring} \
