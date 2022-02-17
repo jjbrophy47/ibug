@@ -244,7 +244,7 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
     return best_delta, best_op
 
 
-def get_loc_scale(model, model_type, X, y_train=None, delta=None, delta_op=None):
+def get_loc_scale(model, model_type, X, y_train=None):
     """
     Predict location and scale for each x in X.
 
@@ -253,8 +253,6 @@ def get_loc_scale(model, model_type, X, y_train=None, delta=None, delta_op=None)
         model_type: str, Type of uncertainty estimator.
         X: 2d array of input data.
         y_train: 1d array of targets (constant method only).
-        delta: float, Value to add or multiply to each scale value.
-        delta_op: str, Operation to perform on each scalue value using delta.
 
     Return
         Tuple, 2 1d arrays of locations and scales.
@@ -474,9 +472,14 @@ def experiment(args, logger, out_dir):
 
     # save results
     result = {}
-    result['args'] = vars(args)
-    result['data'] = {'n_train': len(X_train), 'n_tune': len(X_tune),
-                      'n_val': len(X_val), 'n_test': len(X_test), 'n_feature': X_train.shape[1]}
+    result['train_args'] = vars(args)
+    result['data'] = {'n_train': len(X_train),
+                      'n_tune': len(X_tune),
+                      'n_val': len(X_val),
+                      'n_test': len(X_test),
+                      'n_feature': X_train.shape[1],
+                      'tune_idxs': tune_idxs,
+                      'val_idxs': val_idxs}
     result['model_params'] = model_test.get_params()
     result['timing'] = {'tune_model': tune_time_model, 'tune_extra': tune_time_extra,
                         'tune_delta': tune_time_delta, 'train': train_time, 'tune_train': tune_train_time}
@@ -494,13 +497,8 @@ def experiment(args, logger, out_dir):
 
     # save results/models
     np.save(os.path.join(out_dir, 'results.npy'), result)
-    util.save_model(model=model_val, model_type=args.model_type, out_dir=out_dir, fn='model_val')
-    util.save_model(model=model_test, model_type=args.model_type, out_dir=out_dir, fn='model_test')
-
-    mt = util.load_model(model_type=args.model_type, in_dir=out_dir, fn='model_test')
-
-    print(model_test.get_params())
-    print(mt.get_params())
+    util.save_model(model=model_val, model_type=args.model_type, fp=result['saved_models']['model_val'])
+    util.save_model(model=model_test, model_type=args.model_type, fp=result['saved_models']['model_test'])
 
 
 def main(args):

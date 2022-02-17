@@ -7,6 +7,7 @@ import shutil
 import joblib
 import logging
 import hashlib
+import itertools
 import numpy as np
 
 import properscoring as ps
@@ -104,32 +105,32 @@ def reset_stdout_stderr(logfile, stdout, stderr):
     logfile.close()
 
 
-def save_model(model, model_type, out_dir, fn):
+def save_model(model, model_type, fp):
     """
     Save model in a picklable format.
     """
     if model_type == 'ngboost':
         model_state = model.__getstate__()
-        np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+        np.save(f'{fp}.npy', model_state)
 
     elif model_type == 'pgbm':
-        joblib.dump(model, os.path.join(out_dir, f'{fn}.pkl'))
+        joblib.dump(model, f'{fp}.pkl')
 
     elif model_type == 'ibug':
         model_state = model.__getstate__()
-        np.save(os.path.join(out_dir, f'{fn}.npy'), model_state)
+        np.save(f'{fp}.npy', model_state)
 
     elif model_type == 'knn':
-        joblib.dump(model, os.path.join(out_dir, f'{fn}.pkl'))
+        joblib.dump(model, f'{fp}.pkl')
 
     elif model_type == 'constant':
-        joblib.dump(model, os.path.join(out_dir, f'{fn}.pkl'))
+        joblib.dump(model, f'{fp}.pkl')
 
     else:
         raise ValueError(f'Unknown model_type {model_type}')
 
 
-def load_model(model_type, in_dir, fn):
+def load_model(model_type, fp):
     """
     Load saved model.
 
@@ -141,22 +142,22 @@ def load_model(model_type, in_dir, fn):
     Return loaded model.
     """
     if model_type == 'ngboost':
-        model_state = np.load(os.path.join(in_dir, f'{fn}.npy'), allow_pickle=True)[()]
+        model_state = np.load(f'{fp}.npy', allow_pickle=True)[()]
         model = NGBRegressor()
         model.__setstate__(model_state)
 
     elif model_type == 'pgbm':
-        model = joblib.load(os.path.join(in_dir, f'{fn}.pkl'))
+        model = joblib.load(f'{fp}.pkl')
 
     elif model_type == 'ibug':
-        model_state = np.load(os.path.join(in_dir, f'{fn}.npy'), allow_pickle=True)[()]
+        model_state = np.load(f'{fp}.npy', allow_pickle=True)[()]
         model = IBUGWrapper().__setstate__(model_state)
 
     elif model_type == 'knn':
-        model = joblib.load(os.path.join(in_dir, f'{fn}.pkl'))
+        model = joblib.load(f'{fp}.pkl')
 
     elif model_type == 'constant':
-        model = joblib.load(os.path.join(in_dir, f'{fn}.pkl'))
+        model = joblib.load(f'{fp}.pkl')
 
     else:
         raise ValueError(f'Unknown model_type {model_type}')
