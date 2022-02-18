@@ -496,9 +496,9 @@ def experiment(args, logger, out_dir):
     logger.info(f"\nsaving results and models to {os.path.join(out_dir, 'results.npy')}")
 
     # save results/models
-    np.save(os.path.join(out_dir, 'results.npy'), result)
     util.save_model(model=model_val, model_type=args.model_type, fp=result['saved_models']['model_val'])
     util.save_model(model=model_test, model_type=args.model_type, fp=result['saved_models']['model_test'])
+    np.save(os.path.join(out_dir, 'results.npy'), result)
 
 
 def main(args):
