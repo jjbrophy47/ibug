@@ -96,7 +96,7 @@ if __name__ == '__main__':
     # Experiment settings
     parser.add_argument('--dataset', type=str, nargs='+',
                         default=['ames', 'bike', 'california', 'communities', 'concrete',
-                                 'energy', 'facebook', 'heart', 'kin8nm', 'life', 'meps',
+                                 'energy', 'facebook', 'kin8nm', 'life', 'meps',
                                  'msd', 'naval', 'obesity', 'news', 'power', 'protein',
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
