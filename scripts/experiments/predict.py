@@ -144,7 +144,7 @@ def experiment(args, in_dir, out_dir, logger):
     model_val = util.load_model(model_type=args.model_type, fp=result['saved_models']['model_val'])
     model_test = util.load_model(model_type=args.model_type, fp=result['saved_models']['model_test'])
 
-    # IBUG modifications
+    # additional settings
     if args.model_type == 'ibug':
         model_test.set_tree_subsampling(frac=args.tree_subsample_frac, order=args.tree_subsample_order)
         model_test.set_instance_subsampling(frac=args.instance_subsample_frac)

@@ -157,46 +157,14 @@ class IBUGWrapper(Estimator):
             self.model_.update_node_count(X)
             self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
 
-        """
-        organize training example leaf IDs
-        schema: tree ID -> leaf ID -> train IDs
-        {
-          0: {0: [1, 7, 9], 1: [2, 3, 5]},
-          1: {0: [2, 11], 1: [1, 7, 27]}
-        }
-        """
-        self.leaf_counts_ = self.model_.get_leaf_counts().squeeze()  # shape=(n_boost,)
-        train_leaves = self.model_.apply(X).squeeze()  # shape=(len(X), n_boost)
-        train_leaves[:, 1:] += self.leaf_counts_[:-1]  # shape=(len(X), n_boost)
-        row_idxs = np.concatenate([[i] * len(X) for i in range(self.n_boost_)])  # shape=(n_boost * len(X),)
-        col_idxs = train_leaves.T.flatten()  # shape=(n_boost * len(X),)
-        data = np.ones(self.n_boost_ * len(X))  # shape=(n_boost * len(X),)
-        print(row_idxs.shape, col_idxs.shape, data.shape)
-        self.leaf_mat_ = csr_matrix((data, (row_idxs, col_idxs)), shape=(np.sum(self.leaf_counts_), len(X)))
-
-        # leaf_dict = {}
-        # for boost_idx in range(train_leaves.shape[1]):
-        #     leaf_dict[boost_idx] = {}
-        #     for leaf_idx in range(leaf_counts[boost_idx]):
-        #         train_idxs = np.where(train_leaves[:, boost_idx] == leaf_idx)[0]
-        #         self.rng_.shuffle(train_idxs)
-        #         leaf_dict[boost_idx][leaf_idx] = train_idxs
-        # self.leaf_dict_ = leaf_dict
-
-        # leaf_dict = {}
-        # for boost_idx in range(train_leaves.shape[1]):
-        #     leaf_dict[boost_idx] = {}
-        #     for leaf_idx in range(leaf_counts[boost_idx]):
-        #         train_idxs = np.where(train_leaves[:, boost_idx] == leaf_idx)[0]
-        #         self.rng_.shuffle(train_idxs)
-        #         leaf_dict[boost_idx][leaf_idx] = train_idxs
-        # self.leaf_dict_ = leaf_dict
+        # build leaf matrix
+        self.leaf_mat_, self.leaf_counts_, self.leaf_cum_sum_ = self._build_leaf_matrix(X)
 
         # select which trees to sample
         self.set_tree_subsampling(frac=self.tree_subsample_frac, order=self.tree_subsample_order)
 
-        # select how many 
-        self.set_instance_subsampling(frac=self.tree_subsample_frac)
+        # select which instances to sample
+        self.set_instance_subsampling(frac=self.instance_subsample_frac)
 
         # tune k
         k_params = [k for k in self.k_params if k <= len(X)]
@@ -241,14 +209,8 @@ class IBUGWrapper(Estimator):
         """
         start = time.time()
 
-        # leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
-        # test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
-
         test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
-        test_leaves[:, 1:] += self.leaf_counts_[:-1]  # shape=(n_test, n_boost)
-
-        # intermediate tracker
-        affinity = np.zeros(self.n_train_, dtype=np.float32)  # shape=(n_train,)
+        test_leaves[:, 1:] += self.leaf_cum_sum_[:-1]  # shape=(n_test, n_boost)
 
         # result objects
         loc = self.predict(X).squeeze()  # shape=(len(X),)
@@ -257,20 +219,10 @@ class IBUGWrapper(Estimator):
             neighbor_idxs = np.zeros((len(X), self.k_), dtype=np.int32)  # shape=(len(X), k)
             neighbor_vals = np.zeros((len(X), self.k_), dtype=np.float32)  # shape=(len(X), k)
 
-        for i in range(test_leaves.shape[0]):  # per test example
-            leaf_idxs = test_leaves[i]  # shape=(n_boost,)
+        for i, leaf_idxs in enumerate(test_leaves):  # per test example
+            leaf_idxs = leaf_idxs[self.tree_idxs_]  # subsample trees
             affinity = self.leaf_mat_[leaf_idxs].sum(axis=0)  # shape=(n_train,)
-            train_idxs = np.asarray(affinity.argsort())[0][-self.k:]  # k neighbors
-
-            # affinity[:] = 0  # reset affinity
-
-            # compute affinity
-            # for tree_idx in self.tree_idxs_:  # per tree
-            #     train_idxs = leaf_dict[tree_idx][test_leaves[i, tree_idx]][:self.n_instance_]
-            #     affinity[train_idxs] += 1
-
-            # get k nearest neighbors
-            train_idxs = np.argsort(affinity)[-self.k_:]
+            train_idxs = np.asarray(affinity.argsort())[0][-self.k_:]  # k neighbors
             train_vals = self.y_train_[train_idxs]
 
             # add to result
@@ -296,6 +248,54 @@ class IBUGWrapper(Estimator):
 
         return result
 
+    def set_tree_subsampling(self, frac, order):
+        """
+        Select which trees to sample.
+
+        Input
+            frac: float, Fraction of trees to subsample.
+            order: str, Order of trees to subsample.
+        """
+        assert frac > 0.0 and frac <= 1.0
+        assert order in ['random', 'ascending', 'descending']
+
+        # modify instance parameters
+        self.tree_subsample_frac = frac
+        self.tree_subsample_order = order
+
+        if frac < 1.0:
+            n_idxs = max(1, int(self.n_boost_ * self.tree_subsample_frac))
+
+            if self.tree_subsample_order == 'ascending':
+                self.tree_idxs_ = np.arange(self.n_boost_)[:n_idxs]  # first to last
+
+            elif self.tree_subsample_order == 'random':
+                self.tree_idxs_ = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)  # random trees
+
+            else:
+                assert self.tree_subsample_order == 'descending'
+                self.tree_idxs_ = np.arange(self.n_boost_)[::-1][:n_idxs]  # last to first
+        else:
+            self.tree_idxs_ = np.arange(self.n_boost_)
+
+    def set_instance_subsampling(self, frac):
+        """
+        Select which instances to include in the affinity computation.
+
+        Input
+            frac: float, Fraction of the TOTAL no. train instances to sample.
+        """
+        assert frac > 0.0 and frac <= 1.0
+
+        # modify instance parameters
+        self.instance_subsample_frac = frac
+
+        if self.instance_subsample_frac < 1.0:
+            n_sample = int(self.n_train_ * self.instance_subsample_frac)
+            self.sample_idxs_ = self.rng_.choice(self.n_train_, size=n_sample, replace=False)
+        else:
+            self.sample_idxs_ = np.arange(self.n_train_)
+
     def get_affinity_stats(self, X):
         """
         Compute average affinity statistics over all x in X.
@@ -309,27 +309,15 @@ class IBUGWrapper(Estimator):
         """
         start = time.time()
 
-        # leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
         test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
-        test_leaves[:, 1:] += self.leaf_counts_[:-1]  # shape=(n_test, n_boost)
-
-        # intermediate tracker
-        # affinity = np.zeros(self.n_train_, dtype=np.float32)  # shape=(n_train,)
+        test_leaves[:, 1:] += self.leaf_cum_sum_[:-1]  # shape=(n_test, n_boost)
 
         # result objects
         instances = np.zeros((len(X), len(self.tree_idxs_)), dtype=np.float32)  # shape=(n_test, n_boost)
 
-        for i in range(test_leaves.shape[0]):  # per test example
-            leaf_idxs = test_leaves[i]  # shape=(n_boost,)
-            instances[i] = np.asarray(self.leaf_mat_[leaf_idxs].sum(axis=1))[0] / self.n_train_  # shape=(n_boost,)
-
-            # reset and then compute affinity
-            # affinity[:] = 0
-            # for j, tree_idx in enumerate(self.tree_idxs_):  # per tree
-            #     train_idxs = leaf_dict[tree_idx][test_leaves[i, tree_idx]]
-
-            # add to result
-            # instances[i, j] = len(train_idxs) / self.n_train_
+        for i, leaf_idxs in enumerate(test_leaves):  # per test example
+            leaf_idxs = leaf_idxs[self.tree_idxs_]  # subsample trees
+            instances[i] = np.asarray(self.leaf_mat_[leaf_idxs].sum(axis=1)).flatten() / self.n_train_  # (n_boost,)
 
             # display progress
             if (i + 1) % 100 == 0 and self.verbose > 0:
@@ -349,73 +337,58 @@ class IBUGWrapper(Estimator):
 
         Return
             Dict containing:
-                * 'mean': 1d array of largest leaf densities (% of train), one per tree; shape=(n_boost,).
+                * 'max': 1d array of largest leaf densities (% of train), one per tree; shape=(n_boost,).
                 * 'min': 1d array of smallest leaf densities (% of train), one per tree; shape=(n_boost,).
         """
+        assert self.n_boost_ == len(self.leaf_counts_)
 
         # result
-        max_arr = np.zeros(len(self.tree_idxs_), dtype=np.float32)  # shape=(n_boost,)
-        min_arr = np.zeros(len(self.tree_idxs_), dtype=np.float32)  # shape=(n_boost,)
+        max_arr = np.zeros(self.n_boost_, dtype=np.float32)  # shape=(n_boost,)
+        min_arr = np.zeros(self.n_boost_, dtype=np.float32)  # shape=(n_boost,)
 
-        for i, tree_idx in enumerate(self.tree_idxs_):
-            tree_dict = self.leaf_dict_[tree_idx]
+        leaf_densities = np.asarray(self.leaf_mat_.sum(axis=1)).flatten()  # shape=(total no. leaves,)
 
-            leaf_arr = np.zeros(len(tree_dict), dtype=np.float32)  # shape=(n_boost,)
-            for leaf_idx, train_idxs in tree_dict.items():
-                leaf_arr[leaf_idx] = len(train_idxs)
-
+        n_prev_leaves = 0
+        for i, leaf_count in enumerate(self.leaf_counts_):  # per tree
+            leaf_arr = leaf_densities[n_prev_leaves: n_prev_leaves + leaf_count]
             max_arr[i] = np.max(leaf_arr) / self.n_train_
             min_arr[i] = np.min(leaf_arr) / self.n_train_
+            n_prev_leaves += leaf_count
 
         # assemble output
-        result = {'max': max_arr, 'min': min_arr}
+        result = {'max': max_arr[self.tree_idxs_], 'min': min_arr[self.tree_idxs_]}
         return result
 
-    def set_tree_subsampling(self, frac, order):
-        """
-        Select which trees to sample.
-
-        Input
-            frac: float, Fraction of trees to subsample.
-            order: str, Order of trees to subsample.
-        """
-        assert frac > 0.0 and frac <= 1.0
-        assert order in ['random', 'ascending', 'descending']
-
-        # modify instance parameters
-        self.tree_subsample_frac = frac
-        self.tree_subsample_order = order
-
-        if frac < 1.0:
-            n_idxs = int(self.n_boost_ * self.tree_subsample_frac)
-
-            if self.tree_subsample_order == 'ascending':
-                self.tree_idxs_ = np.arange(self.n_boost_)[:n_idxs]  # first to last
-
-            elif self.tree_subsample_order == 'random':
-                self.tree_idxs_ = self.rng_.choice(self.n_boost_, size=n_idxs, replace=False)  # random trees
-
-            else:
-                assert self.tree_subsample_order == 'descending'
-                self.tree_idxs_ = np.arange(self.n_boost_)[::-1][:n_idxs]  # last to first
-        else:
-            self.tree_idxs_ = np.arange(self.n_boost_)
-
-    def set_instance_subsampling(self, frac):
-        """
-        Set how many instance to sample at each leaf.
-
-        Input
-            frac: float, Fraction of the TOTAL no. train instances to sample at each leaf.
-        """
-        assert frac > 0.0 and frac <= 1.0
-        self.instance_subsample_frac = frac
-        if self.instance_subsample_frac < 1.0:
-            self.n_instance_ = int(self.n_train_ * self.instance_subsample_frac)
-        else:
-            self.n_instance_ = self.n_train_
-
     # private
+    def _build_leaf_matrix(self, X):
+        """
+        Build sparse leaf matrix of shape=(total no. leaves, len(X)).
+            Example:
+                row = [1 7 11 | 0 5 11]  # `train_leaves` (after adjustment) flattened
+                col = [0 0 0  | 1 1 1 ]  # column indices
+
+        Input
+            X: 2d array of training data.
+
+        Return
+            - Sparse Leaf matrix of shape=(total_n_leaves, len(X)).
+            - 1d array of leaf counts of shape=(n_boost,).
+            - 1d array of cumulative leaf counts of shape=(n_boost,).
+        """
+        leaf_counts = self.model_.get_leaf_counts().squeeze()  # shape=(n_boost,)
+        leaf_cum_sum = np.cumsum(leaf_counts)
+        total_num_leaves = np.sum(leaf_counts)
+
+        train_leaves = self.model_.apply(X).squeeze()  # shape=(len(X), n_boost)
+        train_leaves[:, 1:] += leaf_cum_sum[:-1]  # shape=(len(X), n_boost)
+
+        row = train_leaves.flatten().astype(np.int32)  # shape=(n_boost * len(X))
+        col = np.concatenate([[i] * self.n_boost_ for i in range(len(X))]).astype(np.int32)  # (len(X) * n_boost)
+        data = np.ones(self.n_boost_ * len(X), dtype=np.float32)  # shape=(n_boost * len(X),)
+        leaf_mat = csr_matrix((data, (row, col)), shape=(total_num_leaves, len(X)), dtype=np.float32)
+
+        return leaf_mat, leaf_counts, leaf_cum_sum
+
     def _tune_k(self, X, y, k_params=[3, 5], scoring='nll'):
         """
         Tune k-nearest neighbors for probabilistic prediction.
@@ -428,31 +401,25 @@ class IBUGWrapper(Estimator):
             k_params: list, values of k to evaluate.
             cv: int, no. cross-validation folds.
             scoring: str, evaluation metric.
+
+        Return
+            Best k.
         """
         start = time.time()
 
-        # leaf_dict = self.leaf_dict_  # schema: tree ID -> leaf ID -> train IDs
         test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
-        test_leaves[:, 1:] += self.leaf_counts_[:-1]  # shape=(len(X), n_boost)
+        test_leaves[:, 1:] += self.leaf_cum_sum_[:-1]  # shape=(len(X), n_boost)
 
         scale = np.zeros((len(X), len(k_params)), dtype=np.float32)
         loc = np.tile(self.model_.predict(X), len(k_params)).astype(np.float32)  # shape=(len(X), n_k)
 
         # gather predictions
         vals = self.y_train_
-        # affinity = np.zeros(self.n_train_, dtype=np.float32)  # shape=(n_train,)
 
-        for i in range(test_leaves.shape[0]):  # per test example
-            leaf_idxs = test_leaves[i]  # shape=(n_boost,)
+        for i, leaf_idxs in enumerate(test_leaves):  # per test example
+            leaf_idxs = leaf_idxs[self.tree_idxs_]  # subsample trees
             affinity = self.leaf_mat_[leaf_idxs].sum(axis=0)  # shape=(n_train,)
             train_idxs = np.asarray(affinity.argsort())[0]  # neighbors
-
-            # affinity[:] = 0  # reset affinity
-
-            # get nearest neighbors
-            # for tree_idx in self.tree_idxs_:  # per tree
-            #     affinity[leaf_dict[tree_idx][test_leaves[i, tree_idx]]] += 1
-            # train_idxs = np.argsort(affinity)
 
             for j, k in enumerate(k_params):
                 vals_knn = vals[train_idxs[-k:]]
