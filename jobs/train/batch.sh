@@ -14,11 +14,12 @@ done
 
 for f in ${fold_list[@]}; do
     sbatch -a 1-6,8-10,12,14-19,21-22 -c 7  -t 1440  -p 'short' -o ${o}'pgbm-%a.out' $run $f 'pgbm' $t $g $s
-    sbatch -a 7,11,13,20              -c 15 -t 7200  -p 'long'  -o ${o}'pgbm-%a.out' $run $f 'pgbm' $t $g $s
+    sbatch -a 7,13,20                 -c 15 -t 7200  -p 'long'  -o ${o}'pgbm-%a.out' $run $f 'pgbm' $t $g $s
+    sbatch -a 11                      -c 20 -t 7200  -p 'long'  -o ${o}'pgbm-%a.out' $run $f 'pgbm' $t $g $s
 done
 
 for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
-        sbatch -a 1-22 -c 4 -t 1440  -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $t $t $g $s
+        sbatch -a 1-22 -c 4 -t 1440  -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $g $s
     done
 done

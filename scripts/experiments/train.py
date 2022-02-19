@@ -41,7 +41,8 @@ from ibug import KNNWrapper
 
 
 def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
-               scoring='nll', gridsearch=True, n_stopping_rounds=25, logger=None):
+               scoring='nll', bagging_frac=1.0, gridsearch=True,
+               n_stopping_rounds=25, logger=None):
     """
     Hyperparameter tuning.
 
@@ -52,7 +53,8 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         X_val: 2d array of evaluation data.
         y_val: 1d array of evaluation targets.
         tree_type: str, GBRT type.
-        scoring: str, Evaluation metric.
+        scoring: str, Probabilistic evaluation metric.
+        bagging_frac: float, Fraction of training instances to sample per tree.
         gridsearch: bool, If True, do gridsearch tuning.
         n_stopping_rounds: int, No. iterations to run without improved validation scoring.
             Only used when gridsearch is False.
@@ -67,7 +69,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
     tune_dict = {}
 
     # get model and candidate parameters
-    model = get_model(model_type=model_type, tree_type=tree_type, scoring=scoring)
+    model = get_model(model_type=model_type, tree_type=tree_type, scoring=scoring, bagging_frac=bagging_frac)
     param_grid = get_params(model_type=model_type, tree_type=tree_type, n_train=len(X_tune))
 
     # gridsearch
@@ -170,6 +172,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         tune_dict['best_params_wrapper'] = best_params_wrapper
         tune_dict['WrapperClass'] = WrapperClass
         tune_dict['tune_time_extra'] = time.time() - start
+        tune_dict['base_model'] = model
 
         if logger:
             logger.info(f"best params (wrapper): {best_params_wrapper}")
@@ -292,12 +295,13 @@ def get_params(model_type, n_train, tree_type=None):
     Return dict of gridsearch parameter values.
     """
     if model_type == 'ngboost':
-        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000]}
+        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000]}
 
     elif model_type == 'pgbm':
-        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
+        params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],
                   'max_leaves': [15, 31, 61, 91],
                   'learning_rate': [0.01, 0.1],
+                  'min_data_in_leaf': [1, 20],
                   'max_bin': [255]}
 
     elif model_type == 'knn':
@@ -308,21 +312,24 @@ def get_params(model_type, n_train, tree_type=None):
         assert tree_type is not None
 
         if tree_type == 'lgb':
-            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],
                       'num_leaves': [15, 31, 61, 91],
                       'learning_rate': [0.01, 0.1],
+                      'min_child_samples': [1, 20],
                       'max_bin': [255]}
 
         elif tree_type == 'xgb':
-            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],
                       'max_depth': [2, 3, 5, 7, None],
                       'learning_rate': [0.01, 0.1],
+                      'min_child_weight': [1, 20],
                       'max_bin': [255]}
 
         elif tree_type == 'cb':
-            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000],
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],
                       'max_depth': [2, 3, 5, 7, None],
                       'learning_rate': [0.01, 0.1],
+                      'min_data_in_leaf': [1, 20],
                       'max_bin': [255]}
         else:
             raise ValueError('tree_type unknown: {}'.format(tree_type))
@@ -333,7 +340,8 @@ def get_params(model_type, n_train, tree_type=None):
 
 
 def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=64,
-              lr=0.1, max_leaves=16, max_depth=4, verbose=2, random_state=1):
+              lr=0.1, max_leaves=16, max_depth=6, min_leaf_samples=1,
+              bagging_frac=1.0, random_state=1, verbose=2):
     """
     Return the appropriate classifier.
 
@@ -346,20 +354,27 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
         lr: float, Learning rate.
         max_leaves: int, Maximum number of leaves.
         max_depth: int, Maximum depth of each tree.
-        verbose: int, Verbosity level.
+        min_leaf_samples: int, Miniumum number of samples per leaf.
+        bagging_frac: float, Fraction of training instances to sample per tree.
         random_state: int, Random seed.
+        verbose: int, Verbosity level.
 
     Return initialized models with default values.
     """
-    if model_type == 'ngboost':
+    assert bagging_frac > 0 and bagging_frac <= 1.0
+
+    if model_type == 'ngboost':  # defaults: min_data_leaf=1, max_depth=3
         assert scoring in ['nll', 'crps']
         score = ngboost.scores.CRPScore if scoring == 'crps' else ngboost.scores.LogScore
-        model = ngboost.NGBRegressor(n_estimators=n_estimators, verbose=verbose, Score=score)
+        model = ngboost.NGBRegressor(n_estimators=n_estimators, Score=score,
+                                     minibatch_frac=bagging_frac, verbose=verbose)
 
     elif model_type == 'pgbm':
         import pgbm  # dynamic import (some machines cannot install pgbm)
-        model = pgbm.PGBMRegressor(n_estimators=n_estimators, learning_rate=lr, max_leaves=max_leaves,
-                                   max_bin=max_bin, verbose=verbose)
+        model = pgbm.PGBMRegressor(n_estimators=n_estimators, learning_rate=lr,
+                                   max_leaves=max_leaves, max_bin=max_bin,
+                                   bagging_fraction=bagging_frac,
+                                   min_data_in_leaf=min_leaf_samples, verbose=0)
 
     elif model_type == 'knn':
         model = KNeighborsRegressor(weights='uniform')
@@ -368,17 +383,22 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
         assert tree_type is not None
 
         if tree_type == 'lgb':
+            bagging_freq = 1 if bagging_frac < 1.0 else 0
             model = LGBMRegressor(n_estimators=n_estimators, learning_rate=lr, max_depth=-1,
-                                  num_leaves=max_leaves, max_bin=max_bin, random_state=random_state)
+                                  num_leaves=max_leaves, max_bin=max_bin,
+                                  subsample=bagging_frac, subsample_freq=bagging_freq,
+                                  min_child_samples=min_leaf_samples, random_state=random_state)
 
         elif tree_type == 'xgb':
             model = XGBRegressor(n_estimators=n_estimators, max_depth=max_depth, learning_rate=lr,
-                                 max_bin=max_bin, random_state=random_state)
+                                 max_bin=max_bin, min_child_weight=min_leaf_samples,
+                                 subsample=bagging_frac, random_state=random_state)
 
         elif tree_type == 'cb':
-            model = CatBoostRegressor(n_estimators=n_estimators, max_depth=max_depth, max_bin=max_bin,
-                                      random_state=random_state,
-                                      logging_level='Silent', learning_rate=lr)
+            model = CatBoostRegressor(n_estimators=n_estimators, max_depth=max_depth,
+                                      learning_rate=lr, max_bin=max_bin,
+                                      min_data_in_leaf=min_leaf_samples, subsample=bagging_frac,
+                                      random_state=random_state, logging_level='Silent')
         else:
             raise ValueError('tree_type unknown: {}'.format(tree_type))
     else:
@@ -423,6 +443,7 @@ def experiment(args, logger, out_dir):
     tune_dict = tune_model(model_type=args.model_type,
                            X_tune=X_tune, y_tune=y_tune, X_val=X_val, y_val=y_val,
                            tree_type=args.tree_type, scoring=args.scoring,
+                           bagging_frac=args.bagging_frac,
                            n_stopping_rounds=args.n_stopping_rounds,
                            gridsearch=args.gridsearch, logger=logger)
     tune_time_model = tune_dict['tune_time_model']
@@ -446,17 +467,19 @@ def experiment(args, logger, out_dir):
     assert 'best_params' in tune_dict
     best_params = tune_dict['best_params']
 
+    model = get_model(model_type=args.model_type, tree_type=args.tree_type, scoring=args.scoring)
+
     if args.model_type in ['ibug', 'knn']:  # wrap model
-        assert 'model_val' in tune_dict
+        assert 'base_model' in tune_dict
         assert 'model_val_wrapper' in tune_dict
         assert 'best_params_wrapper' in tune_dict
         assert 'WrapperClass' in tune_dict
-        base_model_val = tune_dict['model_val']
+        base_model = tune_dict['base_model']
         model_val = tune_dict['model_val_wrapper']
         best_params_wrapper = tune_dict['best_params_wrapper']
         WrapperClass = tune_dict['WrapperClass']
 
-        base_model_test = clone(base_model_val).set_params(**best_params).fit(X_train, y_train)
+        base_model_test = clone(base_model).set_params(**best_params).fit(X_train, y_train)
         model_test = WrapperClass(verbose=args.verbose, logger=logger).set_params(**best_params_wrapper)\
             .fit(base_model_test, X_train, y_train)
     else:
@@ -556,6 +579,7 @@ if __name__ == '__main__':
 
     # Default settings
     parser.add_argument('--tune_frac', type=float, default=1.0)  # ALL
+    parser.add_argument('--bagging_frac', type=float, default=1.0)  # ALL
     parser.add_argument('--val_frac', type=float, default=0.2)  # ALL
     parser.add_argument('--random_state', type=int, default=1)  # ALL
     parser.add_argument('--verbose', type=int, default=2)  # ALL
