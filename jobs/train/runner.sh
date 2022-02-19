@@ -23,11 +23,11 @@ fi
 dataset=${datasets[${SLURM_ARRAY_TASK_ID}]}
 
 if [[ $dataset = 'msd' ]]; then
-    tune_frac=0.1
+    bagging_frac=0.1
 elif [[ $dataset = 'wave' ]]; then
-    tune_frac=0.1
+    bagging_frac=0.1
 else
-    tune_frac=1.0
+    bagging_frac=1.0
 fi
 
 python3 scripts/experiments/train.py \
@@ -37,5 +37,5 @@ python3 scripts/experiments/train.py \
   --tree_type=${tree_type} \
   --gridsearch=${gridsearch} \
   --custom_dir=${custom_dir} \
-  --tune_frac=${tune_frac} \
+  --bagging_frac=${bagging_frac} \
   --scoring=${scoring} \
