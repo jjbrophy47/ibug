@@ -37,3 +37,15 @@ for i in ${!tree_subsample_order_list[@]}; do
         done
     done
 done
+
+
+# Posterior modeling
+custom_dir_list=('dist' 'dist_fl' 'dist_fls')
+
+for cd in ${custom_dir_list[@]}; do
+    for f in ${fold_list[@]}; do
+        for tree in ${tree_list[@]}; do
+            sbatch -a 1-22 -c 4  -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
+        done
+    done
+done

@@ -84,10 +84,10 @@ def eval_posterior(model, X, y, min_scale, loc, scale, distribution_list,
     for dist in distribution_list:
 
         # select fixed parameters
-        if fixed_params == 'fl_dist':
+        if fixed_params == 'dist_fl':
             loc_copy, scale_copy = loc.copy(), None
 
-        elif fixed_params == 'fls_dist':
+        elif fixed_params == 'dist_fls':
             loc_copy, scale_copy = loc.copy(), scale.copy()
 
         else:
@@ -288,7 +288,7 @@ def experiment(args, in_dir, out_dir, logger):
         logger.info(f'time: {time.time() - start:.3f}s')
 
         # posterior modeling
-        if args.custom_out_dir in ['dist', 'fl_dist', 'fls_dist']:
+        if args.custom_out_dir in ['dist', 'dist_fl', 'dist_fls']:
             logger.info('\n\nPOSTERIOR MODELING')
             val_res = eval_posterior(model=model_val, X=X_val, y=y_val, min_scale=model_val.min_scale_,
                                      loc=loc_val, scale=scale_val_delta, distribution_list=args.distribution,
