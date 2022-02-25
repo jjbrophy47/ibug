@@ -15,7 +15,7 @@ import util
 from experiments import util as exp_util
 
 
-def get_status(args, settings, method_id):
+def get_status(args, settings, method_id, in_dir):
     """
     Compute status dataframe for the specified method.
 
@@ -23,6 +23,7 @@ def get_status(args, settings, method_id):
         args: argparse, Experiment arguments.
         settings: dict, Contains lists of experiment settings.
         method_id: str, Method identifier.
+        in_dir: str, Input directory.
 
     Return
         pd.dataframe of statuses for all experiments.
@@ -32,7 +33,7 @@ def get_status(args, settings, method_id):
 
         missing_list = []
         for fold in args.fold:
-            method_dir = os.path.join(args.in_dir,
+            method_dir = os.path.join(in_dir,
                                       setting['dataset'],
                                       setting['metric'],
                                       f'fold{fold}',
@@ -53,7 +54,7 @@ def get_status(args, settings, method_id):
     return df
 
 
-def process(args, out_dir, logger):
+def process(args, in_dir, out_dir, logger):
 
     settings = {'dataset': args.dataset, 'metric': args.metric}
 
@@ -62,19 +63,21 @@ def process(args, out_dir, logger):
             for tree_type in args.tree_type_list:
                 args.tree_type = tree_type
                 method_id = exp_util.get_method_identifier(model_type, vars(args))
-                df = get_status(args, settings, method_id)
+                df = get_status(args, settings, method_id, in_dir)
                 df.to_csv(os.path.join(out_dir, f'{method_id}.csv'), index=False)
                 logger.info(f'\n{method_id}\n{df}')
         else:
             method_id = exp_util.get_method_identifier(model_type, vars(args))
-            df = get_status(args, settings, method_id)
+            df = get_status(args, settings, method_id, in_dir)
             df.to_csv(os.path.join(out_dir, f'{method_id}.csv'), index=False)
             logger.info(f'\n{method_id}\n{df}')
 
 
 def main(args):
 
-    out_dir = os.path.join(args.out_dir)
+    # setup I/O
+    in_dir = os.path.join(args.in_dir, args.exp, args.custom_dir)
+    out_dir = os.path.join(args.out_dir, args.exp, args.custom_dir)
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
@@ -83,15 +86,17 @@ def main(args):
     logger.info(args)
     logger.info(datetime.now())
 
-    process(args, out_dir, logger)
+    process(args, in_dir, out_dir, logger)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--in_dir', type=str, default='output/experiments/train/default/')
-    parser.add_argument('--out_dir', type=str, default='output/status/experiments/train/default')
+    parser.add_argument('--in_dir', type=str, default='output/experiments/')
+    parser.add_argument('--out_dir', type=str, default='output/status/experiments/')
+    parser.add_argument('--exp', type=str, default='train')
+    parser.add_argument('--custom_dir', type=str, default='default')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, nargs='+',
