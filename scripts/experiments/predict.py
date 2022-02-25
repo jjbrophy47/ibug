@@ -39,6 +39,7 @@ import util
 from ibug import IBUGWrapper
 from ibug import KNNWrapper
 from train import get_loc_scale
+from train import tune_delta
 
 
 def eval_posterior(model, X, y, min_scale, loc, scale, distribution_list,
@@ -160,7 +161,7 @@ def experiment(args, in_dir, out_dir, logger):
     logger.info('  -> no. val.: {:,}'.format(X_val.shape[0]))
     logger.info('no. test: {:,}'.format(X_test.shape[0]))
     logger.info('no. features: {:,}'.format(X_train.shape[1]))
-    logger.info(f"\ndelta: {result['delta']['best_delta']}, 'op': {result['delta']['best_op']}")
+    logger.info(f"\ndelta: {result['delta']['best_delta']}, op: {result['delta']['best_op']}")
 
     # validation: predict
     logger.info(f'\nVALIDATION SET\n')
@@ -182,7 +183,17 @@ def experiment(args, in_dir, out_dir, logger):
     logger.info(f'evaluating probabilistic performance...{time.time() - start:.3f}s')
 
     # validation: calibrate variance
-    best_delta, best_op = result['delta']['best_delta'], result['delta']['best_op']
+    if args.tune_delta:
+        assert args.model_type in ['constant', 'pgbm']
+        logger.info(f'\nTuning delta for {args.out_scoring.upper()} scoring...')
+        start = time.time()
+        best_delta, best_op = tune_delta(loc=loc_val, scale=scale_val, y=y_val,
+                                         scoring=args.out_scoring, verbose=args.verbose, logger=logger)
+        tune_time_delta = time.time() - start
+        logger.info(f'\nbest delta: {best_delta}, op: {best_op}')
+        logger.info(f'tune time (delta): {tune_time_delta:.3f}s')
+    else:
+        best_delta, best_op = result['delta']['best_delta'], result['delta']['best_op']
     scale_val_delta = calibrate_variance(scale_val, delta=best_delta, op=best_op)
 
     # validation: evaluate probabilistic performance (w/ delta)
@@ -264,6 +275,9 @@ def experiment(args, in_dir, out_dir, logger):
                                   'crps_delta': crps_test2}
     result['misc'] = {'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
                       'total_experiment_time': time.time() - begin}
+    if args.tune_delta:
+        result['timing']['tune_delta'] = tune_time_delta
+        result['delta'] = {'best_delta': best_delta, 'best_op': best_op}
     if args.model_type == 'ibug':
 
         # collecting statistics
@@ -311,7 +325,7 @@ def main(args):
     in_dir = os.path.join(args.in_dir,
                           args.custom_in_dir,
                           args.dataset,
-                          args.scoring,
+                          args.in_scoring,
                           f'fold{args.fold}',
                           method_name)
 
@@ -321,7 +335,7 @@ def main(args):
     out_dir = os.path.join(args.out_dir,
                            args.custom_out_dir,
                            args.dataset,
-                           args.scoring,
+                           args.out_scoring,
                            f'fold{args.fold}',
                            method_name)
 
@@ -368,12 +382,14 @@ if __name__ == '__main__':
     parser.add_argument('--affinity', type=str, default='unweighted')  # IBUG
 
     # Default settings
+    parser.add_argument('--tune_delta', type=int, default=0)  # Constant and PGBM
     parser.add_argument('--tune_frac', type=float, default=1.0)  # ALL
     parser.add_argument('--val_frac', type=float, default=0.2)  # ALL
     parser.add_argument('--random_state', type=int, default=1)  # ALL
     parser.add_argument('--verbose', type=int, default=2)  # ALL
     parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
-    parser.add_argument('--scoring', type=str, default='nll')
+    parser.add_argument('--in_scoring', type=str, default='nll')
+    parser.add_argument('--out_scoring', type=str, default='nll')
     parser.add_argument('--distribution', type=str, nargs='+',
                         default=['normal', 'skewnormal', 'lognormal', 'laplace',
                                  'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])
