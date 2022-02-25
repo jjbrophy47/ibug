@@ -8,7 +8,7 @@ module load miniconda
 conda activate jbrophy-20210713
 
 fold=$1
-model=$2
+model_type=$2
 tree_type=$3
 gridsearch=$4
 scoring=$5
@@ -33,7 +33,7 @@ fi
 python3 scripts/experiments/train.py \
   --dataset=${dataset} \
   --fold=${fold} \
-  --model=${model} \
+  --model_type=${model_type} \
   --tree_type=${tree_type} \
   --gridsearch=${gridsearch} \
   --custom_dir=${custom_dir} \
