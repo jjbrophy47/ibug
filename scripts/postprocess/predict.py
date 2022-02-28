@@ -61,7 +61,7 @@ def get_ax_lims(ax):
             np.max([ax.get_xlim(), ax.get_ylim()])]
 
 
-def plot_runtime(bdf, pdf, out_dir, ref_col='KGBM-LDG'):
+def plot_runtime(bdf, pdf, out_dir):
     """
     Plot train time and avg. predict time per test example scatter plots.
 
@@ -70,14 +70,34 @@ def plot_runtime(bdf, pdf, out_dir, ref_col='KGBM-LDG'):
         pdf: pd.DataFrame, Average predict time dataframe.
         out_dir: str, Output directory.
     """
+
+    # find IBUG, NGBoost, and PGBM columns
+    igb_col = None
+    ngb_col = None
+    pgb_col = None
+
+    for c in bdf.columns:
+        if 'ibug' in c:
+            ibg_col = c
+            assert ibg_col in pdf
+        elif 'ngboost' in c:
+            ngb_col = c
+            assert ngb_col in pdf
+        elif 'pgbm' in c:
+            pgb_col = c
+            assert pgb_col in pdf
+
+    if ibg_col is None and ngb_col is None and pgb_col is None:
+        return
+
     util.plot_settings(fontsize=15, libertine=True)
 
     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
     s = 75
 
     ax = axs[0]
-    x = bdf[ref_col]
-    y = bdf['NGBoost-D']
+    x = bdf[ibg_col]
+    y = bdf[ngb_col]
     ax.scatter(x, y, marker='1', s=s)
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
     ax.set_xscale('log')
@@ -91,14 +111,14 @@ def plot_runtime(bdf, pdf, out_dir, ref_col='KGBM-LDG'):
     ax.legend()
 
     ax = axs[1]
-    x = bdf[ref_col]
-    y = bdf['PGBM-DG']
+    x = bdf[ibg_col]
+    y = bdf[pgb_col]
     ax.scatter(x, y, marker='1', s=s)
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', s=s)
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlim(1e0, 1e5)
-    ax.set_ylim(1e0, 1e5)
+    ax.set_xlim(1e1, 1e6)
+    ax.set_ylim(1e1, 1e6)
     lims = get_ax_lims(ax)
     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
     ax.set_xlabel('IBUG')
@@ -111,14 +131,14 @@ def plot_runtime(bdf, pdf, out_dir, ref_col='KGBM-LDG'):
     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
 
     ax = axs[0]
-    x = pdf[ref_col]
-    y = pdf['NGBoost-D']
+    x = pdf[ibg_col]
+    y = pdf[ngb_col]
     ax.scatter(x, y, marker='1', s=s)
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlim(1e-5, 1e0)
-    ax.set_ylim(1e-5, 1e0)
+    ax.set_xlim(1e-2, 1e3)
+    ax.set_ylim(1e-2, 1e3)
     lims = get_ax_lims(ax)
     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
     ax.tick_params(axis='both', which='minor')
@@ -126,14 +146,14 @@ def plot_runtime(bdf, pdf, out_dir, ref_col='KGBM-LDG'):
     ax.set_ylabel('NGBoost')
 
     ax = axs[1]
-    x = pdf[ref_col]
-    y = pdf['PGBM-DG']
+    x = pdf[ibg_col]
+    y = pdf[pgb_col]
     ax.scatter(x, y, marker='1', s=s)
     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlim(1e-5, 1e0)
-    ax.set_ylim(1e-5, 1e0)
+    ax.set_xlim(1e-2, 1e3)
+    ax.set_ylim(1e-2, 1e3)
     lims = get_ax_lims(ax)
     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
     ax.tick_params(axis='x', which='minor')
@@ -274,13 +294,13 @@ def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset'],
                      'superconductor', 'wine', 'yacht'], '{:.0f}'.format)]
 
     elif metric == 'ptime':
-        formats = [(['ames', 'news', 'wave'], '{:.1e}'.format),
-                   (['facebook', 'meps', 'synthetic'], '{:.1e}'.format),
-                   (['star'], '{:.1e}'.format),
+        formats = [(['ames', 'news', 'wave'], '{:.1f}'.format),
+                   (['facebook', 'meps', 'synthetic'], '{:.1f}'.format),
+                   (['star'], '{:.1f}'.format),
                    (['bike', 'california', 'communities', 'concrete', 'energy',
                      'kin8nm', 'life', 'msd',
                      'naval', 'obesity', 'power', 'protein',
-                     'superconductor', 'wine', 'yacht'], '{:.1e}'.format)]
+                     'superconductor', 'wine', 'yacht'], '{:.1f}'.format)]
 
     else:
         raise ValueError(f'Unknown metric {metric}')
@@ -357,7 +377,7 @@ def append_gmean(data_df, attach_df=None, fmt='int', remove_nan=True):
         elif fmt == 'sci':
             res[c] = f'{res[c]:.1e}'
         else:
-            res[c] = f'{res[c]:.3f}'
+            res[c] = f'{res[c]:.1f}'
     gmean_df = pd.DataFrame([res])
 
     if attach_df is not None:
@@ -629,7 +649,7 @@ def process(args, in_dir, out_dir, logger):
                 val_prob[name] = res['val_performance'][args.scoring]
                 val_prob_delta[name] = res['val_performance'][f'{args.scoring}_delta']
                 btime[name] = res['timing']['tune_train']
-                ptime[name] = res['timing']['test_pred_time'] / res['data']['n_test']
+                ptime[name] = res['timing']['test_pred_time'] / res['data']['n_test'] * 1000  # milliseconds
                 param[name], param_names[name], param_types[name] = get_param_list(name, res)
 
             test_point_list.append(test_point)
@@ -689,8 +709,8 @@ def process(args, in_dir, out_dir, logger):
     val_prob_delta_ms2_df = append_head2head(data_df=val_prob_delta_df, attach_df=val_prob_delta_ms_df)
 
     # attach g. mean scores
-    btime_ms2_df = append_gmean(data_df=btime_df, attach_df=btime_ms_df)
-    ptime_ms2_df = append_gmean(data_df=ptime_df, attach_df=ptime_ms_df)
+    btime_ms2_df = append_gmean(data_df=btime_df, attach_df=btime_ms_df, fmt='int')
+    ptime_ms2_df = append_gmean(data_df=ptime_df, attach_df=ptime_ms_df, fmt='float')
 
     # format columns
     test_point_ms2_df = format_dataset_names(test_point_ms2_df)
@@ -703,6 +723,7 @@ def process(args, in_dir, out_dir, logger):
 
     # merge specific dataframes
     test_prob_point_delta_ms2_df = test_prob_delta_ms2_df.merge(test_point_ms2_df, on='dataset')
+    bptime_ms2_df = btime_ms2_df.merge(ptime_ms2_df, on='dataset')
 
     # display
     logger.info(f'\n[TEST] Point peformance (RMSE):\n{test_point_ms2_df}')
@@ -726,6 +747,7 @@ def process(args, in_dir, out_dir, logger):
     ptime_ms2_df.to_csv(os.path.join(out_dir, 'test_ptime_str.csv'), index=None)
 
     test_prob_point_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.scoring}_rmse_str.csv'), index=None)
+    bptime_ms2_df.to_csv(os.path.join(out_dir, f'test_bptime_str.csv'), index=None)
     param_df.to_csv(os.path.join(out_dir, 'param.csv'), index=None)
 
     # delta comparison
@@ -738,39 +760,7 @@ def process(args, in_dir, out_dir, logger):
 
     # runtime
     logger.info('\nRuntime...')
-    ref_col = 'KGBM-LDG'
-    if ref_col in btime_mean_df and 'NGBoost-D' in btime_mean_df and 'PGBM-DG' in btime_mean_df:
-        plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir, ref_col=ref_col)
-
-        skip_cols = ['dataset', 'n_test', 'n_train', 'n_features']
-        drop_cols = [c for c in btime_mean_df.columns if 'knn' in c.lower()]
-
-        bm_df = btime_mean_df.drop(columns=drop_cols)
-        pm_df = ptime_mean_df.drop(columns=drop_cols)
-        bs_df = btime_sem_df.drop(columns=drop_cols)
-        ps_df = ptime_sem_df.drop(columns=drop_cols)
-
-        b_ms_df = join_mean_sem(bm_df, ps_df, metric='btime', exclude_sem=True, mask_cols=skip_cols)
-        p_ms_df = join_mean_sem(pm_df, ps_df, metric='ptime', exclude_sem=True, mask_cols=skip_cols)
-
-        int_df = compute_time_intersect(bdf=bm_df, pdf=pm_df, ref_col=ref_col, skip_cols=skip_cols)
-        b_ms_df = append_gmean(data_df=bm_df, attach_df=b_ms_df, fmt='int')
-        p_ms_df = append_gmean(data_df=pm_df, attach_df=p_ms_df, fmt='sci')
-
-        bp_ms_df = b_ms_df.merge(p_ms_df, on='dataset')
-        bp_ms_df = bp_ms_df.merge(int_df, on='dataset', how='left').fillna(-1)
-        bp_ms_df = bp_ms_df.drop(columns=['n_train', 'n_test', 'n_features_x', 'n_features_y'])
-
-        n_col = bp_ms_df.pop('n')
-        p_col = bp_ms_df.pop('p')
-        bp_ms_df.insert(1, 'n', n_col)
-        bp_ms_df.insert(2, 'p', p_col)
-        bp_ms_df['n'] = bp_ms_df['n'].apply(lambda x: f'{int(x):,}')
-        bp_ms_df['p'] = bp_ms_df['p'].apply(lambda x: f'{int(x):,}')
-
-        bp_ms_df = format_cols(bp_ms_df, format_dataset_names=True)
-        bp_ms_df['dataset'] = bp_ms_df['dataset'].apply(lambda x: c_dict[x.lower()] if x.lower() in c_dict else x)
-        bp_ms_df.to_csv(os.path.join(out_dir, 'bp_time_str.csv'), index=None)
+    plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
 
     # boxplot
     logger.info('\nPlotting boxplots...')
