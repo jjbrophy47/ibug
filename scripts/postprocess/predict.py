@@ -88,7 +88,7 @@ def plot_runtime(bdf, pdf, out_dir):
             assert pgb_col in pdf
 
     if ibg_col is None and ngb_col is None and pgb_col is None:
-        return
+        return None
 
     util.plot_settings(fontsize=15, libertine=True)
 
@@ -162,6 +162,8 @@ def plot_runtime(bdf, pdf, out_dir):
 
     plt.tight_layout()
     plt.savefig(os.path.join(out_dir, f'runtime_predict.pdf'))
+
+    return (ibg_col, ngb_col, pgb_col)
 
 
 def compute_time_intersect(bdf, pdf, ref_col, skip_cols=[]):
@@ -760,28 +762,32 @@ def process(args, in_dir, out_dir, logger):
 
     # runtime
     logger.info('\nRuntime...')
-    plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
+    ref_cols = plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
 
     # boxplot
     logger.info('\nPlotting boxplots...')
     fig, axs = plt.subplots(5, 5, figsize=(4 * 5, 3 * 5))
     axs = axs.flatten()
     i = 0
-    for dataset, gf in nll_df.groupby('dataset'):
+    for dataset, gf in test_prob_delta_df.groupby('dataset'):
         gf.boxplot([c for c in gf.columns if c not in ['dataset', 'fold']], ax=axs[i])
         axs[i].set_title(dataset)
+        axs[i].set_xticks([])
         i += 1
+    fig.delaxes(axs[-1])
+    fig.delaxes(axs[-2])
+    fig.delaxes(axs[-3])
     plt.tight_layout()
     plt.savefig(os.path.join(out_dir, 'boxplot.pdf'), bbox_inches='tight')
 
     # Wilcoxon ranked test
-    logger.info('\nWilocoxon signed rank test (two-tailed):')
-    for c in ['KNN-D', 'NGBoost-D', 'PGBM-DG']:
-        if c not in nll_df:
-            continue
-        statistic, p_val = stats.wilcoxon(nll_df[ref_col], nll_df[c])
-        statistic_m, p_val_m = stats.wilcoxon(nll_mean_df[ref_col], nll_mean_df[c])
-        logger.info(f'[{ref_col} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
+    if ref_cols is not None:
+        ibg_col, ngb_col, pgb_col = ref_cols
+        logger.info('\nWilocoxon signed rank test (two-tailed):')
+        for c in [ngb_col, pgb_col]:
+            statistic, p_val = stats.wilcoxon(test_prob_delta_df[ibg_col], test_prob_delta_df[c])
+            statistic_m, p_val_m = stats.wilcoxon(test_prob_delta_mean_df[ibg_col], test_prob_delta_mean_df[c])
+            logger.info(f'[{ibg_col} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
 
 
 def main(args):
