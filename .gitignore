@@ -8,10 +8,11 @@ __pycache__
 catboost_info
 
 notes
-
 temp*
+
 output
 output2
+results
 
 /data/**/*.npy
 /data/**/*.arff

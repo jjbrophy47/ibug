@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 from itertools import product
 
 import numpy as np
@@ -20,24 +19,27 @@ def get_results(args, exp_dir, logger=None, progress_bar=False, remove_neighbors
     if logger and progress_bar:
         logger.info('\nGathering results...')
 
-    experiment_settings = list(product(*[args.model, args.tree_type, args.affinity,
-                                         args.min_scale_pct, args.tree_frac,
-                                         args.gridsearch, args.delta]))
+    experiment_settings = list(product(*[args.model_type,
+                                         args.tree_type,
+                                         args.affinity,
+                                         args.tree_subsample_frac,
+                                         args.tree_subsample_order,
+                                         args.instance_subsample_frac]))
 
     visited = set()
     results = []
 
     for items in tqdm(experiment_settings, disable=not progress_bar):
-        model, tree_type, affinity, min_scale_pct, tree_frac, gridsearch, delta = items
+        model_type, tree_type, affinity, tree_subsample_frac, tree_subsample_order, instance_subsample_frac = items
 
         template = {'tree_type': tree_type,
                     'affinity': affinity,
-                    'min_scale_pct': min_scale_pct,
-                    'tree_frac': tree_frac,
-                    'gridsearch': gridsearch,
-                    'delta': delta}
+                    'tree_subsample_frac': tree_subsample_frac,
+                    'tree_subsample_order': tree_subsample_order,
+                    'instance_subsample_frac': tree_subsample_frac,
+                    'gridsearch': args.gridsearch}
 
-        method_id = exp_util.get_method_identifier(model, template)
+        method_id = exp_util.get_method_identifier(model_type, template)
         method_dir = os.path.join(exp_dir, method_id)
 
         # skip empty experiments
