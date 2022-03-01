@@ -305,7 +305,10 @@ class IBUGWrapper(Estimator):
 
         Return
             Dict containing:
-                * 'mean': Instance counts at leaves, averaged over test.
+                * 'mean': Instance counts at leaves, averaged over test, shape=(n_boost,).
+
+        NOTE
+            Return array values are FRACTIONS of the total number of training examples.
         """
         start = time.time()
 
@@ -339,6 +342,9 @@ class IBUGWrapper(Estimator):
             Dict containing:
                 * 'max': 1d array of largest leaf densities (% of train), one per tree; shape=(n_boost,).
                 * 'min': 1d array of smallest leaf densities (% of train), one per tree; shape=(n_boost,).
+
+        NOTE
+            Return array values are FRACTIONS of the total number of training examples.
         """
         assert self.n_boost_ == len(self.leaf_counts_)
 

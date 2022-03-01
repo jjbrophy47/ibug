@@ -283,8 +283,8 @@ def experiment(args, in_dir, out_dir, logger):
         # collecting statistics
         logger.info('\n\nLEAF STATISTICS')
         start = time.time()
-        result['affinity_count'] = model_test.get_affinity_stats(X_test)
-        result['leaf_density'] = model_test.get_leaf_stats()
+        result['affinity_count'] = model_test.get_affinity_stats(X_test)  # dict with 2 1d arrays of len=n_boost
+        result['leaf_density'] = model_test.get_leaf_stats()  # dict with 1 1d array of len=n_boost
         logger.info(f'time: {time.time() - start:.3f}s')
 
         # posterior modeling
