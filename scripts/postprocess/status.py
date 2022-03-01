@@ -39,7 +39,7 @@ def get_status(args, settings, method_id, in_dir):
                                       f'fold{fold}',
                                       method_id)
 
-            for fn in args.fn_list:
+            for fn in args.fn:
                 fp = os.path.join(method_dir, fn)
                 if not os.path.exists(fp):
                     missing_list.append(fold)
@@ -58,19 +58,29 @@ def process(args, in_dir, out_dir, logger):
 
     settings = {'dataset': args.dataset, 'metric': args.metric}
 
+    # get method identifiers
     for model_type in args.model_type:
-        if model_type in ['constant', 'ibug']:
-            for tree_type in args.tree_type_list:
-                args.tree_type = tree_type
-                method_id = exp_util.get_method_identifier(model_type, vars(args))
-                df = get_status(args, settings, method_id, in_dir)
-                df.to_csv(os.path.join(out_dir, f'{method_id}.csv'), index=False)
-                logger.info(f'\n{method_id}\n{df}')
+        if model_type == 'constant':
+            method_args_lists = {'tree_type': args.tree_type,
+                                 'gridsearch': args.gridsearch}
+
+        if model_type == 'ibug':
+            method_args_lists = {'tree_type': args.tree_type,
+                                 'tree_subsample_frac': args.tree_subsample_frac,
+                                 'tree_subsample_order': args.tree_subsample_order,
+                                 'instance_subsample_frac': args.instance_subsample_frac,
+                                 'affinity': args.affinity,
+                                 'gridsearch': args.gridsearch}
         else:
-            method_id = exp_util.get_method_identifier(model_type, vars(args))
-            df = get_status(args, settings, method_id, in_dir)
-            df.to_csv(os.path.join(out_dir, f'{method_id}.csv'), index=False)
-            logger.info(f'\n{method_id}\n{df}')
+            method_args_lists = {'gridsearch': args.gridsearch}
+
+    # get status updates for each method identifier
+    for method_args in list(exp_util.product_dict(**method_args_lists)):
+        print(method_args)
+        method_id = exp_util.get_method_identifier(model_type, method_args)
+        df = get_status(args, settings, method_id, in_dir)
+        df.to_csv(os.path.join(out_dir, f'{method_id}.csv'), index=False)
+        logger.info(f'\n{method_id}\n{df}')
 
 
 def main(args):
@@ -110,16 +120,15 @@ if __name__ == '__main__':
 
     # Method identifiers
     parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'ibug'])
-    parser.add_argument('--tree_subsample_frac', type=float, default=1.0)
-    parser.add_argument('--tree_subsample_order', type=str, default='random')
-    parser.add_argument('--instance_subsample_frac', type=float, default=1.0)
-    parser.add_argument('--tree_type_list', type=str, nargs='+', default=['lgb', 'xgb', 'cb'])
-    parser.add_argument('--tree_type', type=str, default='lgb')
-    parser.add_argument('--affinity', type=str, default='unweighted')
-    parser.add_argument('--gridsearch', type=int, default=1)
+    parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb', 'xgb', 'cb'])
+    parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
+    parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
+    parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
+    parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
+    parser.add_argument('--gridsearch', type=int, nargs='+', default=[1])
 
     # Additional settings
-    parser.add_argument('--fn_list', type=str, nargs='+', default=['results.npy'])
+    parser.add_argument('--fn', type=str, nargs='+', default=['results.npy'])
 
     args = parser.parse_args()
     main(args)

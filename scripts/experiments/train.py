@@ -514,7 +514,7 @@ def experiment(args, logger, out_dir):
 
     # Macs show this in bytes, unix machines show this in KB
     logger.info(f"\ntotal experiment time: {result['misc']['total_experiment_time']:.3f}s")
-    logger.info(f"max_rss (MB): {result['misc']['max_RSS']:.1f}")
+    logger.info(f"max_rss (MB if MacOSX, GB if Linux): {result['misc']['max_RSS']:.1f}")
     logger.info(f"\nresults:\n{result}")
     logger.info(f"\nsaving results and models to {os.path.join(out_dir, 'results.npy')}")
 
