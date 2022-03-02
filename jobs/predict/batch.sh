@@ -36,7 +36,7 @@ for tree in ${tree_list[@]}; do
         cd='tree_subsample_'${to}
         for tf in ${tree_subsample_frac_list[@]}; do
             for f in ${fold_list[@]}; do
-                sbatch -a 1-10,11-19,21-22 -c 4  -t 1440 -p $p -o $op $run $f 'ibug' $tree $s $s $td $cd $tf $to
+                sbatch -a 1-10,11-19,21-22 -c 4  -t 300 -p $p -o $op $run $f 'ibug' $tree $s $s $td $cd $tf $to
             done
         done
     done
