@@ -20,7 +20,7 @@ for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
         sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
         sbatch -a 20               -c 4  -t 2880 -p 'long'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
-        sbatch -a 11               -c 10 -t 4320 -p 'long'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+        sbatch -a 11               -c 7  -t 2880 -p 'long'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
     done
 done
 
@@ -49,9 +49,9 @@ custom_dir_list=('dist' 'dist_fl' 'dist_fls')
 for cd in ${custom_dir_list[@]}; do
     for f in ${fold_list[@]}; do
         for tree in ${tree_list[@]}; do
-            sbatch -a 1-10,12-22 -c 4  -t 1440 -p $p -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
-            sbatch -a 20         -c 4  -t 2880 -p $l -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
-            sbatch -a 11         -c 10 -t 4320 -p $l -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
+            sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p $p -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
+            # sbatch -a 20               -c 4  -t 2880 -p $l -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
+            # sbatch -a 11               -c 10 -t 4320 -p $l -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
         done
     done
 done

@@ -154,7 +154,7 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--in_dir', type=str, default='results/experiments/predict/')
-    parser.add_argument('--out_dir', type=str, default='results/postprocess/predict/')
+    parser.add_argument('--out_dir', type=str, default='results/postprocess/')
     parser.add_argument('--custom_in_dir', type=str, default='default')
     parser.add_argument('--custom_out_dir', type=str, default='affinity')
 

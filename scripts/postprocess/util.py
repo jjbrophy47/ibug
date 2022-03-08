@@ -12,7 +12,7 @@ from experiments import util as exp_util
 
 
 # public
-def get_results(args, exp_dir, logger=None, progress_bar=False, remove_neighbors=False):
+def get_results(args, exp_dir, logger=None, progress_bar=False):
     """
     Retrieve results for the multiple methods.
     """
@@ -36,7 +36,7 @@ def get_results(args, exp_dir, logger=None, progress_bar=False, remove_neighbors
                     'affinity': affinity,
                     'tree_subsample_frac': tree_subsample_frac,
                     'tree_subsample_order': tree_subsample_order,
-                    'instance_subsample_frac': tree_subsample_frac,
+                    'instance_subsample_frac': instance_subsample_frac,
                     'gridsearch': args.gridsearch}
 
         method_id = exp_util.get_method_identifier(model_type, template)
@@ -51,11 +51,6 @@ def get_results(args, exp_dir, logger=None, progress_bar=False, remove_neighbors
             visited.add(method_id)
             result = _get_result(method_dir)
             if result is not None:
-                if remove_neighbors:
-                    if 'neighbor_idxs' in result:
-                        del result['neighbor_idxs']
-                    if 'neighbor_vals' in result:
-                        del result['neighbor_vals']
                 results.append((method_id, result))
 
     return results

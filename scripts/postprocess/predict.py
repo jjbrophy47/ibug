@@ -76,9 +76,11 @@ def plot_runtime(bdf, pdf, out_dir):
     ngb_col = None
     pgb_col = None
 
+    ibug_count = 0
     for c in bdf.columns:
         if 'ibug' in c:
             ibg_col = c
+            ibug_count += 1
             assert ibg_col in pdf
         elif 'ngboost' in c:
             ngb_col = c
@@ -87,7 +89,7 @@ def plot_runtime(bdf, pdf, out_dir):
             pgb_col = c
             assert pgb_col in pdf
 
-    if ibg_col is None and ngb_col is None and pgb_col is None:
+    if (ibg_col is None and ngb_col is None and pgb_col is None) or (ibug_count > 1):
         return None
 
     util.plot_settings(fontsize=15, libertine=True)
@@ -785,6 +787,8 @@ def process(args, in_dir, out_dir, logger):
         ibg_col, ngb_col, pgb_col = ref_cols
         logger.info('\nWilocoxon signed rank test (two-tailed):')
         for c in [ngb_col, pgb_col]:
+            test_prob_delta_df = test_prob_delta_df.dropna()  # TEMP
+            test_prob_delta_mean_df = test_prob_delta_mean_df.dropna()  # TEMP
             statistic, p_val = stats.wilcoxon(test_prob_delta_df[ibg_col], test_prob_delta_df[c])
             statistic_m, p_val_m = stats.wilcoxon(test_prob_delta_mean_df[ibg_col], test_prob_delta_mean_df[c])
             logger.info(f'[{ibg_col} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
@@ -793,7 +797,7 @@ def process(args, in_dir, out_dir, logger):
 def main(args):
 
     in_dir = os.path.join(args.in_dir, args.custom_in_dir)
-    out_dir = os.path.join(args.out_dir, args.custom_out_dir)
+    out_dir = os.path.join(args.out_dir, args.custom_out_dir, args.scoring)
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
@@ -809,9 +813,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--in_dir', type=str, default='results/predict/')
-    parser.add_argument('--out_dir', type=str, default='output/postprocess/predict/')
+    parser.add_argument('--in_dir', type=str, default='results/experiments/predict/')
+    parser.add_argument('--out_dir', type=str, default='results/postprocess/predict/')
     parser.add_argument('--custom_in_dir', type=str, default='default')
     parser.add_argument('--custom_out_dir', type=str, default='default')
 

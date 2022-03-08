@@ -21,14 +21,14 @@ import util
 from experiments import util as exp_util
 
 
-def process(args, out_dir, logger):
+def process(args, in_dir, out_dir, logger):
 
     util.plot_settings(fontsize=21, libertine=True)
-
     rng = np.random.default_rng(args.random_state)
-    color, ls, label = util.get_plot_dicts()
+
     dataset_map = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
+    # setup plots
     if args.combine:
         n_row = len(args.dataset)
         n_col = 6
@@ -36,60 +36,75 @@ def process(args, out_dir, logger):
     else:
         fig, axs = plt.subplots(1, 6, figsize=(24, 3))
 
+    # get results for each dataset
     for i, dataset in enumerate(args.dataset):
-        if dataset in args.skip:
-            continue
-
         logger.info(f'{dataset}...')
 
-        # get results
-        res_list = []
-        score_list = []
+        val_list = []
+        val_norm_list = []
+        test_list = []
+        test_norm_list = []
 
         success = True
         for fold in args.fold:
-            res_dict = {'dataset': dataset, 'fold': fold}
+            val_dict = {'dataset': dataset, 'fold': fold}
+            test_dict = {'dataset': dataset, 'fold': fold}
 
-            exp_dir = os.path.join(args.in_dir, dataset, f'fold{fold}')
+            exp_dir = os.path.join(in_dir, dataset, args.scoring, f'fold{fold}')
             results = util.get_results(args, exp_dir, logger, progress_bar=False)
             if len(results) != 1:
                 success = False
                 break
-            method, res = results[0]
-            assert 'kgbm' in method
 
-            if 'dist_res' in res:
-                res_dict.update(res['dist_res'][args.metric])
-            else:
-                res_dict.update(res['test_dist_res'][args.metric])
-            res_list.append(res_dict)
-            score_list.append(res[args.metric])
+            method, res = results[0]
+            assert 'ibug' in method
+            val_dict.update(res['val_posterior'][args.scoring])
+            test_dict.update(res['test_posterior'][args.scoring])
+            val_list.append(val_dict)
+            test_list.append(test_dict)
+
+            val_norm_list.append(res['val_performance'][f'{args.scoring}_delta'])
+            test_norm_list.append(res['test_performance'][f'{args.scoring}_delta'])
 
             if fold == 1:
-                neighbor_idxs = res['neighbor_idxs']
-                neighbor_vals = res['neighbor_vals']
+                neighbor_idxs = res['neighbors']['idxs']
+                neighbor_vals = res['neighbors']['y_vals']
+                k = res['model_params']['k']
 
         if not success:
             continue
 
-        df = pd.DataFrame(res_list)
-        dist_cols = [c for c in df.columns if c not in ['dataset', 'fold']]
-        dist_vals = df[dist_cols].values  # shape=(no. folds, no. distributions)
-        dist_mean_df = df[dist_cols].mean(axis=0)
-        dist_names = dist_mean_df.index
-        dist_mean = dist_mean_df.values
-        dist_sem = df[dist_cols].sem(axis=0).values
-        min_idx = np.argmin(dist_mean)
-        normal_mean = np.mean(score_list)
-        normal_sem = sem(score_list)
+        val_df = pd.DataFrame(val_list).replace(np.inf, np.nan).dropna(axis=1)
+        test_df = pd.DataFrame(test_list).replace(np.inf, np.nan).dropna(axis=1)
+        dist_cols = [c for c in val_df.columns if c not in ['dataset', 'fold']]
 
-        dist_name = dist_names[min_idx].capitalize()
-        dist_name = 'KDE' if dist_name == 'Kde' else dist_name
+        val_vals = val_df[dist_cols].values  # shape=(n_fold, n_distribution)
+        test_vals = test_df[dist_cols].values  # shape=(n_fold, n_distribution)
 
-        data_list = [score_list, dist_vals[:, min_idx]]
-        means = [normal_mean, dist_mean[min_idx]]
-        sems = [normal_sem, dist_sem[min_idx]]
-        names = ['Normal', dist_name]
+        val_mean = np.mean(val_vals, axis=0)  # shape=(n_distribution,)
+        val_sem = sem(val_vals, axis=0)
+        test_mean = np.mean(test_vals, axis=0)  # shape=(n_distribution,)
+        test_sem = sem(test_vals, axis=0)
+
+        val_min_idx = np.argmin(val_mean)
+        val_norm_mean = np.mean(val_norm_list)
+        val_norm_sem = sem(val_norm_list)
+
+        test_min_idx = np.argmin(test_mean)
+        test_norm_mean = np.mean(test_norm_list)
+        test_norm_sem = sem(test_norm_list)
+
+        val_dist = dist_cols[val_min_idx].capitalize()
+        val_dist = 'KDE' if val_dist == 'Kde' else val_dist
+
+        test_dist = dist_cols[test_min_idx].capitalize()
+        test_dist = 'KDE' if test_dist == 'Kde' else test_dist
+
+        logger.info(f'\t->val/test distribution: {val_dist}/{test_dist}')
+
+        test_means = [test_norm_mean, test_mean[test_min_idx]]
+        test_sems = [test_norm_sem, test_sem[test_min_idx]]
+        test_names = ['Normal', test_dist]
 
         # plot neighbor distributions
         assert neighbor_idxs is not None
@@ -102,24 +117,29 @@ def process(args, out_dir, logger):
         for j, test_idx in enumerate(test_idxs):
             ax = axs[i][j] if args.combine else axs[j]
             sns.kdeplot(neighbor_vals[test_idx], ax=ax)
+
             if dataset == 'meps':
                 ax.set_xlim(0, None)
+
             ax.set_title(f'Test Index {test_idx}')
+
             if i == len(args.dataset) - 1:
                 ax.set_xlabel('Output value')
+
             if j == 0:
-                k = res['model_params']['k_']
                 ax.set_ylabel(f'({dataset_name}, ' r'$k$=' f'{k})' '\n' r'$k$-train density')
+
             else:
                 ax.set_ylabel('')
 
         ax = axs[i][-1] if args.combine else axs[-1]
-        ax.bar(names, means, yerr=sems)
+        ax.bar(test_names, test_means, yerr=test_sems)
         ax.axhline(0, color='k', ls='-')
         ax.set_title('Avg. Performance')
+
         if i == len(args.dataset) - 1:
             ax.set_xlabel('Distribution')
-        ax.set_ylabel(f'Test {args.metric.upper()}')
+        ax.set_ylabel(f'Test {args.scoring.upper()}')
 
         if not args.combine:
             plt.tight_layout()
@@ -142,7 +162,8 @@ def process(args, out_dir, logger):
 
 def main(args):
 
-    out_dir = os.path.join(args.out_dir, args.custom_dir, args.metric)
+    in_dir = os.path.join(args.in_dir, args.custom_in_dir)
+    out_dir = os.path.join(args.out_dir, args.custom_out_dir)
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
@@ -150,35 +171,35 @@ def main(args):
     logger.info(args)
     logger.info(datetime.now())
 
-    process(args, out_dir, logger)
+    process(args, in_dir, out_dir, logger)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--in_dir', type=str, default='temp_dist/')
-    parser.add_argument('--out_dir', type=str, default='output/postprocess/')
-    parser.add_argument('--custom_dir', type=str, default='dist')
+    parser.add_argument('--in_dir', type=str, default='results/experiments/predict/')
+    parser.add_argument('--out_dir', type=str, default='results/postprocess/')
+    parser.add_argument('--custom_in_dir', type=str, default='dist')
+    parser.add_argument('--custom_out_dir', type=str, default='dist')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, nargs='+',
                         default=['ames', 'bike', 'california', 'communities', 'concrete',
-                                 'energy', 'facebook', 'heart', 'kin8nm', 'life', 'meps',
+                                 'energy', 'facebook', 'kin8nm', 'life', 'meps',
                                  'msd', 'naval', 'obesity', 'news', 'power', 'protein',
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
-    parser.add_argument('--skip', type=str, nargs='+', default=['heart'])
-    parser.add_argument('--fold', type=int, nargs='+', default=[1, 2, 3, 4, 5])
-    parser.add_argument('--model', type=str, nargs='+', default=['kgbm'])
-    parser.add_argument('--tree_frac', type=str, nargs='+', default=[1.0])
-    parser.add_argument('--min_scale_pct', type=float, nargs='+', default=[0.0])
+    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
+    parser.add_argument('--model_type', type=str, nargs='+', default=['ibug'])
+    parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
+    parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
+    parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
-    parser.add_argument('--delta', type=int, nargs='+', default=[1])
-    parser.add_argument('--gridsearch', type=int, nargs='+', default=[1])
-    parser.add_argument('--metric', type=str, default='nll')
-    parser.add_argument('--random_state', type=int, default=3)
+    parser.add_argument('--gridsearch', type=int, default=1)
+    parser.add_argument('--scoring', type=str, default='nll')
+    parser.add_argument('--random_state', type=int, default=1)
     parser.add_argument('--combine', type=int, default=0)
 
     args = parser.parse_args()
