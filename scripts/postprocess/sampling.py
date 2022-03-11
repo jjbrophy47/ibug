@@ -52,7 +52,7 @@ def process(args, in_dir, in_dir2, out_dir, logger):
             # get IBUG results for different tree fractions
             args.model_type = ['ibug']
             exp_dir = os.path.join(in_dir, dataset, args.scoring, f'fold{fold}')
-            results = util.get_results(args, exp_dir, logger, remove_neighbors=True)
+            results = util.get_results(args, exp_dir, logger)
 
             for method, res in results:
                 assert 'ibug' in method
@@ -63,7 +63,7 @@ def process(args, in_dir, in_dir2, out_dir, logger):
             # get NGBoost and PGBM results
             args.model_type = ['ngboost', 'pgbm']
             exp_dir2 = os.path.join(args.in_dir2, dataset, args.scoring, f'fold{fold}')
-            results = util.get_results(args, exp_dir2, logger, remove_neighbors=True)
+            results = util.get_results(args, exp_dir2, logger)
 
             for method, res in results:
 
