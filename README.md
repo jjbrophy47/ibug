@@ -5,7 +5,7 @@ IBUG: Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Tree
 [![Github License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/jjbrophy47/ibug/blob/master/LICENSE)
 [![Build](https://github.com/jjbrophy47/ibug/actions/workflows/wheels.yml/badge.svg?branch=v0.0.1)](https://github.com/jjbrophy47/ibug/actions/workflows/wheels.yml)
 
-**ibug** is a python library that turns *any* for gradient-boosted regress trees (GBRT) model into a probabilistic estimator, and is compatible with all major GBRT frameworks including LightGBM, XGBoost, CatBoost, and SKLearn.
+**ibug** is a simple wrapper that extends *any* gradient-boosted regression trees (GBRT) model into a probabilistic estimator, and is compatible with all major GBRT frameworks including LightGBM, XGBoost, CatBoost, and SKLearn.
 
 Install
 ---
