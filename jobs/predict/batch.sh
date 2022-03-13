@@ -16,12 +16,6 @@ for f in ${fold_list[@]}; do
     sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t 'nll' 'crps' 1
 done
 
-fold_list=(17 18 19 20)
-for f in ${fold_list[@]}; do
-    sbatch -a 7,11,13 -c 4 -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $s $s $td
-    sbatch -a 7,11,13 -c 4 -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t 'nll' 'crps' 1
-done
-
 for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
         sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
@@ -42,7 +36,9 @@ for tree in ${tree_list[@]}; do
         cd='tree_subsample_'${to}
         for tf in ${tree_subsample_frac_list[@]}; do
             for f in ${fold_list[@]}; do
-                sbatch -a 1-10,11-19,21-22 -c 4  -t 300 -p $p -o $op $run $f 'ibug' $tree $s $s $td $cd $tf $to
+                # sbatch -a 1-10,11-19,21-22 -c 4  -t 300 -p $p -o $op $run $f 'ibug' $tree $s $s $td $cd $tf $to
+                sbatch -a 20 -c 4 -t 2880 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+                sbatch -a 11 -c 7 -t 2880 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
             done
         done
     done
