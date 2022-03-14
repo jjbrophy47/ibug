@@ -98,7 +98,7 @@ def stdout_stderr_to_log(filename):
 
 def reset_stdout_stderr(logfile, stdout, stderr):
     """
-    Restore original stdout and stderr
+    Restore original stdout and stderr.
     """
     sys.stdout = stdout
     sys.stderr = stderr
