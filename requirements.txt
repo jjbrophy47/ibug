@@ -20,6 +20,8 @@ pgbm==1.6
 ngboost==0.3.12
 properscoring==0.1
 
+ninja==1.10.2.3
+
 # visualizers
 tqdm==4.61.2
 seaborn==0.11.1
