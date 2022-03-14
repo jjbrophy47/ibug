@@ -110,7 +110,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
 
     # base model, only tune no. iterations
     elif model_type in ['constant', 'ibug']:
-        assert tree_type in ['lgb', 'xgb', 'cb']
+        assert tree_type in ['lgb', 'xgb', 'cb', 'ngb']
 
         if tree_type == 'lgb':
             model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
@@ -120,11 +120,21 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
                                          early_stopping_rounds=n_stopping_rounds)
             best_n_estimators = model_val.best_ntree_limit
-        else:
-            assert tree_type == 'cb'
+        elif tree_type == 'cb':
             model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
                                          early_stopping_rounds=n_stopping_rounds)
             best_n_estimators = model_val.tree_count_
+
+        elif tree_type == 'ngb':
+            model_val = clone(model).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
+                                         early_stopping_rounds=n_stopping_rounds)
+            if model_val.best_val_loss_itr is None:
+                best_n_estimators = model_val.n_estimators
+            else:
+                best_n_estimators = model_val.best_val_loss_itr + 1
+
+        else:
+            raise ValueError(f'Unknown tree type {tree_type}')
 
         best_params = {'n_estimators': best_n_estimators}
 
@@ -331,6 +341,10 @@ def get_params(model_type, n_train, tree_type=None):
                       'learning_rate': [0.01, 0.1],
                       'min_data_in_leaf': [1, 20],
                       'max_bin': [255]}
+
+        elif tree_type == 'ngb':
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000]}
+
         else:
             raise ValueError('tree_type unknown: {}'.format(tree_type))
     else:
@@ -399,6 +413,12 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
                                       learning_rate=lr, max_bin=max_bin,
                                       min_data_in_leaf=min_leaf_samples, subsample=bagging_frac,
                                       random_state=random_state, logging_level='Silent')
+
+        elif tree_type == 'ngb':
+            assert scoring in ['nll', 'crps']
+            score = ngboost.scores.CRPScore if scoring == 'crps' else ngboost.scores.LogScore
+            model = ngboost.NGBRegressor(n_estimators=n_estimators, Score=score,
+                                         minibatch_frac=bagging_frac, verbose=verbose)
         else:
             raise ValueError('tree_type unknown: {}'.format(tree_type))
     else:
