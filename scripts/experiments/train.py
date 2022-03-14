@@ -57,7 +57,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         bagging_frac: float, Fraction of training instances to sample per tree.
         gridsearch: bool, If True, do gridsearch tuning.
         n_stopping_rounds: int, No. iterations to run without improved validation scoring.
-            Only used when gridsearch is False.
+            * Note: Only used when gridsearch is False.
         logger: object, Object for logging.
 
     Return tuned model and dict of best hyperparameters.
