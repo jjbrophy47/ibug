@@ -1,5 +1,5 @@
 """
-Model performance.
+Model training.
 """
 import os
 import sys
