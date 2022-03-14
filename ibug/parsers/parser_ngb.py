@@ -1,4 +1,3 @@
-import ngboost
 import numpy as np
 
 from .tree import Tree
