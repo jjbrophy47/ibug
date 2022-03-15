@@ -43,3 +43,5 @@ python3 scripts/experiments/train.py \
   --gridsearch=${gridsearch} \
   --bagging_frac=${bagging_frac} \
   --scoring=${scoring} \
+  --load_model=${load_model} \
+  --in_scoring=${in_scoring} \
