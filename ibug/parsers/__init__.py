@@ -10,6 +10,7 @@ from .parser_sk import parse_skgbm_ensemble
 from .parser_sk import parse_skrf_ensemble
 from .parser_xgb import parse_xgb_ensemble
 from .parser_ngb import parse_ngb_ensemble
+from .parser_pgb import parse_pgb_ensemble
 from .tree import TreeEnsemble
 from .util import check_input_data
 
@@ -44,6 +45,9 @@ def parse_model(model, X, y):
 
     elif 'NGBRegressor' in str(model):
         trees, params = parse_ngb_ensemble(model)
+
+    elif 'PGBMRegressor' in str(model):
+        trees, params = parse_pgb_ensemble(model)
 
     elif 'RandomForest' in str(model):
         trees, params = parse_skrf_ensemble(model)
