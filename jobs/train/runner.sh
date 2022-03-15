@@ -12,10 +12,15 @@ model_type=$2
 tree_type=$3
 gridsearch=$4
 scoring=$5
-custom_dir=$6
+load_model=$6
+in_scoring=$7
 
-if [[ ! $custom_dir ]]; then
-    custom_dir='default'
+if [[ ! $load_model ]]; then
+    load_model=0
+fi
+
+if [[ ! $in_scoring ]]; then
+    in_scoring='nll'
 fi
 
 . jobs/config.sh
@@ -36,6 +41,5 @@ python3 scripts/experiments/train.py \
   --model_type=${model_type} \
   --tree_type=${tree_type} \
   --gridsearch=${gridsearch} \
-  --custom_dir=${custom_dir} \
   --bagging_frac=${bagging_frac} \
   --scoring=${scoring} \
