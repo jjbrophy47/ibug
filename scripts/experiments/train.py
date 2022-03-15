@@ -42,7 +42,7 @@ from ibug import KNNWrapper
 
 def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
                scoring='nll', bagging_frac=1.0, gridsearch=True,
-               n_stopping_rounds=25, logger=None):
+               n_stopping_rounds=25, in_dir=None, logger=None):
     """
     Hyperparameter tuning.
 
@@ -58,115 +58,132 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         gridsearch: bool, If True, do gridsearch tuning.
         n_stopping_rounds: int, No. iterations to run without improved validation scoring.
             * Note: Only used when gridsearch is False.
+        in_dir: If not None, then load in an already trained model.
         logger: object, Object for logging.
 
     Return tuned model and dict of best hyperparameters.
     """
     start = time.time()
 
+    # base model
+    model = get_model(model_type=model_type, tree_type=tree_type, scoring=scoring, bagging_frac=bagging_frac)
+
     # result objects
     model_val = None
     tune_dict = {}
 
-    # get model and candidate parameters
-    model = get_model(model_type=model_type, tree_type=tree_type, scoring=scoring, bagging_frac=bagging_frac)
-    param_grid = get_params(model_type=model_type, tree_type=tree_type, n_train=len(X_tune))
-
-    # gridsearch
-    if model_type == 'knn' or (model_type in ['constant', 'ibug', 'pgbm'] and gridsearch):
-
+    # load in a trained model
+    if in_dir is not None:
         if logger:
-            logger.info('\nmodel: {}, param_grid: {}'.format(model_type, param_grid))
+            logger.info(f'\nloading saved validation model from {in_dir}/...')
+        result = np.load(os.path.join(in_dir, 'results.npy'), allow_pickle=True)[()]
+        model_val = util.load_model(model_type=tree_type, fp=result['saved_models']['model_val'])
+        model_test = util.load_model(model_type=tree_type, fp=result['saved_models']['model_test'])
+        tune_dict['model_val'] = model_val
+        tune_dict['model_test'] = model_test
+        tune_dict['tune_time_model'] = result['timing']['tune_model']
 
-        cv_results = []
-        best_score = None
-        best_model = None
-        best_params = None
+    # train a model from scratch
+    else:
 
-        param_dicts = list(util.product_dict(**param_grid))
-        for i, param_dict in enumerate(param_dicts):
-            temp_model = clone(model).set_params(**param_dict).fit(X_tune, y_tune)
-            y_val_hat = temp_model.predict(X_val)
-            param_dict['score'] = mean_squared_error(y_val, y_val_hat)
-            cv_results.append(param_dict)
+        # get candidate parameters
+        param_grid = get_params(model_type=model_type, tree_type=tree_type, n_train=len(X_tune))
+
+        # gridsearch
+        if model_type == 'knn' or (model_type in ['constant', 'ibug', 'pgbm'] and gridsearch):
 
             if logger:
-                logger.info(f'[{i + 1:,}/{len(param_dicts):,}] {param_dict}'
-                            f', cum. time: {time.time() - start:.3f}s')
+                logger.info('\nmodel: {}, param_grid: {}'.format(model_type, param_grid))
 
-            if best_score is None or param_dict['score'] < best_score:
-                best_score = param_dict['score']
-                best_model = temp_model
-                best_params = param_dict
+            cv_results = []
+            best_score = None
+            best_model = None
+            best_params = None
 
-        # get best params
-        df = pd.DataFrame(cv_results).sort_values('score', ascending=True)  # lower is better
-        del best_params['score']
-        if logger:
-            logger.info(f'\ngridsearch results:\n{df}')
+            param_dicts = list(util.product_dict(**param_grid))
+            for i, param_dict in enumerate(param_dicts):
+                temp_model = clone(model).set_params(**param_dict).fit(X_tune, y_tune)
+                y_val_hat = temp_model.predict(X_val)
+                param_dict['score'] = mean_squared_error(y_val, y_val_hat)
+                cv_results.append(param_dict)
 
-        assert best_model is not None
-        model_val = best_model
+                if logger:
+                    logger.info(f'[{i + 1:,}/{len(param_dicts):,}] {param_dict}'
+                                f', cum. time: {time.time() - start:.3f}s')
 
-    # base model, only tune no. iterations
-    elif model_type in ['constant', 'ibug']:
-        assert tree_type in ['lgb', 'xgb', 'cb', 'ngb', 'pgb']
+                if best_score is None or param_dict['score'] < best_score:
+                    best_score = param_dict['score']
+                    best_model = temp_model
+                    best_params = param_dict
 
-        if tree_type == 'lgb':
-            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
-                                         eval_metric='mse', early_stopping_rounds=n_stopping_rounds)
-            best_n_estimators = model_val.best_iteration_
-        elif tree_type == 'xgb':
-            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
+            # get best params
+            df = pd.DataFrame(cv_results).sort_values('score', ascending=True)  # lower is better
+            del best_params['score']
+            if logger:
+                logger.info(f'\ngridsearch results:\n{df}')
+
+            assert best_model is not None
+            model_val = best_model
+
+        # base model, only tune no. iterations
+        elif model_type in ['constant', 'ibug']:
+            assert tree_type in ['lgb', 'xgb', 'cb', 'ngboost', 'pgbm']
+
+            if tree_type == 'lgb':
+                model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
+                                             eval_metric='mse', early_stopping_rounds=n_stopping_rounds)
+                best_n_estimators = model_val.best_iteration_
+            elif tree_type == 'xgb':
+                model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
+                                             early_stopping_rounds=n_stopping_rounds)
+                best_n_estimators = model_val.best_ntree_limit
+            elif tree_type == 'cb':
+                model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
+                                             early_stopping_rounds=n_stopping_rounds)
+                best_n_estimators = model_val.tree_count_
+
+            elif tree_type == 'ngboost':
+                model_val = clone(model).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
+                                             early_stopping_rounds=n_stopping_rounds)
+                if model_val.best_val_loss_itr is None:
+                    best_n_estimators = model_val.n_estimators
+                else:
+                    best_n_estimators = model_val.best_val_loss_itr + 1
+
+            elif tree_type == 'pgbm':
+                model_val = clone(model).fit(X_tune, y_tune, eval_set=(X_val, y_val),
+                                             early_stopping_rounds=n_stopping_rounds)
+                best_n_estimators = model_val.learner_.best_iteration
+
+            else:
+                raise ValueError(f'Unknown tree type {tree_type}')
+
+            best_params = {'n_estimators': best_n_estimators}
+
+        # PGBM, only tune no. iterations
+        elif model_type == 'pgbm':
+            model_val = clone(model).fit(X_tune, y_tune, eval_set=(X_val, y_val),
                                          early_stopping_rounds=n_stopping_rounds)
-            best_n_estimators = model_val.best_ntree_limit
-        elif tree_type == 'cb':
-            model_val = clone(model).fit(X_tune, y_tune, eval_set=[(X_val, y_val)],
-                                         early_stopping_rounds=n_stopping_rounds)
-            best_n_estimators = model_val.tree_count_
+            best_n_estimators = model_val.learner_.best_iteration
+            best_params = {'n_estimators': best_n_estimators}
 
-        elif tree_type == 'ngb':
+        # NGBoost, only tune no. iterations
+        else:
+            assert model_type == 'ngboost'
             model_val = clone(model).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
                                          early_stopping_rounds=n_stopping_rounds)
             if model_val.best_val_loss_itr is None:
                 best_n_estimators = model_val.n_estimators
             else:
                 best_n_estimators = model_val.best_val_loss_itr + 1
+            best_params = {'n_estimators': best_n_estimators}
 
-        elif tree_type == 'pgb':
-            model_val = clone(model).fit(X_tune, y_tune, eval_set=(X_val, y_val),
-                                         early_stopping_rounds=n_stopping_rounds)
-            best_n_estimators = model_val.learner_.best_iteration
-
-        else:
-            raise ValueError(f'Unknown tree type {tree_type}')
-
-        best_params = {'n_estimators': best_n_estimators}
-
-    # PGBM, only tune no. iterations
-    elif model_type == 'pgbm':
-        model_val = clone(model).fit(X_tune, y_tune, eval_set=(X_val, y_val),
-                                     early_stopping_rounds=n_stopping_rounds)
-        best_n_estimators = model_val.learner_.best_iteration
-        best_params = {'n_estimators': best_n_estimators}
-
-    # NGBoost, only tune no. iterations
-    else:
-        assert model_type == 'ngboost'
-        model_val = clone(model).fit(X_tune, y_tune, X_val=X_val, Y_val=y_val,
-                                     early_stopping_rounds=n_stopping_rounds)
-        if model_val.best_val_loss_itr is None:
-            best_n_estimators = model_val.n_estimators
-        else:
-            best_n_estimators = model_val.best_val_loss_itr + 1
-        best_params = {'n_estimators': best_n_estimators}
-
-    tune_dict['model_val'] = model_val
-    tune_dict['best_params'] = best_params
-    tune_dict['tune_time_model'] = time.time() - start
-    if logger:
-        logger.info(f"\nbest params: {tune_dict['best_params']}")
-        logger.info(f"tune time (model): {tune_dict['tune_time_model']:.3f}s")
+        tune_dict['model_val'] = model_val
+        tune_dict['best_params'] = best_params
+        tune_dict['tune_time_model'] = time.time() - start
+        if logger:
+            logger.info(f"\nbest params: {tune_dict['best_params']}")
+            logger.info(f"tune time (model): {tune_dict['tune_time_model']:.3f}s")
 
     # IBUG and KNN ONLY: tune k (and min. scale)
     tune_dict['tune_time_extra'] = 0
@@ -347,10 +364,10 @@ def get_params(model_type, n_train, tree_type=None):
                       'min_data_in_leaf': [1, 20],
                       'max_bin': [255]}
 
-        elif tree_type == 'ngb':
+        elif tree_type == 'ngboost':
             params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000]}
 
-        elif tree_type == 'pgb':
+        elif tree_type == 'pgbm':
             params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],
                       'max_leaves': [15, 31, 61, 91],
                       'learning_rate': [0.01, 0.1],
@@ -426,13 +443,13 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
                                       min_data_in_leaf=min_leaf_samples, subsample=bagging_frac,
                                       random_state=random_state, logging_level='Silent')
 
-        elif tree_type == 'ngb':
+        elif tree_type == 'ngboost':
             assert scoring in ['nll', 'crps']
             score = ngboost.scores.CRPScore if scoring == 'crps' else ngboost.scores.LogScore
             model = ngboost.NGBRegressor(n_estimators=n_estimators, Score=score,
                                          minibatch_frac=bagging_frac, verbose=verbose)
 
-        elif tree_type == 'pgb':
+        elif tree_type == 'pgbm':
             import pgbm  # dynamic import (some machines cannot install pgbm)
             model = pgbm.PGBMRegressor(n_estimators=n_estimators, learning_rate=lr,
                                        max_leaves=max_leaves, max_bin=max_bin,
@@ -447,12 +464,12 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
     return model
 
 
-def experiment(args, logger, out_dir):
+def experiment(args, logger, out_dir, in_dir=None):
     """
     Main method comparing performance of tree ensembles and svm models.
     """
     begin = time.time()  # experiment timer
-    rng = np.random.default_rng(args.random_state)  # pseduo-random number generator
+    rng = np.random.default_rng(args.random_state)  # pseudo-random number generator
 
     # get data
     X_train, X_test, y_train, y_test, objective = util.get_data(args.data_dir, args.dataset, args.fold)
@@ -485,7 +502,7 @@ def experiment(args, logger, out_dir):
                            tree_type=args.tree_type, scoring=args.scoring,
                            bagging_frac=args.bagging_frac,
                            n_stopping_rounds=args.n_stopping_rounds,
-                           gridsearch=args.gridsearch, logger=logger)
+                           gridsearch=args.gridsearch, in_dir=in_dir, logger=logger)
     tune_time_model = tune_dict['tune_time_model']
     tune_time_extra = tune_dict['tune_time_extra']
     logger.info(f'\ntune time (model+extra): {time.time() - start:.3f}s')
@@ -504,25 +521,30 @@ def experiment(args, logger, out_dir):
     logger.info('\n[TEST] Training...')
     start = time.time()
 
-    assert 'best_params' in tune_dict
-    best_params = tune_dict['best_params']
-
-    model = get_model(model_type=args.model_type, tree_type=args.tree_type, scoring=args.scoring)
-
     if args.model_type in ['ibug', 'knn']:  # wrap model
         assert 'base_model' in tune_dict
         assert 'model_val_wrapper' in tune_dict
         assert 'best_params_wrapper' in tune_dict
         assert 'WrapperClass' in tune_dict
+
         base_model = tune_dict['base_model']
         model_val = tune_dict['model_val_wrapper']
         best_params_wrapper = tune_dict['best_params_wrapper']
         WrapperClass = tune_dict['WrapperClass']
 
-        base_model_test = clone(base_model).set_params(**best_params).fit(X_train, y_train)
+        if 'model_test' in tune_dict:  # loaded model
+            logger.info(f'\nloading saved test model from {in_dir}/...')
+            base_model_test = tune_dict['model_test']
+        else:
+            assert 'best_params' in tune_dict
+            best_params = tune_dict['best_params']
+            base_model_test = clone(base_model).set_params(**best_params).fit(X_train, y_train)
+
         model_test = WrapperClass(verbose=args.verbose, logger=logger).set_params(**best_params_wrapper)\
             .fit(base_model_test, X_train, y_train)
     else:
+        assert 'best_params' in tune_dict
+        best_params = tune_dict['best_params']
         model_val = tune_dict['model_val']
         model_test = clone(model_val).set_params(**best_params).fit(X_train, y_train)
 
@@ -569,6 +591,18 @@ def main(args):
     # create method identifier
     method_name = util.get_method_identifier(args.model_type, vars(args))
 
+    # load trained ngboost or pgbm model
+    if args.load_model and args.model_type == 'ibug' and args.tree_type in ['ngboost', 'pgbm']:
+        in_method_name = util.get_method_identifier(args.tree_type, vars(args))
+        in_dir = os.path.join(args.out_dir,
+                              args.custom_dir,
+                              args.dataset,
+                              args.in_scoring,
+                              f'fold{args.fold}',
+                              in_method_name)
+    else:
+        in_dir = None
+
     # define output directory
     out_dir = os.path.join(args.out_dir,
                            args.custom_dir,
@@ -590,7 +624,7 @@ def main(args):
     logfile, stdout, stderr = util.stdout_stderr_to_log(os.path.join(out_dir, 'log+.txt'))
 
     # run experiment
-    experiment(args, logger, out_dir)
+    experiment(args, logger, out_dir, in_dir=in_dir)
 
     # restore original stdout and stderr settings
     util.reset_stdout_stderr(logfile, stdout, stderr)
@@ -625,6 +659,10 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', type=int, default=2)  # ALL
     parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
     parser.add_argument('--scoring', type=str, default='nll')
+
+    # Extra settings
+    parser.add_argument('--load_model', type=int, default=0)
+    parser.add_argument('--in_scoring', type=str, default='nll')
 
     args = parser.parse_args()
     main(args)
