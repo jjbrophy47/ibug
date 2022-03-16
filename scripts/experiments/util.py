@@ -217,7 +217,6 @@ def eval_normal(y, loc, scale, nll=True, crps=False):
     Evaluate each predicted normal distribution.
 
     Input
-        X: 2d array of data.
         y: 1d array of targets
         loc: 1d array of mean values (same length as y).
         scale: 1d array of std. dev. values (same length as y).

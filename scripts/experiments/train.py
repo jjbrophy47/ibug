@@ -195,7 +195,8 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             logger.info('\nTuning k and min. scale...')
 
         start = time.time()
-        model_val_wrapper = WrapperClass(scoring=scoring, verbose=args.verbose,
+        model_val_wrapper = WrapperClass(scoring=scoring, variance_calibration=False,
+                                         verbose=args.verbose,
                                          logger=logger).fit(model_val, X_tune, y_tune,
                                                             X_val=X_val, y_val=y_val)
         best_params_wrapper = {'k': model_val_wrapper.k_,
@@ -233,14 +234,16 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
         loc: 1d array of location values.
         scale: 1d array of scale values.
         y: 1d array of target values (same shape as scale).
-        op: list, List of operations to perform to scale array.
+        ops: list, List of operations to perform to scale array.
         delta_vals: list, List of candidate delta values.
+        multipliers: list, List of values to multiply the base values by.
         scoring: str, Evaluation metric.
         verbose: int, Verbosity level.
         logger: object, Object for logging.
 
     Return
-        1d array of updated scale values.
+        - float, best delta value.
+        - str, best operation.
     """
     assert scoring in ['nll', 'crps']
     assert ops == ['add', 'mult']
@@ -540,8 +543,8 @@ def experiment(args, logger, out_dir, in_dir=None):
             best_params = tune_dict['best_params']
             base_model_test = clone(base_model).set_params(**best_params).fit(X_train, y_train)
 
-        model_test = WrapperClass(verbose=args.verbose, logger=logger).set_params(**best_params_wrapper)\
-            .fit(base_model_test, X_train, y_train)
+        model_test = WrapperClass(verbose=args.verbose, variance_calibration=False, logger=logger)\
+            .set_params(**best_params_wrapper).fit(base_model_test, X_train, y_train)
     else:
         assert 'best_params' in tune_dict
         best_params = tune_dict['best_params']
