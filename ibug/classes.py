@@ -694,7 +694,6 @@ class KNNWrapper(Estimator):
         d['min_scale'] = self.min_scale
         d['eps'] = self.eps
         d['scoring'] = self.scoring
-        d['k_params'] = self.k_params
         d['random_state'] = self.random_state
         d['verbose'] = self.verbose
         if hasattr(self, 'base_model_params_'):
@@ -730,9 +729,6 @@ class KNNWrapper(Estimator):
         # save results
         self.n_train_ = X.shape[0]
         self.y_train_ = y.copy()
-
-        # tune k
-        k_params = [k for k in self.k_params if k <= len(X)]
 
         if X_val is not None and y_val is not None:
             X_val, y_val = util.check_data(X_val, y_val, objective='regression')
