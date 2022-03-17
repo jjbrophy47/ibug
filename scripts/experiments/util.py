@@ -155,6 +155,7 @@ def load_model(model_type, fp):
 
     elif model_type == 'knn':
         model = joblib.load(f'{fp}.pkl')
+        model.variance_calibration = False  # TEMP: backwards compatibility
 
     elif model_type == 'constant':
         model = joblib.load(f'{fp}.pkl')

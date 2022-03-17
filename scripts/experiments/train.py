@@ -42,7 +42,7 @@ from ibug import KNNWrapper
 
 def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
                scoring='nll', bagging_frac=1.0, gridsearch=True,
-               n_stopping_rounds=25, in_dir=None, logger=None):
+               n_stopping_rounds=25, in_dir=None, logger=None, verbose=0, n_jobs=1):
     """
     Hyperparameter tuning.
 
@@ -60,6 +60,8 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             * Note: Only used when gridsearch is False.
         in_dir: If not None, then load in an already trained model.
         logger: object, Object for logging.
+        verbose: int, verbosity level.
+        n_jobs: int, number of jobs to run in parallel.
 
     Return tuned model and dict of best hyperparameters.
     """
@@ -196,7 +198,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
 
         start = time.time()
         model_val_wrapper = WrapperClass(scoring=scoring, variance_calibration=False,
-                                         verbose=args.verbose,
+                                         verbose=verbose, n_jobs=n_jobs,
                                          logger=logger).fit(model_val, X_tune, y_tune,
                                                             X_val=X_val, y_val=y_val)
         best_params_wrapper = {'k': model_val_wrapper.k_,
@@ -505,7 +507,8 @@ def experiment(args, logger, out_dir, in_dir=None):
                            tree_type=args.tree_type, scoring=args.scoring,
                            bagging_frac=args.bagging_frac,
                            n_stopping_rounds=args.n_stopping_rounds,
-                           gridsearch=args.gridsearch, in_dir=in_dir, logger=logger)
+                           gridsearch=args.gridsearch, in_dir=in_dir,
+                           logger=logger, verbose=args.verbose, n_jobs=args.n_jobs)
     tune_time_model = tune_dict['tune_time_model']
     tune_time_extra = tune_dict['tune_time_extra']
     logger.info(f'\ntune time (model+extra): {time.time() - start:.3f}s')
@@ -543,7 +546,8 @@ def experiment(args, logger, out_dir, in_dir=None):
             best_params = tune_dict['best_params']
             base_model_test = clone(base_model).set_params(**best_params).fit(X_train, y_train)
 
-        model_test = WrapperClass(verbose=args.verbose, variance_calibration=False, logger=logger)\
+        model_test = WrapperClass(verbose=args.verbose, variance_calibration=False,
+                                  n_jobs=args.n_jobs, logger=logger)\
             .set_params(**best_params_wrapper).fit(base_model_test, X_train, y_train)
     else:
         assert 'best_params' in tune_dict
@@ -666,6 +670,7 @@ if __name__ == '__main__':
     # Extra settings
     parser.add_argument('--load_model', type=int, default=0)
     parser.add_argument('--in_scoring', type=str, default='nll')
+    parser.add_argument('--n_jobs', type=int, default=1)
 
     args = parser.parse_args()
     main(args)

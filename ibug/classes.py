@@ -34,7 +34,7 @@ class IBUGWrapper(Estimator):
                  min_scale=1e-15,
                  eps=1e-15,
                  scoring='nll',
-                 n_jobs=1,
+                 n_jobs=-1,
                  random_state=1,
                  verbose=0,
                  logger=None):
@@ -273,11 +273,7 @@ class IBUGWrapper(Estimator):
 
         # parallelize predictions
         with joblib.Parallel(n_jobs=self.n_jobs_, max_nbytes=1e3) as parallel:
-            if self.verbose > 0:
-                if self.logger:
-                    self.logger.info(f'[IBUG - predict] no. jobs: {self.n_jobs_}')
-                else:
-                    print(f'[IBUG - predict] no. jobs: {self.n_jobs_}')
+            self._msg(s=f'[IBUG - predict] no. jobs: {self.n_jobs_}')
 
             n_done = 0
             n_remain = len(X)
@@ -302,14 +298,7 @@ class IBUGWrapper(Estimator):
                 n_remain -= n
 
                 # progress
-                if self.verbose > 0:
-                    cum_time = time.time() - start
-                    if self.logger:
-                        self.logger.info(f'[IBUG - predict] {n_done:,} / {len(X):,}, '
-                                         f'cum. time: {cum_time:.3f}s')
-                    else:
-                        print(f'[IBUG - predict] {n_done:,} / {lsen(X):,}, '
-                              f'cum. time: {cum_time:.3f}s')
+                self._msg(s=f'[IBUG - predict] {n_done:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
 
         # variance calibration
         if self.variance_calibration:
@@ -411,12 +400,7 @@ class IBUGWrapper(Estimator):
             instances[i] = np.asarray(self.leaf_mat_[leaf_idxs].sum(axis=1)).flatten() / self.n_train_  # (n_boost,)
 
             # display progress
-            if (i + 1) % 100 == 0 and self.verbose > 0:
-                cum_time = time.time() - start
-                if self.logger:
-                    self.logger.info(f'[IBUG - affinity]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
-                else:
-                    print(f'[IBUG - affinity]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+            self._msg(s=f'[IBUG - affinity]: {i + 1:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
 
         # assemble output
         result = {'mean': np.mean(instances, axis=0)}
@@ -504,29 +488,33 @@ class IBUGWrapper(Estimator):
         test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
         test_leaves[:, 1:] += self.leaf_cum_sum_[:-1]  # shape=(len(X), n_boost)
 
-        scale = np.zeros((len(X), len(k_params)), dtype=np.float32)
+        scale = np.zeros((len(X), len(k_params)), dtype=np.float32)  # shape=(len(X), n_k)
         loc = np.tile(self.model_.predict(X), len(k_params)).astype(np.float32)  # shape=(len(X), n_k)
 
-        # gather predictions
-        vals = self.y_train_
+        # parallelize predictions
+        with joblib.Parallel(n_jobs=self.n_jobs_, max_nbytes=1e3) as parallel:
+            self._msg(s=f'[IBUG - tuning] no. jobs: {self.n_jobs_}')
 
-        for i, leaf_idxs in enumerate(test_leaves):  # per test example
-            leaf_idxs = leaf_idxs[self.tree_idxs_]  # subsample trees
-            affinity = self.leaf_mat_[leaf_idxs].sum(axis=0)  # shape=(n_train,)
-            train_idxs = np.asarray(affinity.argsort())[0]  # neighbors
+            n_done = 0
+            n_remain = len(X)
 
-            for j, k in enumerate(k_params):
-                vals_knn = vals[train_idxs[-k:]]
-                scale[i, j] = np.std(vals_knn) + self.eps
+            while n_remain > 0:
+                n = min(100, n_remain)
+                res_list = parallel(joblib.delayed(_pred_dist_k)
+                                    (test_idx, test_leaves[test_idx][self.tree_idxs_], self.leaf_mat_,
+                                    self.y_train_, k_params, self.eps) for test_idx in range(n_done, n_done + n))
 
-            # progress
-            if (i + 1) % 100 == 0 and self.verbose > 0:
-                if self.logger:
-                    self.logger.info(f'[IBUG - tuning] {i + 1:,} / {len(X):,}, '
-                                     f'cum. time: {time.time() - start:.3f}s')
-                else:
-                    print(f'[IBUG - tuning] {i + 2:,} / {len(X):,}, '
-                          f'cum. time: {time.time() - start:.3f}s')
+                # synchronization barrier
+                for res in res_list:
+                    test_idx = res['test_idx']
+                    scale[test_idx] = res['scale']  # shape=(n_k,)
+
+                # update incremeters
+                n_done += n
+                n_remain -= n
+
+                # progress
+                self._msg(s=f'[IBUG - tuning] {n_done:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
 
         # evaluate
         assert scoring in ['nll', 'crps']
@@ -545,6 +533,7 @@ class IBUGWrapper(Estimator):
 
         # get min. scale
         candidate_idxs = np.where(scale_val > self.eps)[0]
+
         if len(candidate_idxs) > 0:
             min_scale = np.min(scale_val[candidate_idxs])
         else:
@@ -557,11 +546,7 @@ class IBUGWrapper(Estimator):
                 print(warn_msg)
             min_scale = self.eps
 
-        if self.verbose > 0:
-            if self.logger:
-                self.logger.info(f'\n[IBUG - tuning] k results:\n{df}')
-            else:
-                print(f'\n[IBUG - tuning] k results:\n{df}')
+        self._msg(s=f'\n[IBUG - tuning] k results:\n{df}')
 
         return best_k, min_scale, loc_val, scale_val
 
@@ -619,11 +604,7 @@ class IBUGWrapper(Estimator):
             gamma = best_val
             delta = 0.0
 
-        if self.verbose > 0:
-            if self.logger:
-                self.logger.info(f'\ndelta gridsearch:\n{df}')
-            else:
-                print(f'\ndelta gridsearch:\n{df}')
+        self._msg(s=f'\ndelta gridsearch:\n{df}')
 
         return gamma, delta
 
@@ -676,6 +657,19 @@ class IBUGWrapper(Estimator):
             raise ValueError(f'Unknown scoring {scoring}')
 
         return result
+
+    def _msg(self, s):
+        """
+        Print or log message based on verbosity.
+
+        Input
+            s: str, message to log or display.
+        """
+        if self.verbose > 0:
+            if self.logger:
+                self.logger.info(s)
+            else:
+                print(s)
 
 
 class KNNWrapper(Estimator):
@@ -1062,6 +1056,40 @@ def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_knei
     if return_kneighbors:
         result['train_idxs'] = train_idxs
         result['train_vals'] = train_vals
+
+    return result
+
+
+def _pred_dist_k(test_idx, leaf_idxs, leaf_mat, y_train, k_params, epsilon):
+    """
+    Compute affinity, variance, and nearest neighbor for the given test instance.
+
+    Input
+        test_idx: int, index of the test instance.
+        leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
+        leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
+        y_train: np.ndarray, 1d array of train targets, shape=(n_train,).
+        k_params: list, list of candidate k values to evaluate.
+        epsilon: float, value added to variance estimate to prevent 0 variance.
+
+    Return
+        - Dict, including:
+            * 'test_index': test index.
+            * 'scale': variance estimate (uncalibrated), shape=(len(k_params),).
+    """
+
+    # result object
+    scale = np.zeros(len(k_params), dtype=np.float32)  # shape=(len(k_params),)
+
+    # compute variance for each k
+    affinity = leaf_mat[leaf_idxs].sum(axis=0)  # shape=(n_train,)
+    train_idxs = np.asarray(affinity.argsort())[0]  # sorted neighbors, shape=(n_train,)
+    for j, k in enumerate(k_params):
+        train_vals = y_train[train_idxs[-k:]]
+        scale[j] = np.std(train_vals) + epsilon
+
+    # compile result
+    result = {'test_idx': test_idx, 'scale': scale}
 
     return result
 

@@ -24,7 +24,11 @@ for f in ${fold_list[@]}; do
     done
 done
 
-sbatch -a 11 -c 7 -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run 20 'ibug' 'lgb' 'nll' 'nll' 0 'default' 1.0 'random' -1
+sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 2  'ibug' 'lgb' $s $s $td
+sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 18 'ibug' 'lgb' $s $s $td
+sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 19 'ibug' 'lgb' $s $s $td
+sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 20 'ibug' 'lgb' $s $s $td
+sbatch -a 20 -c 4 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 13 'ibug' 'lgb' $s $s $td
 
 
 # Tree subsampling
