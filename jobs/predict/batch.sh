@@ -24,6 +24,8 @@ for f in ${fold_list[@]}; do
     done
 done
 
+sbatch -a 11 -c 7 -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run 20 'ibug' 'lgb' 'nll' 'nll' 0 'default' 1.0 'random' -1
+
 
 # Tree subsampling
 tree_subsample_order_list=('random' 'ascending' 'descending')

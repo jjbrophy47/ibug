@@ -16,6 +16,7 @@ tune_delta=$6
 custom_out_dir=$7
 tree_subsample_frac=$8
 tree_subsample_order=$9
+n_jobs=${10}
 
 if [[ ! $out_scoring ]]; then
     out_scoring=${in_scoring}
@@ -33,6 +34,10 @@ if [[ ! $tree_subsample_order ]]; then
     tree_subsample_order='random'
 fi
 
+if [[ ! $n_jobs ]]; then
+    n_jobs=1
+fi
+
 . jobs/config.sh
 
 dataset=${datasets[${SLURM_ARRAY_TASK_ID}]}
@@ -48,4 +53,5 @@ python3 scripts/experiments/predict.py \
   --custom_out_dir=${custom_out_dir} \
   --tree_subsample_frac=${tree_subsample_frac} \
   --tree_subsample_order=${tree_subsample_order} \
+  --n_jobs=${n_jobs} \
 
