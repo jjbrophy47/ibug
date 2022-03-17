@@ -392,15 +392,33 @@ class IBUGWrapper(Estimator):
         test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
         test_leaves[:, 1:] += self.leaf_cum_sum_[:-1]  # shape=(n_test, n_boost)
 
-        # result objects
+        # result object
         instances = np.zeros((len(X), len(self.tree_idxs_)), dtype=np.float32)  # shape=(n_test, n_boost)
 
-        for i, leaf_idxs in enumerate(test_leaves):  # per test example
-            leaf_idxs = leaf_idxs[self.tree_idxs_]  # subsample trees
-            instances[i] = np.asarray(self.leaf_mat_[leaf_idxs].sum(axis=1)).flatten() / self.n_train_  # (n_boost,)
+        # parallelize affinities
+        with joblib.Parallel(n_jobs=self.n_jobs_, max_nbytes=1e3) as parallel:
+            self._msg(s=f'[IBUG - affinity] no. jobs: {self.n_jobs_}')
 
-            # display progress
-            self._msg(s=f'[IBUG - affinity]: {i + 1:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
+            n_done = 0
+            n_remain = len(X)
+
+            while n_remain > 0:
+                n = min(100, n_remain)
+                res_list = parallel(joblib.delayed(_affinity)
+                                    (test_idx, test_leaves[test_idx][self.tree_idxs_], self.leaf_mat_,
+                                    self.n_train_) for test_idx in range(n_done, n_done + n))
+
+                # synchronization barrier
+                for res in res_list:
+                    test_idx = res['test_idx']
+                    instances[test_idx] = res['instance']  # shape=(n_boost,)
+
+                # update incremeters
+                n_done += n
+                n_remain -= n
+
+                # progress
+                self._msg(s=f'[IBUG - affinity] {n_done:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
 
         # assemble output
         result = {'mean': np.mean(instances, axis=0)}
@@ -1091,6 +1109,26 @@ def _pred_dist_k(test_idx, leaf_idxs, leaf_mat, y_train, k_params, epsilon):
     # compile result
     result = {'test_idx': test_idx, 'scale': scale}
 
+    return result
+
+
+def _affinity(test_idx, leaf_idxs, leaf_mat, n_train):
+    """
+    Compute affinity for the given test instance.
+
+    Input
+        test_idx: int, index of the test instance.
+        leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
+        leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
+        n_train: int, number of training examples.
+
+    Return
+        - Dict, including:
+            * 'test_index': int, test index.
+            * 'instance': np.ndarray, 1d array of number of training instances per tree, shape=(n_boost,).
+    """
+    instance = np.asarray(leaf_mat[leaf_idxs].sum(axis=1)).flatten() / n_train  # (n_boost,)
+    result = {'test_idx': test_idx, 'instance': instance}
     return result
 
 
