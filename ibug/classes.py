@@ -472,8 +472,8 @@ class IBUGWrapper(Estimator):
             - 1d array of cumulative leaf counts of shape=(n_boost,).
         """
         leaf_counts = self.model_.get_leaf_counts().squeeze()  # shape=(n_boost,)
-        leaf_cum_sum = np.cumsum(leaf_counts)
-        total_num_leaves = np.sum(leaf_counts)
+        leaf_cum_sum = np.cumsum(leaf_counts)  # shape=(n_boost,)
+        total_num_leaves = np.sum(leaf_counts)  # scalar
 
         train_leaves = self.model_.apply(X).squeeze()  # shape=(len(X), n_boost)
         train_leaves[:, 1:] += leaf_cum_sum[:-1]  # shape=(len(X), n_boost)
@@ -705,6 +705,7 @@ class KNNWrapper(Estimator):
                  scoring='nll',
                  min_scale=1e-15,
                  eps=1e-15,
+                 n_jobs=1,
                  random_state=1,
                  verbose=0,
                  logger=None):
@@ -720,6 +721,7 @@ class KNNWrapper(Estimator):
             scoring: str, metric to score probabilistic forecasts.
             rho: float, Minimum scale value.
             eps: float, Addendum to scale value.
+            n_jobs: int, Number of jobs to run in parallel.
             random_state: int, Seed for random number generation to enhance reproducibility.
             verbose: int, verbosity level.
             logger: object, If not None, output to logger.
@@ -731,6 +733,7 @@ class KNNWrapper(Estimator):
         assert scoring in ['nll', 'crps']
         assert min_scale > 0
         assert eps > 0
+        assert n_jobs == 1, 'parallelization not implemented!'
         assert isinstance(random_state, int) and random_state > 0
 
         self.k = k
@@ -740,6 +743,7 @@ class KNNWrapper(Estimator):
         self.min_scale = min_scale
         self.eps = eps
         self.scoring = scoring
+        self.n_jobs = n_jobs
         self.random_state = random_state
         self.verbose = verbose
         self.logger = logger
@@ -756,6 +760,7 @@ class KNNWrapper(Estimator):
         d['min_scale'] = self.min_scale
         d['eps'] = self.eps
         d['scoring'] = self.scoring
+        d['n_jobs'] = self.n_jobs
         d['random_state'] = self.random_state
         d['verbose'] = self.verbose
         if hasattr(self, 'base_model_params_'):

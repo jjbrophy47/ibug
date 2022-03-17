@@ -14,6 +14,7 @@ gridsearch=$4
 scoring=$5
 load_model=$6
 in_scoring=$7
+n_jobs=$8
 
 if [[ ! $load_model ]]; then
     load_model=0
@@ -21,6 +22,10 @@ fi
 
 if [[ ! $in_scoring ]]; then
     in_scoring='nll'
+fi
+
+if [[ ! $n_jobs ]]; then
+    n_jobs=1
 fi
 
 . jobs/config.sh
@@ -45,3 +50,4 @@ python3 scripts/experiments/train.py \
   --scoring=${scoring} \
   --load_model=${load_model} \
   --in_scoring=${in_scoring} \
+  --n_jobs=${n_jobs} \
