@@ -1,4 +1,3 @@
-import sys
 import time
 import joblib
 
@@ -122,18 +121,6 @@ class IBUGWrapper(Estimator):
         del model_dict['trees_arr_dict']
         self.model_ = TreeEnsemble(**model_dict)
 
-        # TEMP: make backwards compatibile with older versions of IBUG
-        if 'variance_calibration' not in state_dict:
-            self.variance_calibration = False
-            self.gamma = 1.0
-            self.delta = 0.0
-            self.gamma_ = self.gamma
-            self.delta_ = self.delta
-
-        if 'n_jobs' not in state_dict:
-            self.n_jobs = 1
-            self.n_jobs_ = self.n_jobs
-
         return self
 
     def get_params(self):
@@ -193,13 +180,6 @@ class IBUGWrapper(Estimator):
         if self.affinity == 'weighted':
             self.model_.update_node_count(X)
             self.leaf_weights_ = self.model_.get_leaf_weights(scale=1.0)
-
-        # select no. processes to run in parallel
-        if self.n_jobs == -1:
-            self.n_jobs_ = joblib.cpu_count()
-        else:
-            assert self.n_jobs >= 1
-            self.n_jobs_ = min(self.n_jobs, joblib.cpu_count())
 
         # build leaf matrix
         self.leaf_mat_, self.leaf_counts_, self.leaf_cum_sum_ = self._build_leaf_matrix(X)
@@ -271,47 +251,31 @@ class IBUGWrapper(Estimator):
             neighbor_idxs = np.zeros((len(X), self.k_), dtype=np.int32)  # shape=(len(X), k)
             neighbor_vals = np.zeros((len(X), self.k_), dtype=np.float32)  # shape=(len(X), k)
 
-        # parallelize predictions
-        with joblib.Parallel(n_jobs=self.n_jobs_, max_nbytes=1e3) as parallel:
-            if self.verbose > 0:
+        for i, leaf_idxs in enumerate(test_leaves):  # per test example
+            leaf_idxs = leaf_idxs[self.tree_idxs_]  # subsample trees
+            affinity = self.leaf_mat_[leaf_idxs].sum(axis=0)  # shape=(n_train,)
+            train_idxs = np.asarray(affinity.argsort())[0][-self.k_:]  # k neighbors
+            train_vals = self.y_train_[train_idxs]
+
+            # add to result
+            scale[i] = np.std(train_vals)
+            if scale[i] <= self.min_scale_:  # handle extremely small scale values
+                scale[i] = self.min_scale_
+            if return_kneighbors:
+                neighbor_idxs[i, :] = train_idxs
+                neighbor_vals[i, :] = train_vals
+
+            # display progress
+            if (i + 1) % 100 == 0 and self.verbose > 0:
+                cum_time = time.time() - start
                 if self.logger:
-                    self.logger.info(f'[IBUG - predict] no. jobs: {self.n_jobs_}')
+                    self.logger.info(f'[IBUG - predict]: {i + 1:,} / {len(X):,}, '
+                                     f'cum. time: {cum_time:.3f}s')
                 else:
-                    print(f'[IBUG - predict] no. jobs: {self.n_jobs_}')
+                    print(f'[IBUG - predict]: {i + 1:,} / {len(X):,}, '
+                          f'cum. time: {cum_time:.3f}s')
 
-            n_done = 0
-            n_remain = len(X)
-
-            while n_remain > 0:
-                n = min(100, n_remain)
-                res_list = parallel(joblib.delayed(_pred_dist)
-                                    (test_idx, test_leaves[test_idx][self.tree_idxs_],
-                                    self.leaf_mat_, self.y_train_, self.k_, self.min_scale_,
-                                    return_kneighbors) for test_idx in range(n_done, n_done + n))
-
-                # synchronization barrier
-                for res in res_list:
-                    test_idx = res['test_idx']
-                    scale[test_idx] = res['scale']
-                    if return_kneighbors:
-                        neighbor_idxs[test_idx, :] = res['train_idxs']
-                        neighbor_vals[test_idx, :] = res['train_vals']
-
-                # update incremeters
-                n_done += n
-                n_remain -= n
-
-                # progress
-                if self.verbose > 0:
-                    cum_time = time.time() - start
-                    if self.logger:
-                        self.logger.info(f'[IBUG - predict] {n_done:,} / {len(X):,}, '
-                                         f'cum. time: {cum_time:.3f}s')
-                    else:
-                        print(f'[IBUG - predict] {n_done:,} / {lsen(X):,}, '
-                              f'cum. time: {cum_time:.3f}s')
-
-        # variance calibration
+        # variance valibration
         if self.variance_calibration:
             scale = scale * self.gamma_ + self.delta_
 
@@ -369,20 +333,6 @@ class IBUGWrapper(Estimator):
             self.sample_idxs_ = self.rng_.choice(self.n_train_, size=n_sample, replace=False)
         else:
             self.sample_idxs_ = np.arange(self.n_train_)
-
-    def set_n_jobs(self, n_jobs):
-        """
-        Select number of processes to run in parallel.
-
-        Input
-            n_jobs: int, number of jobs to run in parallel.
-                Note: if -1, use all available CPUs.
-        """
-        if n_jobs == -1:
-            self.n_jobs_ = joblib.cpu_count()
-        else:
-            assert n_jobs >= 1
-            self.n_jobs_ = min(n_jobs, joblib.cpu_count())
 
     def get_affinity_stats(self, X):
         """
@@ -1029,41 +979,6 @@ class KNNWrapper(Estimator):
             raise ValueError(f'Unknown scoring {scoring}')
 
         return result
-
-
-# parallelizable methods
-def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_kneighbors):
-    """
-    Compute affinity, variance, and nearest neighbor for the given test instance.
-
-    Input
-        test_idx: int, index of the test instance.
-        leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
-        leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
-        y_train: np.ndarray, 1d array of train targets, shape=(n_train,).
-        k: int, number of nearest neighbors to retrieve.
-        min_scale: float, minimum variance threshold.
-        return_kneigbors: bool, if True, return neighbor indices and target values.
-
-    Return
-        - Dict, including:
-            * 'test_index': test index.
-            * 'scale': variance estimate (uncalibrated).
-            * 'train_idxs': neighbor indices (if return_kneighbors==True).
-            * 'train_vals': neighbor values (if return_kneighbors==True).
-    """
-    affinity = leaf_mat[leaf_idxs].sum(axis=0)  # shape=(n_train,)
-    train_idxs = np.asarray(affinity.argsort())[0][-k:]  # k neighbors
-    train_vals = y_train[train_idxs]
-    scale = max(np.std(train_vals), min_scale)
-
-    # compile result
-    result = {'test_idx': test_idx, 'scale': scale}
-    if return_kneighbors:
-        result['train_idxs'] = train_idxs
-        result['train_vals'] = train_vals
-
-    return result
 
 
 # utility methods

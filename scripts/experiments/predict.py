@@ -147,6 +147,8 @@ def experiment(args, in_dir, out_dir, logger):
 
     # additional settings
     if args.model_type == 'ibug':
+        model_val.set_n_jobs(n_jobs=args.n_jobs)
+        model_test.set_n_jobs(n_jobs=args.n_jobs)
         model_test.set_tree_subsampling(frac=args.tree_subsample_frac, order=args.tree_subsample_order)
         model_test.set_instance_subsampling(frac=args.instance_subsample_frac)
 
@@ -393,6 +395,9 @@ if __name__ == '__main__':
     parser.add_argument('--distribution', type=str, nargs='+',
                         default=['normal', 'skewnormal', 'lognormal', 'laplace',
                                  'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])
+
+    # Extra settings
+    parser.add_argument('--n_jobs', type=int, default=1)
 
     args = parser.parse_args()
     main(args)
