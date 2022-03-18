@@ -3,7 +3,7 @@ IBUG: Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Tree
 [![PyPi version](https://img.shields.io/pypi/v/ibug)](https://pypi.org/project/ibug/)
 [![Python version](https://img.shields.io/badge/python-3.9%20%7C%203.10-blue)](https://pypi.org/project/ibug/)
 [![Github License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/jjbrophy47/ibug/blob/master/LICENSE)
-[![Build](https://github.com/jjbrophy47/ibug/actions/workflows/wheels.yml/badge.svg?branch=v0.0.4)](https://github.com/jjbrophy47/ibug/actions/workflows/wheels.yml)
+[![Build](https://github.com/jjbrophy47/ibug/actions/workflows/wheels.yml/badge.svg?branch=v0.0.5)](https://github.com/jjbrophy47/ibug/actions/workflows/wheels.yml)
 
 **IBUG** is a simple wrapper that extends *any* gradient-boosted regression trees (GBRT) model into a probabilistic estimator, and is compatible with all major GBRT frameworks including LightGBM, XGBoost, CatBoost, and SKLearn.
 
@@ -44,8 +44,8 @@ prob_model = IBUGWrapper().fit(model, X_train, y_train, X_val=X_val, y_val=y_val
 # predict mean and variance for unseen instances
 location, scale = prob_model.pred_dist(X_test)
 
-# return k highest-affinity neighbors for more flexible modeling
-location, scale, (train_idxs, train_vals) = prob_model.pred_dist(X_test, return_kneighbors=True)
+# return k highest-affinity neighbors for more flexible posterior modeling
+location, scale, train_idxs, train_vals = prob_model.pred_dist(X_test, return_kneighbors=True)
 ```
 
 License
