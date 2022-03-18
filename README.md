@@ -5,7 +5,11 @@ IBUG: Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Tree
 [![Github License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/jjbrophy47/ibug/blob/master/LICENSE)
 [![Build](https://github.com/jjbrophy47/ibug/actions/workflows/wheels.yml/badge.svg?branch=v0.0.4)](https://github.com/jjbrophy47/ibug/actions/workflows/wheels.yml)
 
-**ibug** is a simple wrapper that extends *any* gradient-boosted regression trees (GBRT) model into a probabilistic estimator, and is compatible with all major GBRT frameworks including LightGBM, XGBoost, CatBoost, and SKLearn.
+**IBUG** is a simple wrapper that extends *any* gradient-boosted regression trees (GBRT) model into a probabilistic estimator, and is compatible with all major GBRT frameworks including LightGBM, XGBoost, CatBoost, and SKLearn.
+
+<p align="center">
+	<img align="center" src="images/thumbnail.png" alt="thumbnail">
+</p>
 
 Install
 ---
@@ -14,17 +18,34 @@ Install
 pip install ibug
 ```
 
-Experiment
+Quickstart
 ---
 
-#### Download a Dataset
-1. Follow the instructions in the readme for a dataset in `data/`.
+```python
+from ibug import IBUGWrapper
+from lightgbm import LGBMRegressor
+from sklearn.datasets import load_diabetes
+from sklearn.model_selection import train_test_split
 
-#### Quantify Prediction Uncertainy with LightGBM + IBUG
+# load diabetes dataset
+data = load_diabetes()
+X, y = data['data'], data['target']
 
-```
-python3 scripts/experiments/train.py --tree_type lgb
-python3 scripts/experiments/predict.py --tree_type lgb
+# create train/val/test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=1)
+X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, random_state=1)
+
+# train GBRT model
+model = LGBMRegressor().fit(X_train, y_train)
+
+# extend GBRT model into a probabilistic estimator
+prob_model = IBUGWrapper().fit(model, X_train, y_train, X_val=X_val, y_val=y_val)
+
+# predict mean and variance for unseen instances
+location, scale = prob_model.pred_dist(X_test)
+
+# return k highest-affinity neighbors for more flexible modeling
+location, scale, (train_idxs, train_vals) = prob_model.pred_dist(X_test, return_kneighbors=True)
 ```
 
 License
