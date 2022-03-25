@@ -5,6 +5,10 @@ s='nll'
 p='short'
 l='long'
 td=0
+co='default'
+tf=1.0
+to='random'
+nj=-1
 fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
 tree_list=('lgb' 'xgb' 'cb')
 
@@ -24,11 +28,14 @@ for f in ${fold_list[@]}; do
     done
 done
 
-sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 2  'ibug' 'lgb' $s $s $td
-sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 18 'ibug' 'lgb' $s $s $td
-sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 19 'ibug' 'lgb' $s $s $td
-sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 20 'ibug' 'lgb' $s $s $td
-sbatch -a 20 -c 4 -t 4320 -p 'long' -o ${o}'ibug-%a.out' $run 13 'ibug' 'lgb' $s $s $td
+# scratch pad
+fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
+tree_list=('ngboost' 'pgbm')
+for f in ${fold_list[@]}; do
+    for tree in ${tree_list[@]}; do
+        sbatch -a 1-22 -c 7 -t 1440 -p $p -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $co $tf $to $nj
+    done
+done
 
 
 # Tree subsampling

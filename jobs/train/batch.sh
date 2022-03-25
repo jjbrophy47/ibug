@@ -28,7 +28,7 @@ for f in ${fold_list[@]}; do
 done
 
 # scratch pad
+fold_list=(13)
 for f in ${fold_list[@]}; do
-    sbatch -a 1-22 -c 10 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' 'ngboost' $g $s 1 $s    -1
-    sbatch -a 1-22 -c 10 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' 'pgbm'    $g $s 1 'nll' -1
+    sbatch -a 14 -c 10 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' 'ngboost' $g 'nll' 1 'nll' -1
 done

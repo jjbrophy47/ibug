@@ -39,6 +39,8 @@ import util
 from ibug import IBUGWrapper
 from ibug import KNNWrapper
 
+MIN_NUM_TREES = 2
+
 
 def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
                scoring='nll', bagging_frac=1.0, gridsearch=True,
@@ -160,6 +162,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             else:
                 raise ValueError(f'Unknown tree type {tree_type}')
 
+            best_n_estimators = max(best_n_estimators, MIN_NUM_TREES)
             best_params = {'n_estimators': best_n_estimators}
 
         # PGBM, only tune no. iterations
@@ -167,6 +170,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             model_val = clone(model).fit(X_tune, y_tune, eval_set=(X_val, y_val),
                                          early_stopping_rounds=n_stopping_rounds)
             best_n_estimators = model_val.learner_.best_iteration
+            best_n_estimators = max(best_n_estimators, MIN_NUM_TREES)
             best_params = {'n_estimators': best_n_estimators}
 
         # NGBoost, only tune no. iterations
@@ -178,6 +182,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
                 best_n_estimators = model_val.n_estimators
             else:
                 best_n_estimators = model_val.best_val_loss_itr + 1
+            best_n_estimators = max(best_n_estimators, MIN_NUM_TREES)
             best_params = {'n_estimators': best_n_estimators}
 
         tune_dict['model_val'] = model_val
