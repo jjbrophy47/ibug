@@ -54,6 +54,7 @@ License
 
 Paper
 ---
+Brophy and Lowd. [Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Trees](https://arxiv.org/abs/2205.11412). arXiv 2022.
 
 ```
 @article{brophy2021machine,
