@@ -52,9 +52,14 @@ License
 ---
 [Apache License 2.0](https://github.com/jjbrophy47/ibug/blob/master/LICENSE).
 
-<!--Reference
+Paper
 ---
-Brophy and Lowd. [Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Trees](). arXiv 2022.
 
 ```
-```-->
+@article{brophy2021machine,
+  title={Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Trees},
+  author={Brophy, Jonathan and Lowd, Daniel},
+  journal={arXiv preprint arXiv:2205.11412},
+  year={2022},
+}
+```
