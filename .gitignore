@@ -2,6 +2,8 @@
 **.h
 **.c
 **.so
+**.vscode
+**.DS_Store
 __pycache__
 catboost_info
 
@@ -9,9 +11,9 @@ setup_pypi
 
 notes
 temp*
-
 output
 results
+videos
 
 /data/**/*.npy
 /data/**/*.arff
@@ -25,4 +27,6 @@ results
 /data/**/*.R
 /data/**/*.ods
 /data/**/*.xlsx
+/data/power/CCPP
+/data/naval/UCI\ CBM\ Dataset
 /data/meps/get_meps_data/

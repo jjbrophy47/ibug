@@ -16,18 +16,71 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
 from scipy import stats
 from ngboost import NGBRegressor
+from catboost import CatBoostRegressor
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
 sys.path.insert(0, here + '/../../')  # for ibug
 from ibug import IBUGWrapper
-from ibug import KNNWrapper
 
 # constants
 dtype_t = np.float64
 
 
 # public
+class CatBoostRMSEUncertaintyWrapper:
+    """
+    Wrapper for CatBoostRegressor RMSEWithUncertainty model.
+    """
+    def __init__(self, **kwargs):
+        """
+        Initialize wrapper with Catboost arguments.
+        """
+        self.model = CatBoostRegressor(**kwargs)
+    
+    def fit(self, X, y):
+        """
+        Fit model.
+        """
+        self.model.fit(X, y)
+        return self
+    
+    def predict(self, X):
+        """
+        Point predictions.
+
+        Return
+        ------
+            preds : ndarray, 1d array of shape=(X.shape[0],).
+        """
+        return self.model.predict(X)[:, 0]
+    
+    def pred_dist(self, X):
+        """
+        Mean and standard deviation of predictions.
+
+        Return
+        ------
+            preds : tuple, 2 1d arrays of shape=(X.shape[0],).
+        """
+        preds = self.model.predict(X)
+        loc, scale = preds[:, 0], np.sqrt(preds[:, 1])
+        return loc, scale
+    
+    def get_params(self, deep=False):
+        """
+        Get parameters of model.
+        """
+        return self.model.get_params()
+    
+    def set_params(self, **kwargs):
+        """
+        Set parameters of model.
+        """
+        self.model.set_params(**kwargs)
+        return self
+
+
 def get_logger(filename=''):
     """
     Return a logger object to easily save textual output.
@@ -123,6 +176,15 @@ def save_model(model, model_type, fp):
     elif model_type == 'knn':
         joblib.dump(model, f'{fp}.pkl')
 
+    elif model_type == 'knn_fi':
+        joblib.dump(model, f'{fp}.pkl')
+    
+    elif model_type == 'bart':
+        joblib.dump(model, f'{fp}.pkl')
+
+    elif model_type == 'cbu':
+        joblib.dump(model, f'{fp}.pkl')
+
     elif model_type == 'constant':
         joblib.dump(model, f'{fp}.pkl')
 
@@ -156,6 +218,15 @@ def load_model(model_type, fp):
     elif model_type == 'knn':
         model = joblib.load(f'{fp}.pkl')
         model.variance_calibration = False  # TEMP: backwards compatibility
+
+    elif model_type == 'knn_fi':
+        model = joblib.load(f'{fp}.pkl')
+    
+    elif model_type == 'bart':
+        model = joblib.load(f'{fp}.pkl')
+
+    elif model_type == 'cbu':
+        model = joblib.load(f'{fp}.pkl')
 
     elif model_type == 'constant':
         model = joblib.load(f'{fp}.pkl')

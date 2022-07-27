@@ -8,6 +8,7 @@ import properscoring as ps
 from sklearn.base import clone
 from scipy.stats import norm
 from scipy.sparse import csr_matrix
+from sklearn.neighbors import KNeighborsRegressor
 
 from .base import Estimator
 from .parsers import util
@@ -777,7 +778,7 @@ class KNNWrapper(Estimator):
 
     def fit(self, model, X, y, X_val=None, y_val=None):
         """
-        - Compute leaf IDs for each x in X.
+        - Fit KNN uncertainty estimator.
 
         Input
             model: KNN regressor.
@@ -1048,6 +1049,465 @@ class KNNWrapper(Estimator):
         return result
 
 
+# # parallelizable methods
+# def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_kneighbors):
+#     """
+#     Compute affinity, variance, and nearest neighbor for the given test instance.
+
+#     Input
+#         test_idx: int, index of the test instance.
+#         leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
+#         leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
+#         y_train: np.ndarray, 1d array of train targets, shape=(n_train,).
+#         k: int, number of nearest neighbors to retrieve.
+#         min_scale: float, minimum variance threshold.
+#         return_kneigbors: bool, if True, return neighbor indices and target values.
+
+#     Return
+#         - Dict, including:
+#             * 'test_index': test index.
+#             * 'scale': variance estimate (uncalibrated).
+#             * 'train_idxs': neighbor indices (if return_kneighbors==True).
+#             * 'train_vals': neighbor values (if return_kneighbors==True).
+#     """
+#     affinity = leaf_mat[leaf_idxs].sum(axis=0)  # shape=(n_train,)
+#     train_idxs = np.asarray(affinity.argsort())[0][-k:]  # k neighbors
+#     train_vals = y_train[train_idxs]
+#     scale = max(np.std(train_vals), min_scale)
+
+#     # compile result
+#     result = {'test_idx': test_idx, 'scale': scale}
+#     if return_kneighbors:
+#         result['train_idxs'] = train_idxs
+#         result['train_vals'] = train_vals
+
+#     return result
+
+
+# def _pred_dist_k(test_idx, leaf_idxs, leaf_mat, y_train, k_params, epsilon):
+#     """
+#     Compute affinity, variance, and nearest neighbor for the given test instance.
+
+#     Input
+#         test_idx: int, index of the test instance.
+#         leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
+#         leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
+#         y_train: np.ndarray, 1d array of train targets, shape=(n_train,).
+#         k_params: list, list of candidate k values to evaluate.
+#         epsilon: float, value added to variance estimate to prevent 0 variance.
+
+#     Return
+#         - Dict, including:
+#             * 'test_index': test index.
+#             * 'scale': variance estimate (uncalibrated), shape=(len(k_params),).
+#     """
+
+#     # result object
+#     scale = np.zeros(len(k_params), dtype=np.float32)  # shape=(len(k_params),)
+
+#     # compute variance for each k
+#     affinity = leaf_mat[leaf_idxs].sum(axis=0)  # shape=(n_train,)
+#     train_idxs = np.asarray(affinity.argsort())[0]  # sorted neighbors, shape=(n_train,)
+#     for j, k in enumerate(k_params):
+#         train_vals = y_train[train_idxs[-k:]]
+#         scale[j] = np.std(train_vals) + epsilon
+
+#     # compile result
+#     result = {'test_idx': test_idx, 'scale': scale}
+
+#     return result
+
+
+# def _affinity(test_idx, leaf_idxs, leaf_mat, n_train):
+#     """
+#     Compute affinity for the given test instance.
+
+#     Input
+#         test_idx: int, index of the test instance.
+#         leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
+#         leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
+#         n_train: int, number of training examples.
+
+#     Return
+#         - Dict, including:
+#             * 'test_index': int, test index.
+#             * 'instance': np.ndarray, 1d array of number of training instances per tree, shape=(n_boost,).
+#     """
+#     instance = np.asarray(leaf_mat[leaf_idxs].sum(axis=1)).flatten() / n_train  # (n_boost,)
+#     result = {'test_idx': test_idx, 'instance': instance}
+#     return result
+
+
+class KNNFIWrapper(Estimator):
+    """
+    K-Nearest neigbors regressor with feature importance and uncertainty estimation.
+        Wrapper around a KNN regressor model enabling probabilistic forecasting
+        by modeling the output distribution of the k-nearest neighbors to a
+        given test example using the most important features based on
+        a given GBRT model.
+    """
+    def __init__(self,
+                 k=100,
+                 gamma=1.0,
+                 delta=0.0,
+                 variance_calibration=True,
+                 scoring='nll',
+                 min_scale=1e-15,
+                 eps=1e-15,
+                 n_jobs=1,
+                 random_state=1,
+                 verbose=0,
+                 logger=None):
+        """
+        Input
+            k: int, no. neighbors to consider for uncertainty estimation.
+            gamma: float, scale value applied to all variance estimates. '1.0' means no transformation.
+            delta: float, value added to all variance estimates. '0.0' means no transformation.
+            variance_calibration: bool, If True, tune variance valibration parameters gamma and delta.
+                Note: Only tunes when X_val and y_val are supplied in the 'fit' method.
+            tree_frac: float, Fraction of trees to use for the affinity computation
+            loc_type: str, prediction should come from original tree or mean of neighbors.
+            scoring: str, metric to score probabilistic forecasts.
+            rho: float, Minimum scale value.
+            eps: float, Addendum to scale value.
+            n_jobs: int, Number of jobs to run in parallel.
+            random_state: int, Seed for random number generation to enhance reproducibility.
+            verbose: int, verbosity level.
+            logger: object, If not None, output to logger.
+        """
+        assert k > 0
+        assert gamma > 0.0
+        assert delta >= 0.0
+        assert variance_calibration in [True, False]
+        assert scoring in ['nll', 'crps']
+        assert min_scale > 0
+        assert eps > 0
+        assert n_jobs == 1, 'parallelization not implemented!'
+        assert isinstance(random_state, int) and random_state > 0
+
+        self.k = k
+        self.gamma = gamma
+        self.delta = delta
+        self.variance_calibration = variance_calibration
+        self.min_scale = min_scale
+        self.eps = eps
+        self.scoring = scoring
+        self.n_jobs = n_jobs
+        self.random_state = random_state
+        self.verbose = verbose
+        self.logger = logger
+
+    def get_params(self):
+        """
+        Return a dict of parameter values.
+        """
+        d = {}
+        d['k'] = self.k
+        d['gamma'] = self.gamma
+        d['delta'] = self.delta
+        d['variance_calibration'] = self.variance_calibration
+        d['min_scale'] = self.min_scale
+        d['eps'] = self.eps
+        d['scoring'] = self.scoring
+        d['n_jobs'] = self.n_jobs
+        d['random_state'] = self.random_state
+        d['verbose'] = self.verbose
+        if hasattr(self, 'base_model_params_'):
+            d['base_model_params_'] = self.model_.get_params()
+        return d
+
+    def set_params(self, **params):
+        """
+        Set the parameters of this model.
+        """
+        for key, value in params.items():
+            setattr(self, key, value)
+        return self
+
+    def fit(self, model, X, y, X_val=None, y_val=None):
+        """
+        - Fit KNN uncertainty estimator weighted by
+          feature importance from the given GBRT model.
+
+        Input
+            model: GBTregressor.
+            X: 2d array of training data.
+            y: 1d array of training targets.
+            X_val: 2d array of validation data.
+            y_val: 1d array of validation targets.
+        """
+        X, y = util.check_data(X, y, objective='regression')
+        self.model_ = model
+        self.base_model_params_ = self.model_.get_params()
+
+        # pseudo-random number generator
+        self.rng_ = np.random.default_rng(self.random_state)
+
+        # weight feature values by normalized feature importance
+        assert hasattr(self.model_, 'feature_importances_')
+        self.normalized_fi_ = self.model_.feature_importances_ / np.max(self.model_.feature_importances_)
+
+        # save results
+        self.n_train_ = X.shape[0]
+        self.y_train_ = y.copy()
+
+        if X_val is not None and y_val is not None:
+            X_val, y_val = util.check_data(X_val, y_val, objective='regression')
+            assert len(X) == len(y)
+            assert len(X_val) == len(y_val)
+            assert X.shape[1] == X_val.shape[1]
+            self.k_, self.min_scale_, self.loc_val_, self.scale_val_ = self._tune_k(X_train=X, y_train=y,
+                X_val=X_val, y_val=y_val, scoring=self.scoring)
+
+            if self.variance_calibration:
+                self.gamma_, self.delta_ = self._tune_calibration(loc=self.loc_val_, scale=self.scale_val_,
+                                                                  y=y_val, scoring=self.scoring)
+            else:
+                self.gamma_, self.delta_ = self.gamma, self.delta
+
+        else:
+            self.k_ = self.k
+            self.min_scale_ = self.min_scale
+            self.gamma_ = self.gamma
+            self.delta_ = self.delta
+
+        best_params = {'n_neighbors': self.k_, 'weights': 'uniform'}
+        self.uncertainty_estimator = KNeighborsRegressor().set_params(**best_params).fit(X, y)
+
+        return self
+
+    def predict(self, X):
+        """
+        Predict using the parsed model.
+
+        Input
+            X: 2d array of data.
+
+        Return
+            2d array of shape=(len(X), no. class).
+        """
+        return self.model_.predict(X)
+
+    def pred_dist(self, X):
+        """
+        Return mean and variance for each x in X.
+
+        Input
+            X: 2d array of data.
+
+        Return
+            - Location and shape, 2 1d arrays of shape=(len(X),).
+                + Location and shape
+        """
+        start = time.time()
+
+        # result objects
+        loc = self.predict(X)  # shape=(len(X))
+        scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X))
+
+        # weight by normalized feature importance
+        Xw = X * self.normalized_fi_
+
+        neighbors = self.uncertainty_estimator.kneighbors(Xw, return_distance=False)  # shape=(len(X), self.k_)
+        for i, train_idxs in enumerate(neighbors):  # per test example
+            train_vals = self.y_train_[train_idxs]
+
+            # add to result
+            scale[i] = np.std(train_vals)
+            if scale[i] < self.min_scale_:  # handle extremely small scale values
+                scale[i] = self.min_scale_
+
+            # display progress
+            if (i + 1) % 100 == 0 and self.verbose > 0:
+                cum_time = time.time() - start
+                if self.logger:
+                    self.logger.info(f'[KNN - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+                else:
+                    print(f'[KNN - predict]: {i + 1:,} / {len(X):,}, cum. time: {cum_time:.3f}s')
+
+        # variance calibration
+        if self.variance_calibration:
+            scale = scale * self.gamma_ + self.delta_
+
+        # assemble output         
+        result = loc, scale
+
+        return result
+
+    # private
+    def _tune_k(self, X_train, y_train, X_val, y_val, scoring='nll',
+                k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121,
+                          151, 201, 301, 401, 501, 601, 701]):
+        """
+        Tune k-nearest neighbors for probabilistic prediction.
+
+        Input
+            X_train: 2d array of train data.
+            y_train: 1d array of train targets.
+            X_val: 2d array of validation data.
+            y_val: 1d array of validation targets.
+            scoring: str, evaluation metric.
+            k_params: list, values of k to evaluate.
+
+        Return
+            - k that has the best validation score.
+            - min_scale associated with k is also returned.
+            - location values.
+            - scale values.
+        """
+        start = time.time()
+        k_params = [k for k in k_params if k <= len(X_train)]
+
+        # weight by normalized feature importance
+        Xw_train = X_train * self.normalized_fi_
+        Xw_val = X_val * self.normalized_fi_
+
+        loc_vals = np.expand_dims(self.predict(X_val), axis=1)
+        loc = np.tile(loc_vals, len(k_params)).astype(np.float32)  # shape=(len(X), len(k_params))
+        scale = np.zeros((len(X_val), len(k_params)), dtype=np.float32)  # shape=(len(X), len(k_params))
+
+        for i in range(len(X_val)):  # per test example
+            affinity = np.linalg.norm(Xw_val[i] - Xw_train, axis=1)  # shape=(len(X_train),)
+            train_idxs = np.argsort(affinity)  # smallest to largest distance
+
+            # evaluate different k
+            for j, k in enumerate(k_params):
+                train_vals_k = y_train[train_idxs[:k]]
+                scale[i, j] = np.std(train_vals_k) + self.eps
+
+            # progress
+            if (i + 1) % 100 == 0 and self.verbose > 0:
+                if self.logger:
+                    self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X_val):,}, '
+                                     f'cum. time: {time.time() - start:.3f}s')
+                else:
+                    print(f'[KNN - tuning] {i + 2:,} / {len(X_val):,}, '
+                          f'cum. time: {time.time() - start:.3f}s')
+
+        # evaluate
+        assert scoring in ['nll', 'crps']
+
+        results = []
+        for j, k in enumerate(k_params):
+            score = self._eval_normal(y=y_val, loc=loc[:, j], scale=scale[:, j], scoring=scoring)
+            results.append({'k': k, 'score': score, 'k_idx': j})
+
+        df = pd.DataFrame(results).sort_values('score', ascending=True)
+        best_k = df.astype(object).iloc[0]['k']
+        best_k_idx = df.astype(object).iloc[0]['k_idx']
+
+        if self.verbose > 0:
+            if self.logger:
+                self.logger.info(f'\n[KNN - tuning] k results:\n{df}')
+            else:
+                print(f'\n[KNN - tuning] k results:\n{df}')
+
+        loc_val = loc[:, best_k_idx]
+        scale_val = scale[:, best_k_idx]
+
+        # get min. scale
+        candidate_idxs = np.where(scale_val > self.eps)[0]
+        if len(candidate_idxs) > 0:
+            min_scale = np.min(scale_val[candidate_idxs])
+        else:
+            warn_msg = f'[KNNWrapper - WARNING] All validation predictions had 0 variance, '
+            warn_msg += f'setting rho (min. variance) to {self.eps}...'
+            warn_msg += f' this may lead to poor results.'
+            if self.logger:
+                self.logger.info(warn_msg)
+            else:
+                print(warn_msg)
+            min_scale = self.eps
+
+        return best_k, min_scale, loc_val, scale_val
+
+    def _tune_calibration(self, loc, scale, y,
+                          base_vals=[1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3,
+                                     1e-2, 1e-1, 0.0, 1e0, 1e1, 1e2, 1e3],
+                          multipliers=[1.0, 2.5, 5.0],
+                          ops=['add', 'mult'], scoring='nll'):
+        """
+        Add or multiply detla to scale values.
+
+        Input
+            loc: 1d array of location values.
+            scale: 1d array of scale values.
+            y: 1d array of target values (same shape as scale).
+            base_vals: list, List of base candidate delta values.
+            multipliers: list, List of values to multiply the base values by.
+            ops: list, List of operations to perform to the scale array.
+            scoring: str, Evaluation metric.
+
+        Return
+            - gamma, float, value to scale each variance estimate by.
+            - delta, float, value to add to each variance estimate.
+        """
+        assert scoring in ['nll', 'crps']
+        assert ops == ['add', 'mult']
+        assert loc.shape == scale.shape == y.shape
+
+        results = []
+        for op in ops:
+            for base_val in base_vals:
+                for multiplier in multipliers:
+
+                    if op == 'mult' and base_val == 0.0:
+                        continue
+
+                    if op == 'add':
+                        temp_scale = scale + (base_val * multiplier)
+                    else:
+                        temp_scale = scale * (base_val * multiplier)
+
+                    score = self._eval_normal(y=y, loc=loc, scale=temp_scale, scoring=scoring)
+                    results.append({'base_val': base_val, 'op': op, 'multiplier': multiplier, 'score': score})
+
+        df = pd.DataFrame(results).sort_values('score', ascending=True)
+
+        best_val = df.iloc[0]['base_val'] * df.iloc[0]['multiplier']
+        best_op = df.iloc[0]['op']
+
+        if best_op == 'add':
+            gamma = 1.0
+            delta = best_val
+        else:
+            assert best_op == 'mult'
+            gamma = best_val
+            delta = 0.0
+
+        if self.verbose > 0:
+            if self.logger:
+                self.logger.info(f'\ndelta gridsearch:\n{df}')
+            else:
+                print(f'\ndelta gridsearch:\n{df}')
+
+        return gamma, delta
+
+    def _eval_normal(self, y, loc, scale, scoring):
+        """
+        Evaluate pedictions assuming the output follows a normal distribution.
+
+        Input
+            y: 1d array of targets
+            loc: 1d array of mean values (same length as y).
+            scale: 1d array of std. dev. values (same length as y).
+            scoring: str, evaluation metric.
+
+        Return
+            - Float, Average score over all examples.
+        """
+        if scoring == 'nll':
+            result = eval_normal(y=y, loc=loc, scale=scale, nll=True, crps=False)
+
+        elif scoring == 'crps':
+            result = eval_normal(y=y, loc=loc, scale=scale, nll=False, crps=True)
+
+        else:
+            raise ValueError(f'Unknown scoring {scoring}')
+
+        return result
+
+
 # parallelizable methods
 def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_kneighbors):
     """
@@ -1137,7 +1597,6 @@ def _affinity(test_idx, leaf_idxs, leaf_mat, n_train):
     return result
 
 
-# utility methods
 def eval_normal(y, loc, scale, nll=True, crps=False):
     """
     Evaluate each predicted normal distribution.

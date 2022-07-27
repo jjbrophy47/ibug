@@ -1,9 +1,6 @@
 # C extensions
 cython==0.29.23
 
-# input management
-configargparse==1.5.2
-
 # data processors
 xlrd==2.0.1  # reading excel
 openpyxl==3.0.7  # reading excel
@@ -11,14 +8,16 @@ mat73==0.50  # reading matlab
 numpy==1.21.0
 ngboost==0.3.12
 scikit-learn==0.24.2
-catboost==0.26
-lightgbm==3.2.1
-xgboost==1.4.2
-torch==1.9.0
-pandas==1.3.1
+catboost==1.0.6
+lightgbm==3.3.2  # if arm64, install using conda-forge
+xgboost==1.6.1
+torch==1.12.0
+pandas==1.4.3
 pgbm==1.6
 ngboost==0.3.12
 properscoring==0.1
+
+git+https://github.com/JakeColtman/bartpy  # bartpy
 
 ninja==1.10.2.3
 

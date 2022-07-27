@@ -8,17 +8,11 @@ import ngboost
 import resource
 import argparse
 import warnings
-import itertools
 from datetime import datetime
 warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler warning
 
 import numpy as np
 import pandas as pd
-import seaborn as sns
-import properscoring as ps
-import matplotlib.pyplot as plt
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
@@ -26,11 +20,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
-from ngboost import NGBRegressor
-from ngboost.scores import CRPScore
-from ngboost.scores import LogScore
-from scipy.stats import gaussian_kde
-from scipy.stats import lognorm
+from bartpy.sklearnmodel import SklearnModel as BartModel
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -38,6 +28,7 @@ sys.path.insert(0, here + '/../../')  # for ibug
 import util
 from ibug import IBUGWrapper
 from ibug import KNNWrapper
+from ibug import KNNFIWrapper
 
 MIN_NUM_TREES = 2
 
@@ -94,7 +85,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         param_grid = get_params(model_type=model_type, tree_type=tree_type, n_train=len(X_tune))
 
         # gridsearch
-        if model_type == 'knn' or (model_type in ['constant', 'ibug', 'pgbm'] and gridsearch):
+        if model_type == 'knn' or (model_type in ['constant', 'ibug', 'pgbm', 'bart', 'cbu', 'knn_fi'] and gridsearch):
 
             if logger:
                 logger.info('\nmodel: {}, param_grid: {}'.format(model_type, param_grid))
@@ -130,7 +121,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             model_val = best_model
 
         # base model, only tune no. iterations
-        elif model_type in ['constant', 'ibug']:
+        elif model_type in ['constant', 'ibug', 'knn_fi']:
             assert tree_type in ['lgb', 'xgb', 'cb', 'ngboost', 'pgbm']
 
             if tree_type == 'lgb':
@@ -164,6 +155,16 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
 
             best_n_estimators = max(best_n_estimators, MIN_NUM_TREES)
             best_params = {'n_estimators': best_n_estimators}
+        
+        # TODO: BART, only tune no. iterations
+        elif model_type == 'bart':
+            model_val = clone(model).fit(X_tune, y_tune)
+            best_params = {}
+        
+        # TODO: CBU, only tune no. iterations
+        elif model_type == 'cbu':
+            model_val = clone(model).fit(X_tune, y_tune)
+            best_params = {}
 
         # PGBM, only tune no. iterations
         elif model_type == 'pgbm':
@@ -192,11 +193,17 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             logger.info(f"\nbest params: {tune_dict['best_params']}")
             logger.info(f"tune time (model): {tune_dict['tune_time_model']:.3f}s")
 
-    # IBUG and KNN ONLY: tune k (and min. scale)
+    # IBUG, KNN, and KNN_FI ONLY: tune k (and min. scale)
     tune_dict['tune_time_extra'] = 0
-    if model_type in ['ibug', 'knn']:
+    if model_type in ['ibug', 'knn', 'knn_fi']:
         best_params_wrapper = {}
-        WrapperClass = IBUGWrapper if model_type == 'ibug' else KNNWrapper
+        if model_type == 'ibug':
+            WrapperClass = IBUGWrapper
+        elif model_type == 'knn':
+            WrapperClass = KNNWrapper
+        else:
+            assert model_type == 'knn_fi'
+            WrapperClass = KNNFIWrapper
 
         if logger:
             logger.info('\nTuning k and min. scale...')
@@ -219,9 +226,9 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             logger.info(f"tune time (extra): {tune_dict['tune_time_extra']:.3f}s")
 
     # get validation predictions
-    if model_type in ['ibug', 'knn']:
+    if model_type in ['ibug', 'knn', 'knn_fi']:
         loc_val, scale_val = model_val_wrapper.loc_val_, model_val_wrapper.scale_val_
-    elif model_type in ['constant', 'ngboost', 'pgbm']:
+    elif model_type in ['constant', 'ngboost', 'pgbm', 'bart', 'cbu']:
         loc_val, scale_val = get_loc_scale(model_val, model_type, X=X_val, y_train=y_tune)
     tune_dict['loc_val'] = loc_val
     tune_dict['scale_val'] = scale_val
@@ -312,6 +319,16 @@ def get_loc_scale(model, model_type, X, y_train=None):
 
     elif model_type == 'knn':
         loc, scale = model.pred_dist(X)
+    
+    elif model_type == 'knn_fi':  # KNN weighted by most important features
+        loc, scale = model.pred_dist(X)
+
+    elif model_type == 'cbu':  # CatBoost RMSEWithUncertainty
+        loc, scale = model.pred_dist(X)
+    
+    elif model_type == 'bart':
+        samples = model.data.y.unnormalize_y(np.array([x.predict(X) for x in model._model_samples]))
+        loc, scale = np.mean(samples, axis=0), np.std(samples, axis=0)
 
     elif model_type == 'pgbm':
         _, loc, variance = model.learner_.predict_dist(X.astype(np.float32),
@@ -349,8 +366,18 @@ def get_params(model_type, n_train, tree_type=None):
     elif model_type == 'knn':
         k_list = [3, 5, 7, 11, 15, 31, 61, 91, 121, 151, 201, 301, 401, 501, 601, 701]
         params = {'n_neighbors': [k for k in k_list if k <= n_train]}
+    
+    elif model_type == 'bart':
+        params = {'n_trees': [10, 50, 100, 250, 500, 1000], 'n_chains': [2, 3, 5]}
 
-    elif model_type in ['constant', 'ibug']:
+    elif model_type == 'cbu':
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],
+                      'max_depth': [2, 3, 5, 7, None],
+                      'learning_rate': [0.01, 0.1],
+                      'min_data_in_leaf': [1, 20],
+                      'max_bin': [255]}
+
+    elif model_type in ['constant', 'ibug', 'knn_fi']:
         assert tree_type is not None
 
         if tree_type == 'lgb':
@@ -431,8 +458,19 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
 
     elif model_type == 'knn':
         model = KNeighborsRegressor(weights='uniform')
+    
+    elif model_type == 'bart':
+        model = BartModel()
+    
+    elif model_type == 'cbu':
+        model = util.CatBoostRMSEUncertaintyWrapper(n_estimators=n_estimators, max_depth=max_depth,
+                                                    learning_rate=lr, max_bin=max_bin,
+                                                    min_data_in_leaf=min_leaf_samples, subsample=bagging_frac,
+                                                    loss_function='RMSEWithUncertainty',
+                                                    posterior_sampling=True,
+                                                    random_state=random_state, logging_level='Silent')
 
-    elif model_type in ['constant', 'ibug']:
+    elif model_type in ['constant', 'ibug', 'knn_fi']:
         assert tree_type is not None
 
         if tree_type == 'lgb':
@@ -482,7 +520,7 @@ def experiment(args, logger, out_dir, in_dir=None):
     rng = np.random.default_rng(args.random_state)  # pseudo-random number generator
 
     # get data
-    X_train, X_test, y_train, y_test, objective = util.get_data(args.data_dir, args.dataset, args.fold)
+    X_train, X_test, y_train, _, _ = util.get_data(args.data_dir, args.dataset, args.fold)
 
     # use a fraction of the training data for tuning
     if args.tune_frac < 1.0:
@@ -532,7 +570,7 @@ def experiment(args, logger, out_dir, in_dir=None):
     logger.info('\n[TEST] Training...')
     start = time.time()
 
-    if args.model_type in ['ibug', 'knn']:  # wrap model
+    if args.model_type in ['ibug', 'knn', 'knn_fi']:  # wrap model
         assert 'base_model' in tune_dict
         assert 'model_val_wrapper' in tune_dict
         assert 'best_params_wrapper' in tune_dict
@@ -656,8 +694,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_type', type=str, default='ibug')
 
     # Method settings
-    parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, IBUG, PGBM
-    parser.add_argument('--tree_type', type=str, default='lgb')  # IBUG, constant
+    parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, IBUG, PGBM, BART, CBU
+    parser.add_argument('--tree_type', type=str, default='lgb')  # IBUG, constant, KKNNFI
     parser.add_argument('--tree_subsample_frac', type=float, default=1.0)  # IBUG
     parser.add_argument('--tree_subsample_order', type=str, default='random')  # IBUG
     parser.add_argument('--instance_subsample_frac', type=float, default=1.0)  # IBUG

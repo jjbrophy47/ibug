@@ -4,40 +4,19 @@ Model performance.
 import os
 import sys
 import time
-import ngboost
 import resource
 import argparse
 import warnings
-import itertools
 from datetime import datetime
 warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler warning
 
 import numpy as np
-import pandas as pd
-import seaborn as sns
-import properscoring as ps
 import matplotlib.pyplot as plt
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
-from sklearn.base import clone
-from sklearn.neighbors import KNeighborsRegressor
-from lightgbm import LGBMRegressor
-from xgboost import XGBRegressor
-from catboost import CatBoostRegressor
-from ngboost import NGBRegressor
-from ngboost.scores import CRPScore
-from ngboost.scores import LogScore
-from scipy.stats import gaussian_kde
-from scipy.stats import lognorm
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
 sys.path.insert(0, here + '/../../')  # for ibug
 import util
-from ibug import IBUGWrapper
-from ibug import KNNWrapper
 from train import get_loc_scale
 from train import tune_delta
 
@@ -366,7 +345,7 @@ if __name__ == '__main__':
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
     parser.add_argument('--in_dir', type=str, default='output/experiments/train/')
-    parser.add_argument('--out_dir', type=str, default='output/experiments/predict')
+    parser.add_argument('--out_dir', type=str, default='output/experiments/predict/')
     parser.add_argument('--custom_in_dir', type=str, default='default')
     parser.add_argument('--custom_out_dir', type=str, default='default')
 
