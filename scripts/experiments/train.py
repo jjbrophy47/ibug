@@ -215,6 +215,8 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
                                                             X_val=X_val, y_val=y_val)
         best_params_wrapper = {'k': model_val_wrapper.k_,
                                'min_scale': model_val_wrapper.min_scale_}
+        if model_type == 'knn_fi':
+            best_params_wrapper['max_feat'] = model_val_wrapper.max_feat_
         tune_dict['model_val_wrapper'] = model_val_wrapper
         tune_dict['best_params_wrapper'] = best_params_wrapper
         tune_dict['WrapperClass'] = WrapperClass
@@ -368,7 +370,7 @@ def get_params(model_type, n_train, tree_type=None):
         params = {'n_neighbors': [k for k in k_list if k <= n_train]}
     
     elif model_type == 'bart':
-        params = {'n_trees': [50, 100, 500, 1000, 2000], 'n_chains': [5]}
+        params = {'n_trees': [10, 50, 100, 200], 'n_chains': [5]}
 
     elif model_type == 'cbu':
             params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],

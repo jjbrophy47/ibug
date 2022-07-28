@@ -118,7 +118,7 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
 
     # Method identifiers
-    parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'ibug'])
+    parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'ibug', 'knn_fi', 'cbu', 'bart'])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb', 'xgb', 'cb'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])

@@ -1058,6 +1058,7 @@ class KNNFIWrapper(Estimator):
         a given GBRT model.
     """
     def __init__(self,
+                 max_feat=20,
                  k=100,
                  gamma=1.0,
                  delta=0.0,
@@ -1071,6 +1072,7 @@ class KNNFIWrapper(Estimator):
                  logger=None):
         """
         Input
+            max_feat: int, maximum number of features to use.
             k: int, no. neighbors to consider for uncertainty estimation.
             gamma: float, scale value applied to all variance estimates. '1.0' means no transformation.
             delta: float, value added to all variance estimates. '0.0' means no transformation.
@@ -1086,6 +1088,7 @@ class KNNFIWrapper(Estimator):
             verbose: int, verbosity level.
             logger: object, If not None, output to logger.
         """
+        assert max_feat > 0
         assert k > 0
         assert gamma > 0.0
         assert delta >= 0.0
@@ -1096,6 +1099,7 @@ class KNNFIWrapper(Estimator):
         assert n_jobs == 1, 'parallelization not implemented!'
         assert isinstance(random_state, int) and random_state > 0
 
+        self.max_feat = max_feat
         self.k = k
         self.gamma = gamma
         self.delta = delta
@@ -1113,6 +1117,7 @@ class KNNFIWrapper(Estimator):
         Return a dict of parameter values.
         """
         d = {}
+        d['max_feat'] = self.max_feat
         d['k'] = self.k
         d['gamma'] = self.gamma
         d['delta'] = self.delta
@@ -1156,8 +1161,7 @@ class KNNFIWrapper(Estimator):
 
         # weight feature values by normalized feature importance
         assert hasattr(self.model_, 'feature_importances_')
-        self.normalized_fi_ = self.model_.feature_importances_ / np.sum(self.model_.feature_importances_)
-        Xw = X * self.normalized_fi_
+        self.sorted_fi_ = np.argsort(self.model_.feature_importances_)[::-1]  # descending
 
         # save results
         self.n_train_ = X.shape[0]
@@ -1168,7 +1172,7 @@ class KNNFIWrapper(Estimator):
             assert len(X) == len(y)
             assert len(X_val) == len(y_val)
             assert X.shape[1] == X_val.shape[1]
-            self.k_, self.min_scale_, self.loc_val_, self.scale_val_ = self._tune_k(X_train=X, y_train=y,
+            self.max_feat_, self.k_, self.min_scale_, self.loc_val_, self.scale_val_ = self._tune_k(X_train=X, y_train=y,
                 X_val=X_val, y_val=y_val, scoring=self.scoring)
 
             if self.variance_calibration:
@@ -1178,13 +1182,15 @@ class KNNFIWrapper(Estimator):
                 self.gamma_, self.delta_ = self.gamma, self.delta
 
         else:
+            self.max_feat_ = self.max_feat
             self.k_ = self.k
             self.min_scale_ = self.min_scale
             self.gamma_ = self.gamma
             self.delta_ = self.delta
 
+        self.fi_ = self.sorted_fi_[:self.max_feat_]
         best_params = {'n_neighbors': self.k_, 'weights': 'uniform'}
-        self.uncertainty_estimator = KNeighborsRegressor().set_params(**best_params).fit(Xw, y)
+        self.uncertainty_estimator = KNeighborsRegressor().set_params(**best_params).fit(X[:, self.fi_], y)
 
         return self
 
@@ -1217,10 +1223,7 @@ class KNNFIWrapper(Estimator):
         loc = self.predict(X)  # shape=(len(X))
         scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X))
 
-        # weight by normalized feature importance
-        Xw = X * self.normalized_fi_
-
-        neighbors = self.uncertainty_estimator.kneighbors(Xw, return_distance=False)  # shape=(len(X), self.k_)
+        neighbors = self.uncertainty_estimator.kneighbors(X[:, self.fi_], return_distance=False)  # shape=(len(X), self.k_)
         for i, train_idxs in enumerate(neighbors):  # per test example
             train_vals = self.y_train_[train_idxs]
 
@@ -1249,7 +1252,8 @@ class KNNFIWrapper(Estimator):
     # private
     def _tune_k(self, X_train, y_train, X_val, y_val, scoring='nll',
                 k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121,
-                          151, 201, 301, 401, 501, 601, 701]):
+                          151, 201, 301, 401, 501, 601, 701],
+                max_feat_params=[5, 10, 20]):
         """
         Tune k-nearest neighbors for probabilistic prediction.
 
@@ -1268,54 +1272,58 @@ class KNNFIWrapper(Estimator):
             - scale values.
         """
         start = time.time()
+        max_feat_params = [mf for mf in max_feat_params if mf <= X_train.shape[1]]
+        if max_feat_params[-1] < X_train.shape[1]:
+            max_feat_params.append(X_train.shape[1])  # all features
         k_params = [k for k in k_params if k <= len(X_train)]
 
-        # weight by normalized feature importance
-        Xw_train = X_train * self.normalized_fi_
-        Xw_val = X_val * self.normalized_fi_
-
-        loc_vals = np.expand_dims(self.predict(X_val), axis=1)
-        loc = np.tile(loc_vals, len(k_params)).astype(np.float32)  # shape=(len(X), len(k_params))
-        scale = np.zeros((len(X_val), len(k_params)), dtype=np.float32)  # shape=(len(X), len(k_params))
+        loc = self.predict(X_val)  # shape=(n_val,)
+        scale = np.zeros((len(X_val), len(max_feat_params), len(k_params))).astype(np.float32)  # shape=(n_val, n_feats, n_k)
 
         for i in range(len(X_val)):  # per test example
-            affinity = np.linalg.norm(Xw_val[i] - Xw_train, axis=1)  # shape=(len(X_train),)
-            train_idxs = np.argsort(affinity)  # smallest to largest distance
 
-            # evaluate different k
-            for j, k in enumerate(k_params):
-                train_vals_k = y_train[train_idxs[:k]]
-                scale[i, j] = np.std(train_vals_k) + self.eps
+            for j, max_feat in enumerate(max_feat_params):  # per max_feat
+                feat_idxs = self.sorted_fi_[:max_feat]
+                affinity = np.linalg.norm(X_val[i, feat_idxs] - X_train[:, feat_idxs], axis=1)  # shape=(len(X_train),)
+                train_idxs = np.argsort(affinity)  # smallest to largest distance
 
-            # progress
-            if (i + 1) % 100 == 0 and self.verbose > 0:
-                if self.logger:
-                    self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X_val):,}, '
-                                     f'cum. time: {time.time() - start:.3f}s')
-                else:
-                    print(f'[KNN - tuning] {i + 2:,} / {len(X_val):,}, '
-                          f'cum. time: {time.time() - start:.3f}s')
+                # evaluate different k
+                for m, k in enumerate(k_params):
+                    train_vals_k = y_train[train_idxs[:k]]
+                    scale[i, j, m] = np.std(train_vals_k) + self.eps
+
+                # progress
+                if (i + 1) % 100 == 0 and self.verbose > 0:
+                    if self.logger:
+                        self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X_val):,}, '
+                                        f'cum. time: {time.time() - start:.3f}s')
+                    else:
+                        print(f'[KNN - tuning] {i + 2:,} / {len(X_val):,}, '
+                            f'cum. time: {time.time() - start:.3f}s')
 
         # evaluate
         assert scoring in ['nll', 'crps']
 
         results = []
-        for j, k in enumerate(k_params):
-            score = self._eval_normal(y=y_val, loc=loc[:, j], scale=scale[:, j], scoring=scoring)
-            results.append({'k': k, 'score': score, 'k_idx': j})
+        for j, max_feat in enumerate(max_feat_params):
+            for m, k in enumerate(k_params):
+                score = self._eval_normal(y=y_val, loc=loc, scale=scale[:, j, m], scoring=scoring)
+                results.append({'max_feat': max_feat, 'k': k, 'score': score, 'max_feat_idx': j, 'k_idx': m})
 
         df = pd.DataFrame(results).sort_values('score', ascending=True)
+        best_max_feat = df.astype(object).iloc[0]['max_feat']
+        best_max_feat_idx = df.astype(object).iloc[0]['max_feat_idx']
         best_k = df.astype(object).iloc[0]['k']
         best_k_idx = df.astype(object).iloc[0]['k_idx']
 
         if self.verbose > 0:
             if self.logger:
-                self.logger.info(f'\n[KNN - tuning] k results:\n{df}')
+                self.logger.info(f'\n[KNN - tuning] max_feat, k results:\n{df}')
             else:
-                print(f'\n[KNN - tuning] k results:\n{df}')
+                print(f'\n[KNN - tuning] max_feat, k results:\n{df}')
 
-        loc_val = loc[:, best_k_idx]
-        scale_val = scale[:, best_k_idx]
+        loc_val = loc
+        scale_val = scale[:, best_max_feat_idx, best_k_idx]
 
         # get min. scale
         candidate_idxs = np.where(scale_val > self.eps)[0]
@@ -1331,7 +1339,7 @@ class KNNFIWrapper(Estimator):
                 print(warn_msg)
             min_scale = self.eps
 
-        return best_k, min_scale, loc_val, scale_val
+        return best_max_feat, best_k, min_scale, loc_val, scale_val
 
     def _tune_calibration(self, loc, scale, y,
                           base_vals=[1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3,
