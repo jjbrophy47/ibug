@@ -368,7 +368,7 @@ def get_params(model_type, n_train, tree_type=None):
         params = {'n_neighbors': [k for k in k_list if k <= n_train]}
     
     elif model_type == 'bart':
-        params = {'n_trees': [10, 50, 100, 250, 500, 1000], 'n_chains': [2, 3, 5]}
+        params = {'n_trees': [50, 100, 500, 1000, 2000], 'n_chains': [5]}
 
     elif model_type == 'cbu':
             params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],

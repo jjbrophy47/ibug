@@ -1049,95 +1049,6 @@ class KNNWrapper(Estimator):
         return result
 
 
-# # parallelizable methods
-# def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_kneighbors):
-#     """
-#     Compute affinity, variance, and nearest neighbor for the given test instance.
-
-#     Input
-#         test_idx: int, index of the test instance.
-#         leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
-#         leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
-#         y_train: np.ndarray, 1d array of train targets, shape=(n_train,).
-#         k: int, number of nearest neighbors to retrieve.
-#         min_scale: float, minimum variance threshold.
-#         return_kneigbors: bool, if True, return neighbor indices and target values.
-
-#     Return
-#         - Dict, including:
-#             * 'test_index': test index.
-#             * 'scale': variance estimate (uncalibrated).
-#             * 'train_idxs': neighbor indices (if return_kneighbors==True).
-#             * 'train_vals': neighbor values (if return_kneighbors==True).
-#     """
-#     affinity = leaf_mat[leaf_idxs].sum(axis=0)  # shape=(n_train,)
-#     train_idxs = np.asarray(affinity.argsort())[0][-k:]  # k neighbors
-#     train_vals = y_train[train_idxs]
-#     scale = max(np.std(train_vals), min_scale)
-
-#     # compile result
-#     result = {'test_idx': test_idx, 'scale': scale}
-#     if return_kneighbors:
-#         result['train_idxs'] = train_idxs
-#         result['train_vals'] = train_vals
-
-#     return result
-
-
-# def _pred_dist_k(test_idx, leaf_idxs, leaf_mat, y_train, k_params, epsilon):
-#     """
-#     Compute affinity, variance, and nearest neighbor for the given test instance.
-
-#     Input
-#         test_idx: int, index of the test instance.
-#         leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
-#         leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
-#         y_train: np.ndarray, 1d array of train targets, shape=(n_train,).
-#         k_params: list, list of candidate k values to evaluate.
-#         epsilon: float, value added to variance estimate to prevent 0 variance.
-
-#     Return
-#         - Dict, including:
-#             * 'test_index': test index.
-#             * 'scale': variance estimate (uncalibrated), shape=(len(k_params),).
-#     """
-
-#     # result object
-#     scale = np.zeros(len(k_params), dtype=np.float32)  # shape=(len(k_params),)
-
-#     # compute variance for each k
-#     affinity = leaf_mat[leaf_idxs].sum(axis=0)  # shape=(n_train,)
-#     train_idxs = np.asarray(affinity.argsort())[0]  # sorted neighbors, shape=(n_train,)
-#     for j, k in enumerate(k_params):
-#         train_vals = y_train[train_idxs[-k:]]
-#         scale[j] = np.std(train_vals) + epsilon
-
-#     # compile result
-#     result = {'test_idx': test_idx, 'scale': scale}
-
-#     return result
-
-
-# def _affinity(test_idx, leaf_idxs, leaf_mat, n_train):
-#     """
-#     Compute affinity for the given test instance.
-
-#     Input
-#         test_idx: int, index of the test instance.
-#         leaf_idxs: np.ndarray, 1d array of leaf indices for the given test instance, shape=(n_boost,).
-#         leaf_mat: np.ndarray, 2d sparse array of leaf occupancies, shape=(total_n_leaves, n_train).
-#         n_train: int, number of training examples.
-
-#     Return
-#         - Dict, including:
-#             * 'test_index': int, test index.
-#             * 'instance': np.ndarray, 1d array of number of training instances per tree, shape=(n_boost,).
-#     """
-#     instance = np.asarray(leaf_mat[leaf_idxs].sum(axis=1)).flatten() / n_train  # (n_boost,)
-#     result = {'test_idx': test_idx, 'instance': instance}
-#     return result
-
-
 class KNNFIWrapper(Estimator):
     """
     K-Nearest neigbors regressor with feature importance and uncertainty estimation.
@@ -1245,7 +1156,8 @@ class KNNFIWrapper(Estimator):
 
         # weight feature values by normalized feature importance
         assert hasattr(self.model_, 'feature_importances_')
-        self.normalized_fi_ = self.model_.feature_importances_ / np.max(self.model_.feature_importances_)
+        self.normalized_fi_ = self.model_.feature_importances_ / np.sum(self.model_.feature_importances_)
+        Xw = X * self.normalized_fi_
 
         # save results
         self.n_train_ = X.shape[0]
@@ -1272,7 +1184,7 @@ class KNNFIWrapper(Estimator):
             self.delta_ = self.delta
 
         best_params = {'n_neighbors': self.k_, 'weights': 'uniform'}
-        self.uncertainty_estimator = KNeighborsRegressor().set_params(**best_params).fit(X, y)
+        self.uncertainty_estimator = KNeighborsRegressor().set_params(**best_params).fit(Xw, y)
 
         return self
 

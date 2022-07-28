@@ -18,6 +18,11 @@ for f in ${fold_list[@]}; do
     sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $s $s $td
     sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $s $s $td
     sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t 'nll' 'crps' 1
+    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
+    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'cbu-%a.out'      $run $f 'cbu'      $t $s $s $td
+    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'cbu-%a.out'      $run $f 'cbu'      $t 'nll' 'crps' 1
+    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'bart-%a.out'     $run $f 'bart'     $t $s $s $td
+    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'bart-%a.out'     $run $f 'bart'     $t 'nll' 'crps' 1
 done
 
 for f in ${fold_list[@]}; do
