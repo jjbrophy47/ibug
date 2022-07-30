@@ -65,7 +65,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
 
     # result objects
     model_val = None
-    tune_dict = {}
+    tune_dict = {'base_model': model}
 
     # load in a trained model
     if in_dir is not None:
@@ -221,7 +221,6 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         tune_dict['best_params_wrapper'] = best_params_wrapper
         tune_dict['WrapperClass'] = WrapperClass
         tune_dict['tune_time_extra'] = time.time() - start
-        tune_dict['base_model'] = model
 
         if logger:
             logger.info(f"best params (wrapper): {best_params_wrapper}")
@@ -572,13 +571,14 @@ def experiment(args, logger, out_dir, in_dir=None):
     logger.info('\n[TEST] Training...')
     start = time.time()
 
+    assert 'base_model' in tune_dict
+    base_model = tune_dict['base_model']
+
     if args.model_type in ['ibug', 'knn', 'knn_fi']:  # wrap model
-        assert 'base_model' in tune_dict
         assert 'model_val_wrapper' in tune_dict
         assert 'best_params_wrapper' in tune_dict
         assert 'WrapperClass' in tune_dict
 
-        base_model = tune_dict['base_model']
         model_val = tune_dict['model_val_wrapper']
         best_params_wrapper = tune_dict['best_params_wrapper']
         WrapperClass = tune_dict['WrapperClass']
@@ -596,9 +596,11 @@ def experiment(args, logger, out_dir, in_dir=None):
             .set_params(**best_params_wrapper).fit(base_model_test, X_train, y_train)
     else:
         assert 'best_params' in tune_dict
+        assert 'model_val' in tune_dict
+
         best_params = tune_dict['best_params']
         model_val = tune_dict['model_val']
-        model_test = clone(model_val).set_params(**best_params).fit(X_train, y_train)
+        model_test = clone(base_model).set_params(**best_params).fit(X_train, y_train)
 
     train_time = time.time() - start
     logger.info(f'train time: {train_time:.3f}s')
