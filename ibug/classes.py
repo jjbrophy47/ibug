@@ -1273,7 +1273,7 @@ class KNNFIWrapper(Estimator):
         """
         start = time.time()
         max_feat_params = [mf for mf in max_feat_params if mf <= X_train.shape[1]]
-        if max_feat_params[-1] < X_train.shape[1]:
+        if len(max_feat_params) == 0 or max_feat_params[-1] < X_train.shape[1]:
             max_feat_params.append(X_train.shape[1])  # all features
         k_params = [k for k in k_params if k <= len(X_train)]
 
