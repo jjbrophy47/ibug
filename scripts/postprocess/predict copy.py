@@ -521,13 +521,6 @@ def get_param_list(name, result):
             param_names += ['$d$', r'$n_{\ell_0}$']
             param_types += [int, int]
 
-    elif 'knn_fi' in name:
-        param_list.append(result['model_params']['max_feat'])
-        param_list.append(result['model_params']['k'])
-        param_list.append(result['model_params']['min_scale'])
-        param_names += [r'$\upsilon$', '$k$', r'$\rho$']
-        param_types += [int, int, float]
-
     elif 'knn' in name:
         param_list.append(result['model_params']['base_model_params_']['n_neighbors'])
         param_list.append(result['model_params']['k'])
@@ -622,25 +615,20 @@ def aggregate_params(param_df, param_names, param_types):
 
 
 def process(args, in_dir, out_dir, logger):
-    # color, ls, label = util.get_plot_dicts()
-    # scoring2 = 'crps' if args.scoring == 'nll' else 'nll'
+    color, ls, label = util.get_plot_dicts()
+
+    scoring2 = 'crps' if args.scoring == 'nll' else 'nll'
 
     # get results
     test_point_list = []
     test_prob_list = []
     test_prob2_list = []
-    test_prob3_list = []
     test_prob_delta_list = []
     test_prob2_delta_list = []
-    test_prob3_delta_list = []
-
     val_prob_list = []
     val_prob2_list = []
-    val_prob3_list = []
     val_prob_delta_list = []
     val_prob2_delta_list = []
-    val_prob3_delta_list = []
-
     btime_list = []
     ptime_list = []
     param_list = []
@@ -651,50 +639,33 @@ def process(args, in_dir, out_dir, logger):
         start = time.time()
 
         for fold in args.fold:
-            exp_dir = os.path.join(in_dir, dataset, args.scoring_rule_metric, f'fold{fold}')
+            exp_dir = os.path.join(in_dir, dataset, args.scoring, f'fold{fold}')
             results = util.get_results(args, exp_dir, logger, progress_bar=False)
 
             test_point = {'dataset': dataset, 'fold': fold}
-
             test_prob = test_point.copy()
             test_prob2 = test_point.copy()
-            test_prob3 = test_point.copy()
             test_prob_delta = test_point.copy()
             test_prob2_delta = test_point.copy()
-            test_prob3_delta = test_point.copy()
-
             val_prob = test_point.copy()
             val_prob2 = test_point.copy()
-            val_prob3 = test_point.copy()
             val_prob_delta = test_point.copy()
             val_prob2_delta = test_point.copy()
-            val_prob2_delta = test_point.copy()
-            val_prob3_delta = test_point.copy()
-
             param = test_point.copy()
             btime = test_point.copy()
             ptime = test_point.copy()
 
-            # extract results
             for method, res in results:
-                print(method, exp_dir)
                 name = method
-
-                test_point[name] = res['metrics']['test']['accuracy'][args.acc_metric]
-                test_prob[name] = res['metrics']['test']['scoring_rule'][args.scoring_rule_metric]
-                test_prob2[name] = res['metrics']['test']['avg_calibration'][args.cal_metric]
-                test_prob3[name] = res['metrics']['test']['sharpness']['sharp']
-                test_prob_delta[name] = res['metrics']['test_delta']['scoring_rule'][args.scoring_rule_metric]
-                test_prob2_delta[name] = res['metrics']['test_delta']['avg_calibration'][args.cal_metric]
-                test_prob3_delta[name] = res['metrics']['test_delta']['sharpness']['sharp']
-
-                val_prob[name] = res['metrics']['val']['scoring_rule'][args.scoring_rule_metric]
-                val_prob2[name] = res['metrics']['val']['avg_calibration'][args.cal_metric]
-                val_prob3[name] = res['metrics']['val']['sharpness']['sharp']
-                val_prob_delta[name] = res['metrics']['val_delta']['scoring_rule'][args.scoring_rule_metric]
-                val_prob2_delta[name] = res['metrics']['val_delta']['avg_calibration'][args.cal_metric]
-                val_prob3_delta[name] = res['metrics']['val_delta']['sharpness']['sharp']
-
+                test_point[name] = res['test_performance']['rmse']
+                test_prob[name] = res['test_performance'][args.scoring]
+                test_prob2[name] = res['test_performance'][scoring2]
+                test_prob_delta[name] = res['test_performance'][f'{args.scoring}_delta']
+                test_prob2_delta[name] = res['test_performance'][f'{scoring2}_delta']
+                val_prob[name] = res['val_performance'][args.scoring]
+                val_prob2[name] = res['val_performance'][scoring2]
+                val_prob_delta[name] = res['val_performance'][f'{args.scoring}_delta']
+                val_prob2_delta[name] = res['val_performance'][f'{scoring2}_delta']
                 btime[name] = res['timing']['tune_train']
                 ptime[name] = res['timing']['test_pred_time'] / res['data']['n_test'] * 1000  # milliseconds
                 param[name], param_names[name], param_types[name] = get_param_list(name, res)
@@ -702,18 +673,12 @@ def process(args, in_dir, out_dir, logger):
             test_point_list.append(test_point)
             test_prob_list.append(test_prob)
             test_prob2_list.append(test_prob2)
-            test_prob3_list.append(test_prob3)
             test_prob_delta_list.append(test_prob_delta)
             test_prob2_delta_list.append(test_prob2_delta)
-            test_prob3_delta_list.append(test_prob3_delta)
-
             val_prob_list.append(val_prob)
             val_prob2_list.append(val_prob2)
-            val_prob3_list.append(val_prob3)
             val_prob_delta_list.append(val_prob_delta)
             val_prob2_delta_list.append(val_prob2_delta)
-            val_prob3_delta_list.append(val_prob3_delta)
-
             btime_list.append(btime)
             ptime_list.append(ptime)
             param_list.append(param)
@@ -724,24 +689,15 @@ def process(args, in_dir, out_dir, logger):
     test_point_df = pd.DataFrame(test_point_list)
     test_prob_df = pd.DataFrame(test_prob_list)
     test_prob2_df = pd.DataFrame(test_prob2_list)
-    test_prob3_df = pd.DataFrame(test_prob3_list)
     test_prob_delta_df = pd.DataFrame(test_prob_delta_list)
     test_prob2_delta_df = pd.DataFrame(test_prob2_delta_list)
-    test_prob3_delta_df = pd.DataFrame(test_prob3_delta_list)
-
     val_prob_df = pd.DataFrame(val_prob_list)
     val_prob2_df = pd.DataFrame(val_prob2_list)
-    val_prob3_df = pd.DataFrame(val_prob3_list)
     val_prob_delta_df = pd.DataFrame(val_prob_delta_list)
     val_prob2_delta_df = pd.DataFrame(val_prob2_delta_list)
-    val_prob3_delta_df = pd.DataFrame(val_prob3_delta_list)
-
     btime_df = pd.DataFrame(btime_list)
     ptime_df = pd.DataFrame(ptime_list)
     param_df = aggregate_params(pd.DataFrame(param_list), param_names, param_types)  # aggregate hyperparameters
-
-    print(test_point_df)
-    exit(0)
 
     # compute mean and std. error of the mean
     group_cols = ['dataset']
@@ -771,15 +727,15 @@ def process(args, in_dir, out_dir, logger):
     ptime_std_df = ptime_df.groupby(group_cols).std().reset_index().drop(columns=['fold'])
 
     # combine mean and sem into one dataframe
-    test_point_ms_df = join_mean_sem(test_point_mean_df, test_point_sem_df, metric=args.point_metric)
-    test_prob_ms_df = join_mean_sem(test_prob_mean_df, test_prob_sem_df, metric=args.prob_metric1)
-    test_prob2_ms_df = join_mean_sem(test_prob2_mean_df, test_prob2_sem_df, metric=args.prob_metric2)
-    test_prob_delta_ms_df = join_mean_sem(test_prob_delta_mean_df, test_prob_delta_sem_df, metric=args.prob_metric1)
-    test_prob2_delta_ms_df = join_mean_sem(test_prob2_delta_mean_df, test_prob2_delta_sem_df, metric=args.prob_metric2)
-    val_prob_ms_df = join_mean_sem(val_prob_mean_df, val_prob_sem_df, metric=args.prob_metric1)
-    val_prob2_ms_df = join_mean_sem(val_prob2_mean_df, val_prob2_sem_df, metric=args.prob_metric2)
-    val_prob_delta_ms_df = join_mean_sem(val_prob_delta_mean_df, val_prob_delta_sem_df, metric=args.prob_metric1)
-    val_prob2_delta_ms_df = join_mean_sem(val_prob2_delta_mean_df, val_prob2_delta_sem_df, metric=args.prob_metric2)
+    test_point_ms_df = join_mean_sem(test_point_mean_df, test_point_sem_df, metric='rmse')
+    test_prob_ms_df = join_mean_sem(test_prob_mean_df, test_prob_sem_df, metric=args.scoring)
+    test_prob2_ms_df = join_mean_sem(test_prob2_mean_df, test_prob2_sem_df, metric=scoring2)
+    test_prob_delta_ms_df = join_mean_sem(test_prob_delta_mean_df, test_prob_delta_sem_df, metric=args.scoring)
+    test_prob2_delta_ms_df = join_mean_sem(test_prob2_delta_mean_df, test_prob2_delta_sem_df, metric=scoring2)
+    val_prob_ms_df = join_mean_sem(val_prob_mean_df, val_prob_sem_df, metric=args.scoring)
+    val_prob2_ms_df = join_mean_sem(val_prob2_mean_df, val_prob2_sem_df, metric=scoring2)
+    val_prob_delta_ms_df = join_mean_sem(val_prob_delta_mean_df, val_prob_delta_sem_df, metric=args.scoring)
+    val_prob2_delta_ms_df = join_mean_sem(val_prob2_delta_mean_df, val_prob2_delta_sem_df, metric=scoring2)
     btime_ms_df = join_mean_sem(btime_mean_df, btime_std_df, metric='btime', exclude_sem=True)
     ptime_ms_df = join_mean_sem(ptime_mean_df, ptime_std_df, metric='ptime', exclude_sem=True)
 
@@ -828,19 +784,19 @@ def process(args, in_dir, out_dir, logger):
     # save
     logger.info(f'\nSaving results to {out_dir}...')
 
-    test_point_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.point_metric}_str.csv'), index=None)
-    test_prob_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric1}_str.csv'), index=None)
-    test_prob2_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric2}_str.csv'), index=None)
-    test_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric1}_delta_str.csv'), index=None)
-    test_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric2}_delta_str.csv'), index=None)
-    val_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.prob_metric1}_str.csv'), index=None)
-    val_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.prob_metric2}_str.csv'), index=None)
-    val_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.prob_metric1}_delta_str.csv'), index=None)
-    val_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.prob_metric2}_delta_str.csv'), index=None)
+    test_point_ms2_df.to_csv(os.path.join(out_dir, 'test_rmse_str.csv'), index=None)
+    test_prob_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.scoring}_str.csv'), index=None)
+    test_prob2_ms2_df.to_csv(os.path.join(out_dir, f'test_{scoring2}_str.csv'), index=None)
+    test_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.scoring}_delta_str.csv'), index=None)
+    test_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{scoring2}_delta_str.csv'), index=None)
+    val_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.scoring}_str.csv'), index=None)
+    val_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{scoring2}_str.csv'), index=None)
+    val_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.scoring}_delta_str.csv'), index=None)
+    val_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{scoring2}_delta_str.csv'), index=None)
     btime_ms2_df.to_csv(os.path.join(out_dir, 'test_btime_str.csv'), index=None)
     ptime_ms2_df.to_csv(os.path.join(out_dir, 'test_ptime_str.csv'), index=None)
 
-    test_prob_point_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric1}_rmse_str.csv'), index=None)
+    test_prob_point_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.scoring}_rmse_str.csv'), index=None)
     bptime_ms2_df.to_csv(os.path.join(out_dir, f'test_bptime_str.csv'), index=None)
     param_df.to_csv(os.path.join(out_dir, 'param.csv'), index=None)
 
@@ -848,54 +804,54 @@ def process(args, in_dir, out_dir, logger):
     test_prob_dboth_df = test_prob_df.merge(test_prob_delta_df, on=['dataset', 'fold'], how='left')
     test_prob_mean_dboth_df = test_prob_mean_df.merge(test_prob_delta_mean_df, on='dataset', how='left')
     test_prob_sem_dboth_df = test_prob_sem_df.merge(test_prob_delta_sem_df, on='dataset', how='left')
-    test_prob_dboth_ms_df = join_mean_sem(test_prob_mean_dboth_df, test_prob_sem_dboth_df, metric=args.prob_metric1)
+    test_prob_dboth_ms_df = join_mean_sem(test_prob_mean_dboth_df, test_prob_sem_dboth_df, metric=args.scoring)
     test_prob_dboth_ms2_df = append_head2head(data_df=test_prob_dboth_df, attach_df=test_prob_dboth_ms_df)
-    test_prob_dboth_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric1}_dcomp.csv'), index=None)
+    test_prob_dboth_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.scoring}_dcomp.csv'), index=None)
 
     # delta comparison (scoring 2)
     test_prob2_dboth_df = test_prob2_df.merge(test_prob2_delta_df, on=['dataset', 'fold'], how='left')
     test_prob2_mean_dboth_df = test_prob2_mean_df.merge(test_prob2_delta_mean_df, on='dataset', how='left')
     test_prob2_sem_dboth_df = test_prob2_sem_df.merge(test_prob2_delta_sem_df, on='dataset', how='left')
-    test_prob2_dboth_ms_df = join_mean_sem(test_prob2_mean_dboth_df, test_prob2_sem_dboth_df, metric=args.prob_metric2)
+    test_prob2_dboth_ms_df = join_mean_sem(test_prob2_mean_dboth_df, test_prob2_sem_dboth_df, metric=scoring2)
     test_prob2_dboth_ms2_df = append_head2head(data_df=test_prob2_dboth_df, attach_df=test_prob2_dboth_ms_df)
-    test_prob2_dboth_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric2}_dcomp.csv'), index=None)
+    test_prob2_dboth_ms2_df.to_csv(os.path.join(out_dir, f'test_{scoring2}_dcomp.csv'), index=None)
 
     # runtime
     logger.info('\nRuntime...')
     ref_cols = plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
 
-    # # boxplot
-    # logger.info('\nPlotting boxplots...')
-    # fig, axs = plt.subplots(5, 5, figsize=(4 * 5, 3 * 5))
-    # axs = axs.flatten()
-    # i = 0
-    # for dataset, gf in test_prob_delta_df.groupby('dataset'):
-    #     gf.boxplot([c for c in gf.columns if c not in ['dataset', 'fold']], ax=axs[i])
-    #     axs[i].set_title(dataset)
-    #     axs[i].set_xticks([])
-    #     i += 1
-    # fig.delaxes(axs[-1])
-    # fig.delaxes(axs[-2])
-    # fig.delaxes(axs[-3])
-    # plt.tight_layout()
-    # plt.savefig(os.path.join(out_dir, 'boxplot.pdf'), bbox_inches='tight')
+    # boxplot
+    logger.info('\nPlotting boxplots...')
+    fig, axs = plt.subplots(5, 5, figsize=(4 * 5, 3 * 5))
+    axs = axs.flatten()
+    i = 0
+    for dataset, gf in test_prob_delta_df.groupby('dataset'):
+        gf.boxplot([c for c in gf.columns if c not in ['dataset', 'fold']], ax=axs[i])
+        axs[i].set_title(dataset)
+        axs[i].set_xticks([])
+        i += 1
+    fig.delaxes(axs[-1])
+    fig.delaxes(axs[-2])
+    fig.delaxes(axs[-3])
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, 'boxplot.pdf'), bbox_inches='tight')
 
-    # # Wilcoxon ranked test
-    # if ref_cols is not None:
-    #     ibg_col, ngb_col, pgb_col = ref_cols
-    #     logger.info('\nWilocoxon signed rank test (two-tailed):')
-    #     for c in [ngb_col, pgb_col]:
-    #         test_prob_delta_df = test_prob_delta_df.dropna()  # TEMP
-    #         test_prob_delta_mean_df = test_prob_delta_mean_df.dropna()  # TEMP
-    #         statistic, p_val = stats.wilcoxon(test_prob_delta_df[ibg_col], test_prob_delta_df[c])
-    #         statistic_m, p_val_m = stats.wilcoxon(test_prob_delta_mean_df[ibg_col], test_prob_delta_mean_df[c])
-    #         logger.info(f'[{ibg_col} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
+    # Wilcoxon ranked test
+    if ref_cols is not None:
+        ibg_col, ngb_col, pgb_col = ref_cols
+        logger.info('\nWilocoxon signed rank test (two-tailed):')
+        for c in [ngb_col, pgb_col]:
+            test_prob_delta_df = test_prob_delta_df.dropna()  # TEMP
+            test_prob_delta_mean_df = test_prob_delta_mean_df.dropna()  # TEMP
+            statistic, p_val = stats.wilcoxon(test_prob_delta_df[ibg_col], test_prob_delta_df[c])
+            statistic_m, p_val_m = stats.wilcoxon(test_prob_delta_mean_df[ibg_col], test_prob_delta_mean_df[c])
+            logger.info(f'[{ibg_col} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
 
 
 def main(args):
 
     in_dir = os.path.join(args.in_dir, args.custom_in_dir)
-    out_dir = os.path.join(args.out_dir, args.custom_out_dir, args.scoring_rule_metric)
+    out_dir = os.path.join(args.out_dir, args.custom_out_dir, args.scoring)
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
@@ -924,16 +880,14 @@ if __name__ == '__main__':
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
     parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
-    parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'knn_fi', 'ngboost', 'pgbm', 'cbu', 'bart', 'ibug'])
+    parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'ibug'])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
     parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
     parser.add_argument('--gridsearch', type=int, default=1)
-    parser.add_argument('--acc_metric', type=str, default='rmse')
-    parser.add_argument('--scoring_rule_metric', type=str, default='crps')
-    parser.add_argument('--cal_metric', type=str, default='miscal_area')
+    parser.add_argument('--scoring', type=str, default='nll')
 
     args = parser.parse_args()
     main(args)

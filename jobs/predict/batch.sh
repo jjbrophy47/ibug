@@ -13,27 +13,31 @@ fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
 tree_list=('lgb' 'xgb' 'cb')
 
 for f in ${fold_list[@]}; do
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'constant-%a.out' $run $f 'constant' $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t 'nll' 'crps' 1
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'cbu-%a.out'      $run $f 'cbu'      $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'cbu-%a.out'      $run $f 'cbu'      $t 'nll' 'crps' 1
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'bart-%a.out'     $run $f 'bart'     $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'short' -o ${o}'bart-%a.out'     $run $f 'bart'     $t 'nll' 'crps' 1
+    sbatch -a 1-22 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $s $s $td
+    sbatch -a 1-22 -c 4 -t 1440 -p 'preempt' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
+    sbatch -a 1-22 -c 4 -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $s $s $td
+
+    sbatch -a 1-22 -c 4 -t 1440  -p 'preempt' -o ${o}'constant-%a.out' $run $f 'constant' $t 'nll' 'crps' 1
+    sbatch -a 1-22 -c 4 -t 1440  -p 'preempt' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t 'nll' 'crps' 1
+    sbatch -a 1-22 -c 4 -t 1440  -p 'preempt' -o ${o}'cbu-%a.out'      $run $f 'cbu'      $t 'nll' 'crps' 1
+    sbatch -a 1-22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out'     $run $f 'bart'     $t 'nll' 'crps' 1
 done
 
 for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
-        sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
-        sbatch -a 20               -c 4  -t 2880 -p 'long'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
-        sbatch -a 11               -c 7  -t 2880 -p 'long'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+        # sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+        sbatch -a 20               -c 4  -t 2880 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+        sbatch -a 11               -c 7  -t 2880 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
     done
 done
 
 # scratch pad
+for f in ${fold_list[@]}; do
+    sbatch -a 1-22 -c 4 -t 1440                    -p 'preempt' -o ${o}'cbu-%a.out'  $run $f 'cbu'  $t 'nll' 'crps' 1
+    sbatch -a 2-6,8-9,12,15-17,21-22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out' $run $f 'bart' $t 'nll' 'crps' 1
+done
+
+# NGBoost and PGBM as base models
 fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
 tree_list=('ngboost' 'pgbm')
 for f in ${fold_list[@]}; do

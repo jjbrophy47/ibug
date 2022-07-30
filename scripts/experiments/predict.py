@@ -225,7 +225,7 @@ def experiment(args, in_dir, out_dir, logger):
 
     # validation: calibrate variance
     if args.tune_delta:
-        assert args.model_type in ['constant', 'pgbm']
+        assert args.model_type in ['constant', 'pgbm', 'cbu', 'bart']
         logger.info(f'\nTuning delta for {args.out_scoring.upper()} scoring...')
         start = time.time()
         best_delta, best_op = tune_delta(loc=loc_val, scale=scale_val, y=y_val,

@@ -36,7 +36,7 @@ for f in ${fold_list[@]}; do
 done
 
 # scratch pad
-fold_list=(3 4 5 6 7 10 11 12 13 14 15 16 17 19)
+fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
 for f in ${fold_list[@]}; do
-    sbatch -a 2 -c 20 -t 1440 -p 'preempt' -o ${o}'bart-%a.out' $run $f 'bart' $t $g $s
+    sbatch -a 7,9-11,13-14,19-21 -c 20 -t 1440 -p 'preempt' -o ${o}'bart-%a.out' $run $f 'bart' $t $g $s
 done
