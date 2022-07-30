@@ -335,6 +335,8 @@ def get_loc_scale(model, model_type, X, y_train=None):
         _, loc, variance = model.learner_.predict_dist(X.astype(np.float32),
                                                        output_sample_statistics=True)
         scale = np.sqrt(variance)
+        loc = loc.numpy()
+        scale = scale.numpy()
 
     elif model_type == 'ngboost':
         y_dist = model.pred_dist(X)

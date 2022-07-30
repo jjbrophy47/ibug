@@ -12,6 +12,7 @@ warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler war
 
 import numpy as np
 import matplotlib.pyplot as plt
+import uncertainty_toolbox as uct
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -19,6 +20,77 @@ sys.path.insert(0, here + '/../../')  # for ibug
 import util
 from train import get_loc_scale
 from train import tune_delta
+
+
+# constants
+METRIC_NAMES = {
+    "mae": "MAE",
+    "rmse": "RMSE",
+    "mdae": "MDAE",
+    "marpd": "MARPD",
+    "r2": "R2",
+    "corr": "Correlation",
+    "rms_cal": "Root-mean-squared Calibration Error",
+    "ma_cal": "Mean-absolute Calibration Error",
+    "miscal_area": "Miscalibration Area",
+    "sharp": "Sharpness",
+    "nll": "Negative-log-likelihood",
+    "crps": "CRPS",
+    "check": "Check Score",
+    "interval": "Interval Score",
+    "rms_adv_group_cal": ("Root-mean-squared Adversarial Group " "Calibration Error"),
+    "ma_adv_group_cal": "Mean-absolute Adversarial Group Calibration Error",
+}
+
+
+def _display_adv_group_cal(adv_group_metric_dict, logger, print_group_num=3):
+    """
+    Display and write results to logger.
+    """
+    for a_group_cali_type, a_group_cali_dic in adv_group_metric_dict.items():
+        num_groups = a_group_cali_dic["group_sizes"].shape[0]
+        print_idxs = [int(x) for x in np.linspace(1, num_groups - 1, print_group_num)]
+
+        logger.info("\t{}".format(METRIC_NAMES[a_group_cali_type]))
+
+        for idx in print_idxs:
+            logger.info(
+                "\t\tGroup Size: {:.2f} -- Calibration Error: {:.3f}".format(
+                    a_group_cali_dic["group_sizes"][idx],
+                    a_group_cali_dic["adv_group_cali_mean"][idx],
+                )
+            )
+
+
+def display_results(res_dict, logger, title=''):
+    """
+    Display and write results to logger.
+
+    Reference:
+    https://github.com/uncertainty-toolbox/uncertainty-toolbox/blob/master/uncertainty_toolbox/metrics.py
+    """
+    if title != '':
+        logger.info(f'\n{title}:')
+
+    logger.info(" ====================================================== \n Accuracy Metrics ")
+    for acc_metric, acc_val in res_dict['accuracy'].items():
+        logger.info("\t{:<13} {:.3f}".format(METRIC_NAMES[acc_metric], acc_val))
+
+    logger.info(" ====================================================== \n Average Calibration Metrics ")
+    for cali_metric, cali_val in res_dict['avg_calibration'].items():
+        logger.info("\t{:<37} {:.3f}".format(METRIC_NAMES[cali_metric], cali_val))
+
+    logger.info(" ====================================================== \n Adversarial Group Calibration Metrics ")
+    _display_adv_group_cal(res_dict['adv_group_calibration'], logger)
+
+    logger.info(" ====================================================== \n Sharpness Metrics ")
+    for sharp_metric, sharp_val in res_dict['sharpness'].items():
+        logger.info("\t{:}   {:.3f}".format(METRIC_NAMES[sharp_metric], sharp_val))
+
+    logger.info(" ====================================================== \n Scoring Rule Metrics ")
+    for sr_metric, sr_val in res_dict['scoring_rule'].items():
+        logger.info("\t{:<25} {:.3f}".format(METRIC_NAMES[sr_metric], sr_val))
+    logger.info(" ====================================================== \n")
 
 
 def eval_posterior(model, X, y, min_scale, loc, scale, distribution_list,
@@ -151,18 +223,6 @@ def experiment(args, in_dir, out_dir, logger):
     val_pred_time = time.time() - start
     logger.info(f'predicting...{time.time() - start:.3f}s')
 
-    # validation: evaluate point performance
-    start = time.time()
-    rmse_val, mae_val = util.eval_pred(y_val, model=model_val, X=X_val, logger=None, prefix='VAL')
-    val_eval_point_time = time.time() - start
-    logger.info(f'evaluating point performance...{time.time() - start:.3f}s')
-
-    # validation: evaluate probabilistic performance (w/o delta)
-    start = time.time()
-    nll_val1, crps_val1 = util.eval_normal(y=y_val, loc=loc_val, scale=scale_val, nll=True, crps=True)
-    val_eval_prob_time = time.time() - start
-    logger.info(f'evaluating probabilistic performance...{time.time() - start:.3f}s')
-
     # validation: calibrate variance
     if args.tune_delta:
         assert args.model_type in ['constant', 'pgbm']
@@ -177,14 +237,23 @@ def experiment(args, in_dir, out_dir, logger):
         best_delta, best_op = result['delta']['best_delta'], result['delta']['best_op']
     scale_val_delta = calibrate_variance(scale_val, delta=best_delta, op=best_op)
 
-    # validation: evaluate probabilistic performance (w/ delta)
+    # validation: evaluate performance (w/ and w/o delta)
     start = time.time()
-    nll_val2, crps_val2 = util.eval_normal(y=y_val, loc=loc_val, scale=scale_val_delta, nll=True, crps=True)
-    logger.info(f'evaluating probabilistic performance (w/ delta)...{time.time() - start:.3f}s')
+    val_res = uct.metrics.get_all_metrics(y_pred=loc_val, y_std=scale_val, y_true=y_val, verbose=False)
+    val_res_delta = uct.metrics.get_all_metrics(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, verbose=False)
+    val_eval_time = time.time() - start
+    logger.info(f'evaluating performance...{time.time() - start:.3f}s')
 
-    logger.info(f'\nRMSE: {rmse_val:.5f}, MAE: {mae_val:.5f}')
-    logger.info(f'CRPS: {crps_val1:.5f}, NLL: {nll_val1:.5f}')
-    logger.info(f'CRPS: {crps_val2:.5f}, NLL: {nll_val2:.5f} (w/ delta)')
+    # validation: plot intervals, miscalibration area, adversarial group calibration error
+    fig, axs = plt.subplots(2, 3, figsize=(15, 10))
+    uct.viz.plot_intervals_ordered(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][0])
+    uct.viz.plot_calibration(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][1])
+    uct.viz.plot_adversarial_group_calibration(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][2])
+    uct.viz.plot_intervals_ordered(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][0])
+    uct.viz.plot_calibration(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][1])
+    uct.viz.plot_adversarial_group_calibration(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][2])
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, 'val_pred.png'), bbox_inches='tight')
 
     # test: predict
     logger.info(f'\nTEST SET\n')
@@ -193,42 +262,31 @@ def experiment(args, in_dir, out_dir, logger):
     test_pred_time = time.time() - start
     logger.info(f'predicting...{time.time() - start:.3f}s')
 
-    # test: evaluate point performance
-    start = time.time()
-    rmse_test, mae_test = util.eval_pred(y_test, model=model_test, X=X_test, logger=None, prefix='TEST')
-    test_eval_point_time = time.time() - start
-    logger.info(f'evaluating point performance...{time.time() - start:.3f}s')
-
-    # test: evaluate probabilistic performance
-    start = time.time()
-    nll_test1, crps_test1 = util.eval_normal(y=y_test, loc=loc_test, scale=scale_test, nll=True, crps=True)
-    test_eval_prob_time = time.time() - start
-    logger.info(f'evaluating probabilistic performance...{time.time() - start:.3f}s')
-
     # test: calibrate variance
     scale_test_delta = calibrate_variance(scale_test, delta=best_delta, op=best_op)
 
-    # test: evaluate probabilistic performance
+    # test: evaluate performance (w/ and w/o delta)
     start = time.time()
-    nll_test2, crps_test2 = util.eval_normal(y=y_test, loc=loc_test, scale=scale_test_delta, nll=True, crps=True)
-    logger.info(f'evaluating probabilistic performance (w/ delta)...{time.time() - start:.3f}s')
+    test_res = uct.metrics.get_all_metrics(y_pred=loc_test, y_std=scale_test, y_true=y_test, verbose=False)
+    test_res_delta = uct.metrics.get_all_metrics(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, verbose=False)
+    test_eval_time = time.time() - start
+    logger.info(f'evaluating performance...{time.time() - start:.3f}s')
 
-    logger.info(f'\nRMSE: {rmse_test:.5f}, MAE: {mae_test:.5f}')
-    logger.info(f'CRPS: {crps_test1:.5f}, NLL: {nll_test1:.5f}')
-    logger.info(f'CRPS: {crps_test2:.5f}, NLL: {nll_test2:.5f} (w/ delta)')
+    # show results
+    logger.info(f'\nRESULTS')
+    display_results(val_res, logger, title='Validation')
+    display_results(val_res_delta, logger, title='Validation (w/ delta)')
+    display_results(test_res, logger, title='Test')
+    display_results(test_res_delta, logger, title='Test (w/ delta)')
 
-    # plot predictions
-    test_idxs = np.argsort(y_test)
-
-    fig, ax = plt.subplots()
-    x = np.arange(len(test_idxs))
-    ax.plot(x, y_test[test_idxs], ls='--', color='orange', label='actual', zorder=1)
-    ax.errorbar(x, loc_test[test_idxs], yerr=scale_test[test_idxs], fmt='.',
-                color='green', label='prediction', lw=1, zorder=0)
-    ax.set_title(f'[w/ Delta] CRPS: {crps_test2:.3f}, NLL: {nll_test2:.3f}, RMSE: {rmse_test:.3f}')
-    ax.set_xlabel('Test index (sorted by output)')
-    ax.set_ylabel('Output')
-    ax.legend()
+    # test: plot intervals, miscalibration area, adversarial group calibration error
+    fig, axs = plt.subplots(2, 3, figsize=(15, 10))
+    uct.viz.plot_intervals_ordered(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][0])
+    uct.viz.plot_calibration(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][1])
+    uct.viz.plot_adversarial_group_calibration(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][2])
+    uct.viz.plot_intervals_ordered(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][0])
+    uct.viz.plot_calibration(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][1])
+    uct.viz.plot_adversarial_group_calibration(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][2])
     plt.tight_layout()
     fig.savefig(os.path.join(out_dir, 'test_pred.png'), bbox_inches='tight')
 
@@ -236,26 +294,22 @@ def experiment(args, in_dir, out_dir, logger):
     del result['data']['tune_idxs']
     del result['data']['val_idxs']
     result['predict_args'] = vars(args)
+    result['preds'] = {
+        'val': {'loc': loc_val, 'scale': scale_val, 'scale_delta': scale_val_delta},
+        'test': {'loc': loc_test, 'scale': scale_test, 'scale_delta': scale_test_delta}
+    }
     result['timing'].update({'val_pred_time': val_pred_time,
-                             'val_eval_point_time': val_eval_point_time,
-                             'val_eval_prob_time': val_eval_prob_time,
+                             'val_eval_time': val_eval_time,
                              'test_pred_time': test_pred_time,
-                             'test_eval_point_time': test_eval_point_time,
-                             'test_eval_prob_time': test_eval_prob_time})
-    result['val_performance'] = {'rmse': rmse_val,
-                                 'mae': mae_val,
-                                 'nll': nll_val1,
-                                 'crps': crps_val1,
-                                 'nll_delta': nll_val2,
-                                 'crps_delta': crps_val2}
-    result['test_performance'] = {'rmse': rmse_test,
-                                  'mae': mae_test,
-                                  'nll': nll_test1,
-                                  'crps': crps_test1,
-                                  'nll_delta': nll_test2,
-                                  'crps_delta': crps_test2}
-    result['misc'] = {'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
-                      'total_experiment_time': time.time() - begin}
+                             'test_eval_time': test_eval_time}),
+    result['metrics'] = {
+        'val': val_res, 'val_delta': val_res_delta,
+        'test': test_res, 'test_delta': test_res_delta
+    }
+    result['misc'] = {
+        'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
+        'total_experiment_time': time.time() - begin
+    }
     if args.tune_delta:
         result['timing']['tune_delta'] = tune_time_delta
         result['delta'] = {'best_delta': best_delta, 'best_op': best_op}
