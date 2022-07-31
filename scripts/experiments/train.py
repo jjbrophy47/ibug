@@ -83,6 +83,10 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
 
         # get candidate parameters
         param_grid = get_params(model_type=model_type, tree_type=tree_type, n_train=len(X_tune))
+        
+        # TEMPORARY
+        if model_type == 'ibug' and tree_type == 'lgb' and args.custom_dir == 'ibug_bart':
+            param_grid['n_estimators'] = [10, 50, 100, 200]
 
         # gridsearch
         if model_type == 'knn' or (model_type in ['constant', 'ibug', 'pgbm', 'bart', 'cbu', 'knn_fi'] and gridsearch):
@@ -466,6 +470,7 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
                                                     learning_rate=lr, max_bin=max_bin,
                                                     min_data_in_leaf=min_leaf_samples, subsample=bagging_frac,
                                                     loss_function='RMSEWithUncertainty',
+                                                    custom_metric='RMSE',
                                                     posterior_sampling=True,
                                                     random_state=random_state, logging_level='Silent')
 
@@ -710,7 +715,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_state', type=int, default=1)  # ALL
     parser.add_argument('--verbose', type=int, default=2)  # ALL
     parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
-    parser.add_argument('--scoring', type=str, default='nll')
+    parser.add_argument('--scoring', type=str, default='crps')
 
     # Extra settings
     parser.add_argument('--load_model', type=int, default=0)

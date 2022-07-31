@@ -426,8 +426,8 @@ if __name__ == '__main__':
     parser.add_argument('--random_state', type=int, default=1)  # ALL
     parser.add_argument('--verbose', type=int, default=2)  # ALL
     parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
-    parser.add_argument('--in_scoring', type=str, default='nll')
-    parser.add_argument('--out_scoring', type=str, default='nll')
+    parser.add_argument('--in_scoring', type=str, default='crps')
+    parser.add_argument('--out_scoring', type=str, default='crps')
     parser.add_argument('--distribution', type=str, nargs='+',
                         default=['normal', 'skewnormal', 'lognormal', 'laplace',
                                  'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])

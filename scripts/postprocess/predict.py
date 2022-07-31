@@ -403,6 +403,63 @@ def append_gmean(data_df, attach_df=None, fmt='int', remove_nan=True):
     return result_df
 
 
+def valtest_h2h(val_df, test_df, attach_df=None):
+    """
+    Attach head-to-head wins, ties, and losses to the given dataframe.
+
+    Input
+        val_df: pd.DataFrame, Dataframe with validation scores.
+        test_df: pd.DataFrame, Dataframe with test scores.
+        attach_df: pd.DataFrame, Dataframe to attach results to.
+
+    Return
+        Dataframe attached to `attach_df` if not None, otherwise scores
+            are appended to `data_df`.
+    """
+    assert 'dataset' in val_df.columns
+    assert 'dataset' in test_df.columns
+    cols = [c for c in val_df.columns if c not in ['dataset']]
+
+    # fill in NaNs with a large number
+    val_df = val_df.fillna(np.inf)
+    test_df = test_df.fillna(np.inf)
+
+    res_list = []
+    for c1 in cols:
+        res = {'dataset': f'{c1} W-L'}
+
+        for c2 in cols:
+            if c1 == c2:
+                res[c2] = '-'
+                continue
+
+            vc1 = val_df[c1] != np.inf
+            vc2 = val_df[c2] != np.inf
+            tc1 = test_df[c1] != np.inf
+            tc2 = test_df[c2] != np.inf
+
+            # wins
+            vcw = val_df[c1] < val_df[c2]
+            tcw = test_df[c1] < test_df[c2]
+            n_wins = np.where((vc1) & (vc2) & (vcw) & (tc1) & (tc2) & (tcw))[0].shape[0]
+
+            # losses
+            vcl = val_df[c1] > val_df[c2]
+            tcl = test_df[c1] > test_df[c2]
+            n_losses = np.where((vc1) & (vc2) & (vcl) & (tc1) & (tc2) & (tcl))[0].shape[0]
+
+            res[c2] = f'{n_wins}-{n_losses}'
+
+        res_list.append(res)
+    res_df = pd.DataFrame(res_list)
+
+    if attach_df is not None:
+        result_df = pd.concat([attach_df, res_df])
+    else:
+        result_df = pd.concat([test_df, res_df])
+    return result_df
+
+
 def append_head2head(data_df, attach_df=None):
     """
     Attach head-to-head wins, ties, and losses to the given dataframe.
@@ -705,7 +762,7 @@ def process(args, in_dir, out_dir, logger):
         start = time.time()
 
         for fold in args.fold:
-            exp_dir = os.path.join(in_dir, dataset, 'crps', f'fold{fold}')
+            exp_dir = os.path.join(in_dir, dataset, args.tuning_metric, f'fold{fold}')
             results = util.get_results(args, exp_dir, logger, progress_bar=False)
 
             test_point = {'dataset': dataset, 'fold': fold}
@@ -821,13 +878,28 @@ def process(args, in_dir, out_dir, logger):
     logger.info(f"\nSharpness:\n{mean_h2h['test_sharp_df_delta']}")
 
     # delta comparison
-    keys = [k for k in mean.keys() if'delta' not in k and k not in ['test_acc_df', 'btime_df', 'ptime_df']]
+    keys = [k for k in mean.keys() if 'delta' not in k and k not in ['test_acc_df', 'btime_df', 'ptime_df']]
     delta = {key: mean[key].merge(mean[key+'_delta'], on='dataset', how='left') for key in keys}
     delta_h2h = {key: append_head2head(df) for key, df in delta.items()}
 
     logger.info('\n\nW/O VS. WITH VARIANCE CALIBRATION\n')
     logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{delta_h2h['test_sr_df']}")
     logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{delta_h2h['test_cal_df']}")
+
+    # val-test comparison
+    keys = [k for k in mean.keys() if not any(x in k for x in ['test', 'test_acc_df', 'btime_df', 'ptime_df'])]
+    vtest_h2h = {k.replace('val', 'vtest'): valtest_h2h(val_df=mean[k], test_df=mean[k.replace('val', 'test')]) for k in keys}
+
+    logger.info('\n\nVALIDATION AND TEST\n')
+    logger.info('\nW/O Calibration')
+    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{vtest_h2h['vtest_sr_df']}")
+    logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{vtest_h2h['vtest_cal_df']}")
+    logger.info(f"\nSharpness:\n{vtest_h2h['vtest_sharp_df']}")
+
+    logger.info('\nW/ Calibration')
+    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{vtest_h2h['vtest_sr_df_delta']}")
+    logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{vtest_h2h['vtest_cal_df_delta']}")
+    logger.info(f"\nSharpness:\n{vtest_h2h['vtest_sharp_df_delta']}")
 
     # save
     for key, df in mean_h2h.items():
@@ -988,7 +1060,7 @@ def process(args, in_dir, out_dir, logger):
 def main(args):
 
     in_dir = os.path.join(args.in_dir, args.custom_in_dir)
-    out_dir = os.path.join(args.out_dir, args.custom_out_dir, args.scoring_rule_metric)
+    out_dir = os.path.join(args.out_dir, args.custom_out_dir, args.tuning_metric)
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
@@ -1024,6 +1096,7 @@ if __name__ == '__main__':
     parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
     parser.add_argument('--gridsearch', type=int, default=1)
+    parser.add_argument('--tuning_metric', type=str, default='crps')
     parser.add_argument('--acc_metric', type=str, default='rmse')
     parser.add_argument('--scoring_rule_metric', type=str, default='crps')
     parser.add_argument('--cal_metric', type=str, default='ma_cal')

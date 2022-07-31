@@ -12,9 +12,14 @@ model_type=$2
 tree_type=$3
 gridsearch=$4
 scoring=$5
-load_model=$6
-in_scoring=$7
-n_jobs=$8
+custom_dir=$6
+load_model=$7
+in_scoring=$8
+n_jobs=$9
+
+if [[ ! $custom_dir ]]; then
+    custom_dir='default'
+fi
 
 if [[ ! $load_model ]]; then
     load_model=0
@@ -51,3 +56,5 @@ python3 scripts/experiments/train.py \
   --load_model=${load_model} \
   --in_scoring=${in_scoring} \
   --n_jobs=${n_jobs} \
+  --custom_dir=${custom_dir} \
+
