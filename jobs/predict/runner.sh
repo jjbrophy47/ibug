@@ -13,13 +13,18 @@ tree_type=$3
 in_scoring=$4
 out_scoring=$5
 tune_delta=$6
-custom_out_dir=$7
-tree_subsample_frac=$8
-tree_subsample_order=$9
-n_jobs=${10}
+custom_in_dir=$7
+custom_out_dir=$8
+tree_subsample_frac=$9
+tree_subsample_order=${10}
+n_jobs=${11}
 
 if [[ ! $out_scoring ]]; then
     out_scoring=${in_scoring}
+fi
+
+if [[ ! $custom_in_dir ]]; then
+    custom_in_dir='default'
 fi
 
 if [[ ! $custom_out_dir ]]; then
@@ -50,8 +55,8 @@ python3 scripts/experiments/predict.py \
   --in_scoring=${in_scoring} \
   --out_scoring=${out_scoring} \
   --tune_delta=${tune_delta} \
+  --custom_in_dir=${custom_in_dir} \
   --custom_out_dir=${custom_out_dir} \
   --tree_subsample_frac=${tree_subsample_frac} \
   --tree_subsample_order=${tree_subsample_order} \
   --n_jobs=${n_jobs} \
-

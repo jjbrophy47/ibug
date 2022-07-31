@@ -38,5 +38,5 @@ done
 # scratch pad
 fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
 for f in ${fold_list[@]}; do
-    sbatch -a 2-6,8-9,12,15-17,21-22 -c 4 -t 1440  -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $g $s
+    sbatch -a 2-6,8-9,12,15-17,21-22 -c 4 -t 1440  -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' $t $g $s 'ibug_bart'
 done
