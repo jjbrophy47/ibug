@@ -8,10 +8,10 @@ import joblib
 import logging
 import hashlib
 import itertools
-import numpy as np
 
+import numpy as np
 import properscoring as ps
-from sklearn.model_selection import train_test_split
+import uncertainty_toolbox as uct
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
 from scipy import stats
@@ -282,6 +282,47 @@ def eval_pred(y, yhat=None, model=None, X=None, logger=None, prefix=''):
         logger.info(f'[{prefix}] RMSE: {rmse:.5f}, MAE: {mae:.5f}, ')
 
     return rmse, mae
+
+
+def eval_uncertainty(y, loc, scale, metric='crps'):
+    """
+    Evaluate each predicted normal distribution.
+
+    Input
+        y: 1d array of targets
+        loc: 1d array of mean values (same length as y).
+        scale: 1d array of std. dev. values (same length as y).
+        metric: str, Scoring metric.
+
+    Return
+        - Float, average score over all examples.
+    """
+    assert metric in ['nll', 'crps', 'check', 'interval',
+        'rms_cal', 'ma_cal', 'miscal_area', 'sharpness']
+    assert y.shape == loc.shape == scale.shape
+
+    result = ()
+    if metric == 'nll':
+        score_func = uct.nll_gaussian
+    elif metric == 'crps':
+        score_func = uct.crps_gaussian
+    elif metric == 'check':
+        score_func = uct.check_score
+    elif metric == 'interval':
+        score_func = uct.interval_score
+    elif metric == 'rms_cal':
+        score_func = uct.root_mean_squared_calibration_error
+    elif metric == 'ma_cal':
+        score_func = uct.mean_absolute_calibration_error
+    elif metric == 'miscal_area':
+        score_func = uct.miscalibration_area
+    elif metric == 'sharpness':
+        score_func = uct.sharpness
+    else:
+        raise ValueError(f'Unknown scoring metric {metric}')
+    
+    result = score_func(y_pred=loc, y_std=scale, y_true=y)
+    return result
 
 
 def eval_normal(y, loc, scale, nll=True, crps=False):

@@ -32,9 +32,9 @@ for f in ${fold_list[@]}; do
 done
 
 # scratch pad
+fold_list=(9)
 for f in ${fold_list[@]}; do
-    sbatch -a 1-22 -c 4 -t 1440                    -p 'preempt' -o ${o}'cbu-%a.out'  $run $f 'cbu'  $t 'nll' 'crps' 1
-    sbatch -a 2-6,8-9,12,15-17,21-22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out' $run $f 'bart' $t 'nll' 'crps' 1
+    sbatch -a 8,12 -c 6 -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'cb' $s $s $td
 done
 
 # NGBoost and PGBM as base models

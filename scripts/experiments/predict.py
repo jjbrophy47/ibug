@@ -280,15 +280,18 @@ def experiment(args, in_dir, out_dir, logger):
     display_results(test_res_delta, logger, title='Test (w/ delta)')
 
     # test: plot intervals, miscalibration area, adversarial group calibration error
-    fig, axs = plt.subplots(2, 3, figsize=(15, 10))
-    uct.viz.plot_intervals_ordered(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][0])
-    uct.viz.plot_calibration(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][1])
-    uct.viz.plot_adversarial_group_calibration(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][2])
-    uct.viz.plot_intervals_ordered(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][0])
-    uct.viz.plot_calibration(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][1])
-    uct.viz.plot_adversarial_group_calibration(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][2])
-    plt.tight_layout()
-    fig.savefig(os.path.join(out_dir, 'test_pred.png'), bbox_inches='tight')
+    try:
+        fig, axs = plt.subplots(2, 3, figsize=(15, 10))
+        uct.viz.plot_intervals_ordered(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][0])
+        uct.viz.plot_calibration(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][1])
+        uct.viz.plot_adversarial_group_calibration(y_pred=loc_test, y_std=scale_test, y_true=y_test, ax=axs[0][2])
+        uct.viz.plot_intervals_ordered(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][0])
+        uct.viz.plot_calibration(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][1])
+        uct.viz.plot_adversarial_group_calibration(y_pred=loc_test, y_std=scale_test_delta, y_true=y_test, ax=axs[1][2])
+        plt.tight_layout()
+        fig.savefig(os.path.join(out_dir, 'test_pred.png'), bbox_inches='tight')
+    except:
+        logger.info('plotting failed')
 
     # save results
     del result['data']['tune_idxs']

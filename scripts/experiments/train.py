@@ -260,7 +260,6 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
         - float, best delta value.
         - str, best operation.
     """
-    assert scoring in ['nll', 'crps']
     assert ops == ['add', 'mult']
     assert loc.shape == scale.shape == y.shape
 
@@ -277,10 +276,7 @@ def tune_delta(loc, scale, y, ops=['add', 'mult'],
                 else:
                     temp_scale = scale * (delta * multiplier)
 
-                if scoring == 'nll':
-                    score = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=True, crps=False)
-                else:
-                    score = util.eval_normal(y=y, loc=loc, scale=temp_scale, nll=False, crps=True)
+                score = util.eval_uncertainty(y=y, loc=loc, scale=temp_scale, metric=scoring)
                 results.append({'delta': delta, 'op': op, 'multiplier': multiplier, 'score': score})
 
     df = pd.DataFrame(results).sort_values('score', ascending=True)

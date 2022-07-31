@@ -46,6 +46,17 @@ c_dict['wave'] = 'Wave~\\cite{Dua:2019}'
 c_dict['wine'] = 'Wine~\\cite{cortez2009modeling,Dua:2019}'
 c_dict['yacht'] = 'Yacht~\\cite{Dua:2019}'
 
+metric_names = {
+    'rmse': 'Root-Mean-Squared Error',
+    'nll': 'Negative-Log Likelihood',
+    'crps': 'Continuous Ranked Probability Score',
+    'check': 'Check Score',
+    'interval': 'Interval Score',
+    'rms_cal': 'Root-Mean-Squared Calibration Error',
+    'ma_cal': 'Mean-Absolute Calibration Error',
+    'miscal_area': 'Miscalibration Area',
+}
+
 
 def get_ax_lims(ax):
     """
@@ -392,7 +403,50 @@ def append_gmean(data_df, attach_df=None, fmt='int', remove_nan=True):
     return result_df
 
 
-def append_head2head(data_df, attach_df=None, include_ties=True,
+def append_head2head(data_df, attach_df=None):
+    """
+    Attach head-to-head wins, ties, and losses to the given dataframe.
+
+    Input
+        data_df: pd.DataFrame, Dataframe used to compute head-to-head scores.
+        attach_df: pd.DataFrame, Dataframe to attach results to.
+
+    Return
+        Dataframe attached to `attach_df` if not None, otherwise scores
+            are appended to `data_df`.
+    """
+    assert 'dataset' in data_df.columns
+    cols = [c for c in data_df.columns if c not in ['dataset']]
+
+    # fill in NaNs with a large number
+    data_df = data_df.fillna(np.inf)
+
+    res_list = []
+    for c1 in cols:
+        res = {'dataset': f'{c1} W-L'}
+
+        for c2 in cols:
+            if c1 == c2:
+                res[c2] = '-'
+                continue
+
+            n_wins = len(np.where((data_df[c1] != np.inf) & (data_df[c2] != np.inf) & (data_df[c1] < data_df[c2]))[0])
+            n_ties = len(np.where((data_df[c1] == data_df[c2]) | (data_df[c1] == np.inf) | (data_df[c2] == np.inf))[0])
+            n_losses = len(np.where((data_df[c1] != np.inf) & (data_df[c2] != np.inf) & (data_df[c1] > data_df[c2]))[0])
+
+            res[c2] = f'{n_wins}-{n_losses}'
+
+        res_list.append(res)
+    res_df = pd.DataFrame(res_list)
+
+    if attach_df is not None:
+        result_df = pd.concat([attach_df, res_df])
+    else:
+        result_df = pd.concat([data_df, res_df])
+    return result_df
+
+
+def append_head2head_old(data_df, attach_df=None, include_ties=True,
                      p_val_threshold=0.05):
     """
     Attach head-to-head wins, ties, and losses to the given dataframe.
@@ -651,7 +705,7 @@ def process(args, in_dir, out_dir, logger):
         start = time.time()
 
         for fold in args.fold:
-            exp_dir = os.path.join(in_dir, dataset, args.scoring_rule_metric, f'fold{fold}')
+            exp_dir = os.path.join(in_dir, dataset, 'crps', f'fold{fold}')
             results = util.get_results(args, exp_dir, logger, progress_bar=False)
 
             test_point = {'dataset': dataset, 'fold': fold}
@@ -677,7 +731,6 @@ def process(args, in_dir, out_dir, logger):
 
             # extract results
             for method, res in results:
-                print(method, exp_dir)
                 name = method
 
                 test_point[name] = res['metrics']['test']['accuracy'][args.acc_metric]
@@ -721,54 +774,94 @@ def process(args, in_dir, out_dir, logger):
         logger.info(f'{dataset}...{time.time() - start:.3f}s')
 
     # compile results
-    test_point_df = pd.DataFrame(test_point_list)
-    test_prob_df = pd.DataFrame(test_prob_list)
-    test_prob2_df = pd.DataFrame(test_prob2_list)
-    test_prob3_df = pd.DataFrame(test_prob3_list)
-    test_prob_delta_df = pd.DataFrame(test_prob_delta_list)
-    test_prob2_delta_df = pd.DataFrame(test_prob2_delta_list)
-    test_prob3_delta_df = pd.DataFrame(test_prob3_delta_list)
+    raw = {}
+    raw['test_acc_df'] = pd.DataFrame(test_point_list)
+    raw['test_sr_df'] = pd.DataFrame(test_prob_list)
+    raw['test_cal_df'] = pd.DataFrame(test_prob2_list)
+    raw['test_sharp_df'] = pd.DataFrame(test_prob3_list)
+    raw['test_sr_df_delta'] = pd.DataFrame(test_prob_delta_list)
+    raw['test_cal_df_delta'] = pd.DataFrame(test_prob2_delta_list)
+    raw['test_sharp_df_delta'] = pd.DataFrame(test_prob3_delta_list)
 
-    val_prob_df = pd.DataFrame(val_prob_list)
-    val_prob2_df = pd.DataFrame(val_prob2_list)
-    val_prob3_df = pd.DataFrame(val_prob3_list)
-    val_prob_delta_df = pd.DataFrame(val_prob_delta_list)
-    val_prob2_delta_df = pd.DataFrame(val_prob2_delta_list)
-    val_prob3_delta_df = pd.DataFrame(val_prob3_delta_list)
+    raw['val_sr_df'] = pd.DataFrame(val_prob_list)
+    raw['val_cal_df'] = pd.DataFrame(val_prob2_list)
+    raw['val_sharp_df'] = pd.DataFrame(val_prob3_list)
+    raw['val_sr_df_delta'] = pd.DataFrame(val_prob_delta_list)
+    raw['val_cal_df_delta'] = pd.DataFrame(val_prob2_delta_list)
+    raw['val_sharp_df_delta'] = pd.DataFrame(val_prob3_delta_list)
 
-    btime_df = pd.DataFrame(btime_list)
-    ptime_df = pd.DataFrame(ptime_list)
+    raw['btime_df'] = pd.DataFrame(btime_list)
+    raw['ptime_df'] = pd.DataFrame(ptime_list)
     param_df = aggregate_params(pd.DataFrame(param_list), param_names, param_types)  # aggregate hyperparameters
 
-    print(test_point_df)
+    # compute mean and and SEM/s.d.
+    group_cols = ['dataset']
+    mean = {key: df.groupby(group_cols).mean().reset_index().drop(columns=['fold']) for key, df in raw.items()}
+    sem = {key: df.groupby(group_cols).sem().reset_index().drop(columns=['fold']) for key, df in raw.items()}
+    std = {
+        'btime_df': raw['btime_df'].groupby(group_cols).std().reset_index().drop(columns=['fold']),
+        'ptime_df': raw['ptime_df'].groupby(group_cols).std().reset_index().drop(columns=['fold'])
+    }
+
+    # compute wins/losses
+    mean_h2h = {key: append_head2head(df) for key, df in mean.items()}
+
+    # pd.set_option('display.max_columns', None)
+
+    logger.info('\n\nNO VARIANCE CALIBRATION')
+    logger.info(f"\n{metric_names[args.acc_metric]} (Accuracy):\n{mean_h2h['test_acc_df']}")
+    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{mean_h2h['test_sr_df']}")
+    logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{mean_h2h['test_cal_df']}")
+    logger.info(f"\nSharpness:\n{mean_h2h['test_sharp_df']}")
+
+    logger.info('\n\nWITH VARIANCE CALIBRATION')
+    logger.info(f"\n{metric_names[args.acc_metric]} (Accuracy):\n{mean_h2h['test_acc_df']}")
+    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{mean_h2h['test_sr_df_delta']}")
+    logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{mean_h2h['test_cal_df_delta']}")
+    logger.info(f"\nSharpness:\n{mean_h2h['test_sharp_df_delta']}")
+
+    # delta comparison
+    keys = [k for k in mean.keys() if'delta' not in k and k not in ['test_acc_df', 'btime_df', 'ptime_df']]
+    delta = {key: mean[key].merge(mean[key+'_delta'], on='dataset', how='left') for key in keys}
+    delta_h2h = {key: append_head2head(df) for key, df in delta.items()}
+
+    logger.info('\n\nW/O VS. WITH VARIANCE CALIBRATION\n')
+    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{delta_h2h['test_sr_df']}")
+    logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{delta_h2h['test_cal_df']}")
+
+    # save
+    for key, df in mean_h2h.items():
+        df.to_csv(f'{out_dir}/mean_{key}.csv', index=False)
+
+    for key, df in delta_h2h.items():
+        df.to_csv(f'{out_dir}/dcomp_{key}.csv', index=False)
+
+    logger.info(f'\nSaving results to {out_dir}...')
     exit(0)
 
-    # compute mean and std. error of the mean
-    group_cols = ['dataset']
+    # test_point_mean_df = test_point_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # test_prob_mean_df = test_prob_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # test_prob2_mean_df = test_prob2_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # test_prob_delta_mean_df = test_prob_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # test_prob2_delta_mean_df = test_prob2_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # val_prob_mean_df = val_prob_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # val_prob2_mean_df = val_prob2_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # val_prob_delta_mean_df = val_prob_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # val_prob2_delta_mean_df = val_prob2_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # btime_mean_df = btime_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
+    # ptime_mean_df = ptime_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
 
-    test_point_mean_df = test_point_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    test_prob_mean_df = test_prob_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    test_prob2_mean_df = test_prob2_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    test_prob_delta_mean_df = test_prob_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    test_prob2_delta_mean_df = test_prob2_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    val_prob_mean_df = val_prob_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    val_prob2_mean_df = val_prob2_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    val_prob_delta_mean_df = val_prob_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    val_prob2_delta_mean_df = val_prob2_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    btime_mean_df = btime_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    ptime_mean_df = ptime_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-
-    test_point_sem_df = test_point_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    test_prob_sem_df = test_prob_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    test_prob2_sem_df = test_prob2_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    test_prob_delta_sem_df = test_prob_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    test_prob2_delta_sem_df = test_prob2_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    val_prob_sem_df = val_prob_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    val_prob2_sem_df = val_prob2_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    val_prob_delta_sem_df = val_prob_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    val_prob2_delta_sem_df = val_prob2_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    btime_std_df = btime_df.groupby(group_cols).std().reset_index().drop(columns=['fold'])
-    ptime_std_df = ptime_df.groupby(group_cols).std().reset_index().drop(columns=['fold'])
+    # test_point_sem_df = test_point_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # test_prob_sem_df = test_prob_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # test_prob2_sem_df = test_prob2_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # test_prob_delta_sem_df = test_prob_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # test_prob2_delta_sem_df = test_prob2_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # val_prob_sem_df = val_prob_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # val_prob2_sem_df = val_prob2_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # val_prob_delta_sem_df = val_prob_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # val_prob2_delta_sem_df = val_prob2_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
+    # btime_std_df = btime_df.groupby(group_cols).std().reset_index().drop(columns=['fold'])
+    # ptime_std_df = ptime_df.groupby(group_cols).std().reset_index().drop(columns=['fold'])
 
     # combine mean and sem into one dataframe
     test_point_ms_df = join_mean_sem(test_point_mean_df, test_point_sem_df, metric=args.point_metric)
@@ -911,8 +1004,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--in_dir', type=str, default='results/experiments/predict/')
-    parser.add_argument('--out_dir', type=str, default='results/postprocess/predict/')
+    parser.add_argument('--in_dir', type=str, default='output/talapas/experiments/predict/')
+    parser.add_argument('--out_dir', type=str, default='output/talapas/postprocess/predict/')
     parser.add_argument('--custom_in_dir', type=str, default='default')
     parser.add_argument('--custom_out_dir', type=str, default='default')
 
@@ -933,7 +1026,7 @@ if __name__ == '__main__':
     parser.add_argument('--gridsearch', type=int, default=1)
     parser.add_argument('--acc_metric', type=str, default='rmse')
     parser.add_argument('--scoring_rule_metric', type=str, default='crps')
-    parser.add_argument('--cal_metric', type=str, default='miscal_area')
+    parser.add_argument('--cal_metric', type=str, default='ma_cal')
 
     args = parser.parse_args()
     main(args)

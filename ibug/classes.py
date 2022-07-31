@@ -5,6 +5,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import properscoring as ps
+import uncertainty_toolbox as uct
 from sklearn.base import clone
 from scipy.stats import norm
 from scipy.sparse import csr_matrix
@@ -66,7 +67,7 @@ class IBUGWrapper(Estimator):
         assert tree_subsample_order in ['random', 'ascending', 'descending']
         assert instance_subsample_frac > 0 and tree_subsample_frac <= 1.0
         assert affinity in ['unweighted', 'weighted']
-        assert scoring in ['nll', 'crps']
+        assert scoring in ['nll', 'crps', 'check', 'interval', 'rms_cal', 'ma_cal', 'miscal_area', 'sharpness']
         assert min_scale > 0
         assert eps > 0
         assert n_jobs >= -1
@@ -214,8 +215,7 @@ class IBUGWrapper(Estimator):
         # tune parameters
         if X_val is not None and y_val is not None:
             X_val, y_val = util.check_data(X_val, y_val, objective=self.model_.objective)
-            self.k_, self.min_scale_, self.loc_val_, self.scale_val_ = self._tune_k(X=X_val, y=y_val,
-                                                                                    scoring=self.scoring)
+            self.k_, self.min_scale_, self.loc_val_, self.scale_val_ = self._tune_k(X=X_val, y=y_val)
 
             if self.variance_calibration:
                 self.gamma_, self.delta_ = self._tune_calibration(loc=self.loc_val_, scale=self.scale_val_,
@@ -486,7 +486,7 @@ class IBUGWrapper(Estimator):
 
         return leaf_mat, leaf_counts, leaf_cum_sum
 
-    def _tune_k(self, X, y, scoring='nll',
+    def _tune_k(self, X, y,
                 k_params=[3, 5, 7, 9, 11, 15, 31, 61, 91, 121,
                           151, 201, 301, 401, 501, 601, 701]):
         """
@@ -535,12 +535,9 @@ class IBUGWrapper(Estimator):
                 # progress
                 self._msg(s=f'[IBUG - tuning] {n_done:,} / {len(X):,}, cum. time: {time.time() - start:.3f}s')
 
-        # evaluate
-        assert scoring in ['nll', 'crps']
-
         results = []
         for j, k in enumerate(k_params):
-            score = self._eval_normal(y=y, loc=loc[:, j], scale=scale[:, j], scoring=scoring)
+            score = eval_uncertainty(y=y, loc=loc[:, j], scale=scale[:, j], metric=self.scoring)
             results.append({'k': k, 'score': score, 'k_idx': j})
 
         df = pd.DataFrame(results).sort_values('score', ascending=True)
@@ -607,7 +604,7 @@ class IBUGWrapper(Estimator):
                     else:
                         temp_scale = scale * (base_val * multiplier)
 
-                    score = self._eval_normal(y=y, loc=loc, scale=temp_scale, scoring=scoring)
+                    score = eval_uncertainty(y=y, loc=loc, scale=temp_scale, metric=scoring)
                     results.append({'base_val': base_val, 'op': op, 'multiplier': multiplier, 'score': score})
 
         df = pd.DataFrame(results).sort_values('score', ascending=True)
@@ -652,30 +649,6 @@ class IBUGWrapper(Estimator):
                 n_prev_leaves += leaf_count
 
         return weights
-
-    def _eval_normal(self, y, loc, scale, scoring):
-        """
-        Evaluate pedictions assuming the output follows a normal distribution.
-
-        Input
-            y: 1d array of targets
-            loc: 1d array of mean values (same length as y).
-            scale: 1d array of std. dev. values (same length as y).
-            scoring: str, evaluation metric.
-
-        Return
-            - Float, Average score over all examples.
-        """
-        if scoring == 'nll':
-            result = eval_normal(y=y, loc=loc, scale=scale, nll=True, crps=False)
-
-        elif scoring == 'crps':
-            result = eval_normal(y=y, loc=loc, scale=scale, nll=False, crps=True)
-
-        else:
-            raise ValueError(f'Unknown scoring {scoring}')
-
-        return result
 
     def _msg(self, s):
         """
@@ -731,7 +704,7 @@ class KNNWrapper(Estimator):
         assert gamma > 0.0
         assert delta >= 0.0
         assert variance_calibration in [True, False]
-        assert scoring in ['nll', 'crps']
+        assert scoring in ['nll', 'crps', 'check', 'interval', 'rms_cal', 'ma_cal', 'miscal_area', 'sharpness']
         assert min_scale > 0
         assert eps > 0
         assert n_jobs == 1, 'parallelization not implemented!'
@@ -930,7 +903,7 @@ class KNNWrapper(Estimator):
 
         results = []
         for j, k in enumerate(k_params):
-            score = self._eval_normal(y=y_val, loc=loc[:, j], scale=scale[:, j], scoring=scoring)
+            score = eval_uncertainty(y=y_val, loc=loc[:, j], scale=scale[:, j], metric=scoring)
             results.append({'k': k, 'score': score, 'k_idx': j})
 
         df = pd.DataFrame(results).sort_values('score', ascending=True)
@@ -1000,7 +973,7 @@ class KNNWrapper(Estimator):
                     else:
                         temp_scale = scale * (base_val * multiplier)
 
-                    score = self._eval_normal(y=y, loc=loc, scale=temp_scale, scoring=scoring)
+                    score = eval_uncertainty(y=y, loc=loc, scale=temp_scale, metric=scoring)
                     results.append({'base_val': base_val, 'op': op, 'multiplier': multiplier, 'score': score})
 
         df = pd.DataFrame(results).sort_values('score', ascending=True)
@@ -1024,29 +997,29 @@ class KNNWrapper(Estimator):
 
         return gamma, delta
 
-    def _eval_normal(self, y, loc, scale, scoring):
-        """
-        Evaluate pedictions assuming the output follows a normal distribution.
+    # def _eval_normal(self, y, loc, scale, scoring):
+    #     """
+    #     Evaluate pedictions assuming the output follows a normal distribution.
 
-        Input
-            y: 1d array of targets
-            loc: 1d array of mean values (same length as y).
-            scale: 1d array of std. dev. values (same length as y).
-            scoring: str, evaluation metric.
+    #     Input
+    #         y: 1d array of targets
+    #         loc: 1d array of mean values (same length as y).
+    #         scale: 1d array of std. dev. values (same length as y).
+    #         scoring: str, evaluation metric.
 
-        Return
-            - Float, Average score over all examples.
-        """
-        if scoring == 'nll':
-            result = eval_normal(y=y, loc=loc, scale=scale, nll=True, crps=False)
+    #     Return
+    #         - Float, Average score over all examples.
+    #     """
+    #     if scoring == 'nll':
+    #         result = eval_normal(y=y, loc=loc, scale=scale, nll=True, crps=False)
 
-        elif scoring == 'crps':
-            result = eval_normal(y=y, loc=loc, scale=scale, nll=False, crps=True)
+    #     elif scoring == 'crps':
+    #         result = eval_normal(y=y, loc=loc, scale=scale, nll=False, crps=True)
 
-        else:
-            raise ValueError(f'Unknown scoring {scoring}')
+    #     else:
+    #         raise ValueError(f'Unknown scoring {scoring}')
 
-        return result
+    #     return result
 
 
 class KNNFIWrapper(Estimator):
@@ -1093,7 +1066,7 @@ class KNNFIWrapper(Estimator):
         assert gamma > 0.0
         assert delta >= 0.0
         assert variance_calibration in [True, False]
-        assert scoring in ['nll', 'crps']
+        assert scoring in ['nll', 'crps', 'check', 'interval', 'rms_cal', 'ma_cal', 'miscal_area', 'sharpness']
         assert min_scale > 0
         assert eps > 0
         assert n_jobs == 1, 'parallelization not implemented!'
@@ -1307,7 +1280,7 @@ class KNNFIWrapper(Estimator):
         results = []
         for j, max_feat in enumerate(max_feat_params):
             for m, k in enumerate(k_params):
-                score = self._eval_normal(y=y_val, loc=loc, scale=scale[:, j, m], scoring=scoring)
+                score = eval_uncertainty(y=y_val, loc=loc, scale=scale[:, j, m], metric=scoring)
                 results.append({'max_feat': max_feat, 'k': k, 'score': score, 'max_feat_idx': j, 'k_idx': m})
 
         df = pd.DataFrame(results).sort_values('score', ascending=True)
@@ -1379,7 +1352,7 @@ class KNNFIWrapper(Estimator):
                     else:
                         temp_scale = scale * (base_val * multiplier)
 
-                    score = self._eval_normal(y=y, loc=loc, scale=temp_scale, scoring=scoring)
+                    score = eval_uncertainty(y=y, loc=loc, scale=temp_scale, metric=scoring)
                     results.append({'base_val': base_val, 'op': op, 'multiplier': multiplier, 'score': score})
 
         df = pd.DataFrame(results).sort_values('score', ascending=True)
@@ -1403,29 +1376,29 @@ class KNNFIWrapper(Estimator):
 
         return gamma, delta
 
-    def _eval_normal(self, y, loc, scale, scoring):
-        """
-        Evaluate pedictions assuming the output follows a normal distribution.
+    # def _eval_normal(self, y, loc, scale, scoring):
+    #     """
+    #     Evaluate pedictions assuming the output follows a normal distribution.
 
-        Input
-            y: 1d array of targets
-            loc: 1d array of mean values (same length as y).
-            scale: 1d array of std. dev. values (same length as y).
-            scoring: str, evaluation metric.
+    #     Input
+    #         y: 1d array of targets
+    #         loc: 1d array of mean values (same length as y).
+    #         scale: 1d array of std. dev. values (same length as y).
+    #         scoring: str, evaluation metric.
 
-        Return
-            - Float, Average score over all examples.
-        """
-        if scoring == 'nll':
-            result = eval_normal(y=y, loc=loc, scale=scale, nll=True, crps=False)
+    #     Return
+    #         - Float, Average score over all examples.
+    #     """
+    #     if scoring == 'nll':
+    #         result = eval_normal(y=y, loc=loc, scale=scale, nll=True, crps=False)
 
-        elif scoring == 'crps':
-            result = eval_normal(y=y, loc=loc, scale=scale, nll=False, crps=True)
+    #     elif scoring == 'crps':
+    #         result = eval_normal(y=y, loc=loc, scale=scale, nll=False, crps=True)
 
-        else:
-            raise ValueError(f'Unknown scoring {scoring}')
+    #     else:
+    #         raise ValueError(f'Unknown scoring {scoring}')
 
-        return result
+    #     return result
 
 
 # parallelizable methods
@@ -1517,7 +1490,7 @@ def _affinity(test_idx, leaf_idxs, leaf_mat, n_train):
     return result
 
 
-def eval_normal(y, loc, scale, nll=True, crps=False):
+def eval_uncertainty(y, loc, scale, metric='crps'):
     """
     Evaluate each predicted normal distribution.
 
@@ -1525,22 +1498,63 @@ def eval_normal(y, loc, scale, nll=True, crps=False):
         y: 1d array of targets
         loc: 1d array of mean values (same length as y).
         scale: 1d array of std. dev. values (same length as y).
-        nll: bool, If True, return the avg. neg. log likelihood.
-        crps: bool, If True, return the avg. CRPS score.
+        metric: str, Scoring metric.
 
     Return
-        Tuple of scores.
+        - Float, average score over all examples.
     """
-    assert nll or crps
+    assert metric in ['nll', 'crps', 'check', 'interval',
+        'rms_cal', 'ma_cal', 'miscal_area', 'sharpness']
     assert y.shape == loc.shape == scale.shape
 
     result = ()
-    if nll:
-        result += (np.mean([-norm.logpdf(y[i], loc=loc[i], scale=scale[i]) for i in range(len(y))]),)
-    if crps:
-        result += (np.mean([ps.crps_gaussian(y[i], mu=loc[i], sig=scale[i]) for i in range(len(y))]),)
-
-    if len(result) == 1:
-        result = result[0]
-
+    if metric == 'nll':
+        score_func = uct.nll_gaussian
+    elif metric == 'crps':
+        score_func = uct.crps_gaussian
+    elif metric == 'check':
+        score_func = uct.check_score
+    elif metric == 'interval':
+        score_func = uct.interval_score
+    elif metric == 'rms_cal':
+        score_func = uct.root_mean_squared_calibration_error
+    elif metric == 'ma_cal':
+        score_func = uct.mean_absolute_calibration_error
+    elif metric == 'miscal_area':
+        score_func = uct.miscalibration_area
+    elif metric == 'sharpness':
+        score_func = uct.sharpness
+    else:
+        raise ValueError(f'Unknown scoring metric {metric}')
+    
+    result = score_func(y_pred=loc, y_std=scale, y_true=y)
     return result
+
+
+# def eval_normal(y, loc, scale, nll=True, crps=False):
+#     """
+#     Evaluate each predicted normal distribution.
+
+#     Input
+#         y: 1d array of targets
+#         loc: 1d array of mean values (same length as y).
+#         scale: 1d array of std. dev. values (same length as y).
+#         nll: bool, If True, return the avg. neg. log likelihood.
+#         crps: bool, If True, return the avg. CRPS score.
+
+#     Return
+#         Tuple of scores.
+#     """
+#     assert nll or crps
+#     assert y.shape == loc.shape == scale.shape
+
+#     result = ()
+#     if nll:
+#         result += (np.mean([-norm.logpdf(y[i], loc=loc[i], scale=scale[i]) for i in range(len(y))]),)
+#     if crps:
+#         result += (np.mean([ps.crps_gaussian(y[i], mu=loc[i], sig=scale[i]) for i in range(len(y))]),)
+
+#     if len(result) == 1:
+#         result = result[0]
+
+#     return result
