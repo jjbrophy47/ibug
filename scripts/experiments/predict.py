@@ -13,6 +13,7 @@ warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler war
 import numpy as np
 import matplotlib.pyplot as plt
 import uncertainty_toolbox as uct
+from sklearn.preprocessing import StandardScaler
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -207,10 +208,19 @@ def experiment(args, in_dir, out_dir, logger):
     X_train, X_test, y_train, y_test, objective = util.get_data(args.data_dir, args.dataset, args.fold)
     val_idxs = result['data']['val_idxs']
     tune_idxs = result['data']['tune_idxs']
+
+    # apply standard scaling if KNN
+    if args.model_type in ['knn', 'knn_fi']:
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
+        logger.info('\nApplying standard scaling...')
+
     X_val, y_val = X_train[val_idxs].copy(), y_train[val_idxs].copy()
     X_tune, y_tune = X_train[tune_idxs].copy(), y_train[tune_idxs].copy()
 
-    logger.info('\nno. train: {:,}'.format(X_train.shape[0]))
+    logger.info('no. train: {:,}'.format(X_train.shape[0]))
     logger.info('  -> no. val.: {:,}'.format(X_val.shape[0]))
     logger.info('no. test: {:,}'.format(X_test.shape[0]))
     logger.info('no. features: {:,}'.format(X_train.shape[1]))

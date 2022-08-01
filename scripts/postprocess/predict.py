@@ -908,6 +908,9 @@ def process(args, in_dir, out_dir, logger):
     for key, df in delta_h2h.items():
         df.to_csv(f'{out_dir}/dcomp_{key}.csv', index=False)
 
+    for key, df in vtest_h2h.items():
+        df.to_csv(f'{out_dir}/vtest_{key}.csv', index=False)
+
     logger.info(f'\nSaving results to {out_dir}...')
     exit(0)
 

@@ -12,7 +12,6 @@ for f in ${fold_list[@]}; do
     # sbatch -a 1-22             -c 4  -t 1440 -p 'short' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $g $s
     # sbatch -a 1-22             -c 4  -t 1440 -p 'short' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $g $s
     sbatch -a 1-22             -c 4  -t 1440 -p 'short' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $g $s
-    sbatch -a 1-22             -c 4  -t 1440 -p 'short' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $g 'crps'
     sbatch -a 1-22             -c 4  -t 1440 -p 'short' -o ${o}'cbu-%a.out'      $run $f 'cbu'      $t $g $s
     sbatch -a 1-22             -c 10 -t 1440 -p 'short' -o ${o}'bart-%a.out'     $run $f 'bart'     $t $g $s
 done
@@ -25,7 +24,6 @@ for f in ${fold_list[@]}; do
     # sbatch -a 7,13,20                -c 15 -t 7200  -p 'long'  -o ${o}'pgbm-%a.out'   $run $f 'pgbm'   $t $g $s
     # sbatch -a 11                     -c 20 -t 7200  -p 'long'  -o ${o}'pgbm-%a.out'   $run $f 'pgbm'   $t $g $s
     sbatch -a 11                     -c 5  -t 2880  -p 'long'  -o ${o}'knn_fi-%a.out' $run $f 'knn_fi' $t $g $s
-    sbatch -a 11                     -c 5  -t 2880  -p 'long'  -o ${o}'knn_fi-%a.out' $run $f 'knn_fi' $t $g 'crps'
 done
 
 for f in ${fold_list[@]}; do

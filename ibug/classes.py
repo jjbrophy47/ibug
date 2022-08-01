@@ -7,7 +7,6 @@ import pandas as pd
 import properscoring as ps
 import uncertainty_toolbox as uct
 from sklearn.base import clone
-from scipy.stats import norm
 from scipy.sparse import csr_matrix
 from sklearn.neighbors import KNeighborsRegressor
 

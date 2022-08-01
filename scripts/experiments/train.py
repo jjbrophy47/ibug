@@ -13,6 +13,7 @@ warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler war
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
@@ -533,6 +534,14 @@ def experiment(args, logger, out_dir, in_dir=None):
         tune_idxs = rng.choice(np.arange(len(X_train)), size=n_tune, replace=False)
     else:
         tune_idxs = np.arange(len(X_train))
+
+    # apply standard scaling if the method is KNN
+    if args.model_type in ['knn', 'knn_fi']:
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
+        logger.info('\nApplying standard scaling...')
 
     # split total tuning set into a train/validation set
     tune_idxs, val_idxs = train_test_split(tune_idxs, test_size=args.val_frac,

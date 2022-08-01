@@ -1,10 +1,11 @@
 run='jobs/predict/runner.sh'
 o='jobs/logs/predict/'
 t='lgb'
-s='nll'
+s='crps'
 p='short'
 l='long'
 td=0
+ci='default'
 co='default'
 tf=1.0
 to='random'
@@ -32,9 +33,9 @@ for f in ${fold_list[@]}; do
 done
 
 # scratch pad
-fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
+fold_list=(16)
 for f in ${fold_list[@]}; do
-    sbatch -a 2-6,8-9,12,15-17,21-22 -c 4 -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' $t $s $s $td 'ibug_bart' 'ibug_bart'
+    sbatch -a 11 -c 5 -t 1440 -p 'preempt' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
 done
 
 # NGBoost and PGBM as base models
@@ -42,7 +43,7 @@ fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
 tree_list=('ngboost' 'pgbm')
 for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
-        sbatch -a 1-22 -c 7 -t 1440 -p $p -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $co $tf $to $nj
+        sbatch -a 1-22 -c 7 -t 1440 -p $p -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $ci $co $tf $to $nj
     done
 done
 
