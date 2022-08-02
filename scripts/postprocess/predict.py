@@ -57,6 +57,20 @@ metric_names = {
     'miscal_area': 'Miscalibration Area',
 }
 
+method_map = {
+    'cbu': 'CBU',
+    'cbu_ibug_3c6e45799d41bd18a1c73419c9a8cedf': 'CBU+IBUG',
+    'cbu_ibug_9924f746db4df90f0d794346ed144bbd': 'CBU+IBUG-CB',
+    'pgbm_5e13b5ea212546260ba205c54e1d9559': 'PGBM',
+    'ngboost': 'NGBoost',
+    'knn': 'KNN',
+    'knn_fi': 'KNN-FI',
+    'ibug_3c6e45799d41bd18a1c73419c9a8cedf': 'IBUG',
+    'ibug_9924f746db4df90f0d794346ed144bbd': 'IBUG-CB',
+    'bart': 'BART',
+    'dataset': 'Dataset',
+}
+
 
 def get_ax_lims(ax):
     """
@@ -225,6 +239,157 @@ def compute_relative(df, ref_col, skip_cols=[]):
     for c in cols:
         res_df[c] = df[c] / df[ref_col]
     return res_df
+
+
+def markdown_table(df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}, logger=None, suffix=''):
+    """
+    Format dataframe.
+    """
+    assert 'dataset' in df
+
+    df = df.replace(np.inf, np.nan).dropna()
+
+    num_cols = [c for c in df.columns if c != 'dataset']
+
+    s = '|' + '|'.join([method_map[c] for c in df.columns]) + '|'
+    s += '\n| --- | ' + ' | '.join(['---' for _ in num_cols]) + ' |'
+    datasets = df['dataset'].values
+    num_arr = df[num_cols].values
+
+    num_datasets = len(datasets) - (len(df.columns) - 1)
+    min_vals = num_arr[:num_datasets].min(axis=1)
+
+    i = 0
+    for dataset, arr in zip(datasets, num_arr):
+        if dataset in dmap:
+            dataset_name = dmap[dataset]
+        elif dataset.split()[0] in method_map:
+            items = dataset.split()
+            dataset_name = '*' + method_map[items[0]] + ' ' + items[1] + '*'
+        else:
+            dataset_name = f'{dataset.capitalize()}'
+
+        s += '\n|' + dataset_name.replace("w-l", "W-L")
+        for v in arr:
+            if type(v) == str:
+                s += f'| {v}'
+            else:
+                if v == min_vals[i]:
+                    s += f'| **{v:.3f}**'
+                else:
+                    s += f'| {v:.3f}'
+        i += 1
+        s += '|'
+    
+    if logger:
+        logger.info(f'\n### {suffix}\n{s}\n')
+    else:
+        print(f'\n### {suffix}\n{s}\n')
+
+
+def markdown_table_sem(df, sem_df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}, logger=None, suffix=''):
+    """
+    Format dataframe.
+    """
+    assert 'dataset' in df
+
+    df = df.replace(np.inf, np.nan).dropna()
+    sem_df = sem_df.replace(np.inf, np.nan).dropna()
+    assert np.all(df.index == sem_df.index)
+
+    num_cols = [c for c in df.columns if c != 'dataset']
+
+    s = '|' + '|'.join([method_map[c] for c in df.columns]) + '|'
+    s += '\n| --- | ' + ' | '.join(['---' for _ in num_cols]) + ' |'
+    datasets = df['dataset'].values
+    num_arr = df[num_cols].values
+    sem_arr = sem_df[num_cols].values
+
+    num_datasets = len(datasets) - (len(df.columns) - 1)
+    min_vals = num_arr[:num_datasets].min(axis=1)
+
+    i = 0
+    for dataset, arr, s_arr in zip(datasets, num_arr, sem_arr):
+        if dataset in dmap:
+            dataset_name = dmap[dataset]
+        elif dataset.split()[0] in method_map:
+            items = dataset.split()
+            dataset_name = '*' + method_map[items[0]] + ' ' + items[1] + '*'
+        else:
+            dataset_name = f'{dataset.capitalize()}'
+
+        s += '\n|' + dataset_name.replace("w-l", "W-L")
+        for v, se in zip(arr, s_arr):
+            if type(v) == str:
+                s += f'| {v}'
+            else:
+                if v == min_vals[i]:
+                    s += f'| **$${v:.3f}**' + '_{(' + f'{se:.3f}' + ')}$$'
+                else:
+                    s += f'| $${v:.3f}' + '_{(' + f'{se:.3f}' + ')}$$'
+        i += 1
+        s += '|'
+    
+    if logger:
+        logger.info(f'\n### {suffix}\n{s}\n')
+    else:
+        print(f'\n### {suffix}\n{s}\n')
+
+
+def markdown_table2(df1, df2, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}, logger=None, suffix=''):
+    """
+    Format dataframe.
+    """
+    assert 'dataset' in df1
+
+    df1 = df1.replace(np.inf, np.nan).dropna()
+    df2 = df2.replace(np.inf, np.nan).dropna()
+    assert np.all(df1.index == df2.index)
+
+    num_cols = [c for c in df1.columns if c != 'dataset']
+
+    s = '|' + '|'.join([method_map[c] for c in df1.columns]) + '|'
+    s += '\n| --- | ' + ' | '.join(['---' for _ in num_cols]) + ' |'
+    datasets = df1['dataset'].values
+    num_arr1 = df1[num_cols].values
+    num_arr2 = df2[num_cols].values
+
+    num_datasets = len(datasets) - (len(df1.columns) - 1)
+    min_vals1 = num_arr1[:num_datasets].min(axis=1)
+    min_vals2 = num_arr2[:num_datasets].min(axis=1)
+
+    i = 0
+    for dataset, arr1, arr2 in zip(datasets, num_arr1, num_arr2):
+        if dataset in dmap:
+            dataset_name = dmap[dataset]
+        elif dataset.split()[0] in method_map:
+            items = dataset.split()
+            dataset_name = '*' + method_map[items[0]] + ' ' + items[1] + '*'
+        else:
+            dataset_name = f'{dataset.capitalize()}'
+
+        s += '\n|' + dataset_name.replace("w-l", "W-L")
+        for v1, v2 in zip(arr1, arr2):
+            if type(v1) == str:
+                s += f'| {v1}/{v2}'
+            else:
+                if v1 == min_vals1[i]:
+                    s += f'| **{v1:.3f}**'
+                else:
+                    s += f'| {v1:.3f}'
+
+                if v2 == min_vals2[i]:
+                    s += f'/**{v2:.3f}**'
+                else:
+                    s += f'/{v2:.3f}'
+        i += 1
+        s += '|'
+    
+    if logger:
+        logger.info(f'\n### {suffix}\n{s}\n')
+    else:
+        print(f'\n### {suffix}\n{s}\n')
+
 
 
 def format_dataset_names(df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}):
@@ -583,6 +748,9 @@ def get_param_list(name, result):
     param_names = []
     param_types = []
 
+    if name.startswith('cbu_ibug'):
+        return [], [], []
+
     if 'ibug' in name:
         param_list.append(result['model_params']['base_model_params_']['n_estimators'])
         param_list.append(result['model_params']['base_model_params_']['learning_rate'])
@@ -862,6 +1030,7 @@ def process(args, in_dir, out_dir, logger):
 
     # compute wins/losses
     mean_h2h = {key: append_head2head(df) for key, df in mean.items()}
+    sem_h2h = {key: append_head2head(df) for key, df in sem.items()}
 
     # pd.set_option('display.max_columns', None)
 
@@ -912,6 +1081,18 @@ def process(args, in_dir, out_dir, logger):
         df.to_csv(f'{out_dir}/vtest_{key}.csv', index=False)
 
     logger.info(f'\nSaving results to {out_dir}...')
+
+    if 'cbu' in mean['test_cal_df']:
+        cbu_cal_ratio = mean['test_cal_df']['cbu'] / mean['test_cal_df_delta']['cbu']
+        cbu_sharp_ratio = mean['test_sharp_df']['cbu'] / mean['test_sharp_df_delta']['cbu']
+        print(cbu_cal_ratio.mean(), cbu_cal_ratio.median())
+        print(cbu_sharp_ratio.mean(), cbu_sharp_ratio.median())
+
+    # print markdown tables
+    logger.info('\n\nMARKDOWN TABLES')
+    markdown_table(df=mean_h2h['test_acc_df'], logger=logger, suffix=args.acc_metric.upper())
+    markdown_table(df=mean_h2h['test_sr_df_delta'], logger=logger, suffix=args.scoring_rule_metric.upper())
+    markdown_table2(df1=mean_h2h['test_cal_df_delta'], df2=mean_h2h['test_sharp_df_delta'], logger=logger, suffix='MACE/Sharpness')
     exit(0)
 
     # test_point_mean_df = test_point_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
@@ -1092,7 +1273,8 @@ if __name__ == '__main__':
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
     parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
-    parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'knn_fi', 'ngboost', 'pgbm', 'cbu', 'bart', 'ibug'])
+    parser.add_argument('--model_type', type=str, nargs='+',
+        default=['knn', 'knn_fi', 'ngboost', 'pgbm', 'cbu', 'bart', 'ibug', 'cbu_ibug'])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])

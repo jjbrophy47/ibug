@@ -9,6 +9,7 @@ import uncertainty_toolbox as uct
 from sklearn.base import clone
 from scipy.sparse import csr_matrix
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.preprocessing import StandardScaler
 
 from .base import Estimator
 from .parsers import util
@@ -1128,6 +1129,10 @@ class KNNFIWrapper(Estimator):
         self.model_ = model
         self.base_model_params_ = self.model_.get_params()
 
+        # scale data
+        self.scaler_ = StandardScaler().fit(X)
+        X_norm = self.scaler_.transform(X)
+
         # pseudo-random number generator
         self.rng_ = np.random.default_rng(self.random_state)
 
@@ -1162,7 +1167,7 @@ class KNNFIWrapper(Estimator):
 
         self.fi_ = self.sorted_fi_[:self.max_feat_]
         best_params = {'n_neighbors': self.k_, 'weights': 'uniform'}
-        self.uncertainty_estimator = KNeighborsRegressor().set_params(**best_params).fit(X[:, self.fi_], y)
+        self.uncertainty_estimator = KNeighborsRegressor().set_params(**best_params).fit(X_norm[:, self.fi_], y)
 
         return self
 
@@ -1195,7 +1200,10 @@ class KNNFIWrapper(Estimator):
         loc = self.predict(X)  # shape=(len(X))
         scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X))
 
-        neighbors = self.uncertainty_estimator.kneighbors(X[:, self.fi_], return_distance=False)  # shape=(len(X), self.k_)
+        # standardize data
+        X_norm = self.scaler_.transform(X)
+
+        neighbors = self.uncertainty_estimator.kneighbors(X_norm[:, self.fi_], return_distance=False)  # shape=(len(X), self.k_)
         for i, train_idxs in enumerate(neighbors):  # per test example
             train_vals = self.y_train_[train_idxs]
 
@@ -1249,6 +1257,10 @@ class KNNFIWrapper(Estimator):
             max_feat_params.append(X_train.shape[1])  # all features
         k_params = [k for k in k_params if k <= len(X_train)]
 
+        # standardize data
+        X_train_norm = self.scaler_.transform(X_train)
+        X_val_norm = self.scaler_.transform(X_val)
+
         loc = self.predict(X_val)  # shape=(n_val,)
         scale = np.zeros((len(X_val), len(max_feat_params), len(k_params))).astype(np.float32)  # shape=(n_val, n_feats, n_k)
 
@@ -1256,7 +1268,7 @@ class KNNFIWrapper(Estimator):
 
             for j, max_feat in enumerate(max_feat_params):  # per max_feat
                 feat_idxs = self.sorted_fi_[:max_feat]
-                affinity = np.linalg.norm(X_val[i, feat_idxs] - X_train[:, feat_idxs], axis=1)  # shape=(len(X_train),)
+                affinity = np.linalg.norm(X_val_norm[i, feat_idxs] - X_train_norm[:, feat_idxs], axis=1)  # shape=(len(X_train),)
                 train_idxs = np.argsort(affinity)  # smallest to largest distance
 
                 # evaluate different k
@@ -1264,14 +1276,14 @@ class KNNFIWrapper(Estimator):
                     train_vals_k = y_train[train_idxs[:k]]
                     scale[i, j, m] = np.std(train_vals_k) + self.eps
 
-                # progress
-                if (i + 1) % 100 == 0 and self.verbose > 0:
-                    if self.logger:
-                        self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X_val):,}, '
-                                        f'cum. time: {time.time() - start:.3f}s')
-                    else:
-                        print(f'[KNN - tuning] {i + 2:,} / {len(X_val):,}, '
-                            f'cum. time: {time.time() - start:.3f}s')
+            # progress
+            if (i + 1) % 100 == 0 and self.verbose > 0:
+                if self.logger:
+                    self.logger.info(f'[KNN - tuning] {i + 1:,} / {len(X_val):,}, '
+                                    f'cum. time: {time.time() - start:.3f}s')
+                else:
+                    print(f'[KNN - tuning] {i + 2:,} / {len(X_val):,}, '
+                        f'cum. time: {time.time() - start:.3f}s')
 
         # evaluate
         assert scoring in ['nll', 'crps']

@@ -13,7 +13,7 @@ warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler war
 import numpy as np
 import matplotlib.pyplot as plt
 import uncertainty_toolbox as uct
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
@@ -185,67 +185,45 @@ def calibrate_variance(scale_arr, delta, op):
     return result
 
 
-def experiment(args, in_dir, out_dir, logger):
+def experiment(args, in_dir1, in_dir2, out_dir, logger):
     """
     Main method comparing performance of tree ensembles and svm models.
     """
     begin = time.time()  # experiment timer
     rng = np.random.default_rng(args.random_state)  # pseduo-random number generator
 
-    # load results and models from training
-    result = np.load(os.path.join(in_dir, 'results.npy'), allow_pickle=True)[()]
-    model_val = util.load_model(model_type=args.model_type, fp=result['saved_models']['model_val'])
-    model_test = util.load_model(model_type=args.model_type, fp=result['saved_models']['model_test'])
+    # load cbu and ibug predictions
+    result1 = np.load(os.path.join(in_dir1, 'results.npy'), allow_pickle=True)[()]
+    result2 = np.load(os.path.join(in_dir2, 'results.npy'), allow_pickle=True)[()]
 
-    # additional settings
-    if args.model_type == 'ibug':
-        model_val.set_n_jobs(n_jobs=args.n_jobs)
-        model_test.set_n_jobs(n_jobs=args.n_jobs)
-        model_test.set_tree_subsampling(frac=args.tree_subsample_frac, order=args.tree_subsample_order)
-        model_test.set_instance_subsampling(frac=args.instance_subsample_frac)
+    # average predictions
+    loc_val = (result1['preds']['val']['loc'] + result2['preds']['val']['loc']) / 2
+    scale_val = (result1['preds']['val']['scale'] + result2['preds']['val']['scale']) / 2
+    scale_val_delta = (result1['preds']['val']['scale_delta'] + result2['preds']['val']['scale_delta']) / 2
+
+    loc_test = (result1['preds']['test']['loc'] + result2['preds']['test']['loc']) / 2
+    scale_test = (result1['preds']['test']['scale'] + result2['preds']['test']['scale']) / 2
+    scale_test_delta = (result1['preds']['test']['scale_delta'] + result2['preds']['test']['scale_delta']) / 2
 
     # get data
-    X_train, X_test, y_train, y_test, objective = util.get_data(args.data_dir, args.dataset, args.fold)
-    val_idxs = result['data']['val_idxs']
-    tune_idxs = result['data']['tune_idxs']
+    X_train, X_test, y_train, y_test, _ = util.get_data(args.data_dir, args.dataset, args.fold)
 
-    # apply standard scaling if KNN
-    if args.model_type in ['knn']:
-        scaler = StandardScaler()
-        scaler.fit(X_train)
-        X_train = scaler.transform(X_train)
-        X_test = scaler.transform(X_test)
-        logger.info('\nApplying standard scaling...')
+    # use a fraction of the training data for tuning
+    if args.tune_frac < 1.0:
+        assert args.tune_frac > 0.0
+        n_tune = int(len(X_train) * args.tune_frac)
+        tune_idxs = rng.choice(np.arange(len(X_train)), size=n_tune, replace=False)
+    else:
+        tune_idxs = np.arange(len(X_train))
 
+    tune_idxs, val_idxs = train_test_split(tune_idxs, test_size=args.val_frac,
+                                           random_state=args.random_state)
     X_val, y_val = X_train[val_idxs].copy(), y_train[val_idxs].copy()
-    X_tune, y_tune = X_train[tune_idxs].copy(), y_train[tune_idxs].copy()
 
     logger.info('no. train: {:,}'.format(X_train.shape[0]))
     logger.info('  -> no. val.: {:,}'.format(X_val.shape[0]))
     logger.info('no. test: {:,}'.format(X_test.shape[0]))
     logger.info('no. features: {:,}'.format(X_train.shape[1]))
-    logger.info(f"\ndelta: {result['delta']['best_delta']}, op: {result['delta']['best_op']}")
-
-    # validation: predict
-    logger.info(f'\nVALIDATION SET\n')
-    start = time.time()
-    loc_val, scale_val = get_loc_scale(model=model_val, model_type=args.model_type, X=X_val, y_train=y_tune)
-    val_pred_time = time.time() - start
-    logger.info(f'predicting...{time.time() - start:.3f}s')
-
-    # validation: calibrate variance
-    if args.tune_delta:
-        assert args.model_type in ['constant', 'pgbm', 'cbu', 'bart']
-        logger.info(f'\nTuning delta for {args.out_scoring.upper()} scoring...')
-        start = time.time()
-        best_delta, best_op = tune_delta(loc=loc_val, scale=scale_val, y=y_val,
-                                         scoring=args.out_scoring, verbose=args.verbose, logger=logger)
-        tune_time_delta = time.time() - start
-        logger.info(f'\nbest delta: {best_delta}, op: {best_op}')
-        logger.info(f'tune time (delta): {tune_time_delta:.3f}s')
-    else:
-        best_delta, best_op = result['delta']['best_delta'], result['delta']['best_op']
-    scale_val_delta = calibrate_variance(scale_val, delta=best_delta, op=best_op)
 
     # validation: evaluate performance (w/ and w/o delta)
     start = time.time()
@@ -255,25 +233,18 @@ def experiment(args, in_dir, out_dir, logger):
     logger.info(f'evaluating performance...{time.time() - start:.3f}s')
 
     # validation: plot intervals, miscalibration area, adversarial group calibration error
-    fig, axs = plt.subplots(2, 3, figsize=(15, 10))
-    uct.viz.plot_intervals_ordered(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][0])
-    uct.viz.plot_calibration(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][1])
-    uct.viz.plot_adversarial_group_calibration(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][2])
-    uct.viz.plot_intervals_ordered(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][0])
-    uct.viz.plot_calibration(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][1])
-    uct.viz.plot_adversarial_group_calibration(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][2])
-    plt.tight_layout()
-    fig.savefig(os.path.join(out_dir, 'val_pred.png'), bbox_inches='tight')
-
-    # test: predict
-    logger.info(f'\nTEST SET\n')
-    start = time.time()
-    loc_test, scale_test = get_loc_scale(model=model_test, model_type=args.model_type, X=X_test, y_train=y_train)
-    test_pred_time = time.time() - start
-    logger.info(f'predicting...{time.time() - start:.3f}s')
-
-    # test: calibrate variance
-    scale_test_delta = calibrate_variance(scale_test, delta=best_delta, op=best_op)
+    try:
+        fig, axs = plt.subplots(2, 3, figsize=(15, 10))
+        uct.viz.plot_intervals_ordered(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][0])
+        uct.viz.plot_calibration(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][1])
+        uct.viz.plot_adversarial_group_calibration(y_pred=loc_val, y_std=scale_val, y_true=y_val, ax=axs[0][2])
+        uct.viz.plot_intervals_ordered(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][0])
+        uct.viz.plot_calibration(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][1])
+        uct.viz.plot_adversarial_group_calibration(y_pred=loc_val, y_std=scale_val_delta, y_true=y_val, ax=axs[1][2])
+        plt.tight_layout()
+        fig.savefig(os.path.join(out_dir, 'val_pred.png'), bbox_inches='tight')
+    except:
+        logger.info('plotting failed')
 
     # test: evaluate performance (w/ and w/o delta)
     start = time.time()
@@ -304,16 +275,18 @@ def experiment(args, in_dir, out_dir, logger):
         logger.info('plotting failed')
 
     # save results
-    del result['data']['tune_idxs']
-    del result['data']['val_idxs']
+    result = result1.copy()
+
+    # del result['data']['tune_idxs']
+    # del result['data']['val_idxs']
     result['predict_args'] = vars(args)
     result['preds'] = {
         'val': {'loc': loc_val, 'scale': scale_val, 'scale_delta': scale_val_delta},
         'test': {'loc': loc_test, 'scale': scale_test, 'scale_delta': scale_test_delta}
     }
-    result['timing'].update({'val_pred_time': val_pred_time,
+    result['timing'].update({'val_pred_time': 0,
                              'val_eval_time': val_eval_time,
-                             'test_pred_time': test_pred_time,
+                             'test_pred_time': 0,
                              'test_eval_time': test_eval_time}),
     result['metrics'] = {
         'val': val_res, 'val_delta': val_res_delta,
@@ -323,33 +296,33 @@ def experiment(args, in_dir, out_dir, logger):
         'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
         'total_experiment_time': time.time() - begin
     }
-    if args.tune_delta:
-        result['timing']['tune_delta'] = tune_time_delta
-        result['delta'] = {'best_delta': best_delta, 'best_op': best_op}
-    if args.model_type == 'ibug':
+    # if args.tune_delta:
+    #     result['timing']['tune_delta'] = 0
+    #     result['delta'] = {'best_delta': 0, 'best_op': 'add'}
+    # if args.model_type == 'ibug':
 
         # collecting statistics
-        logger.info('\n\nLEAF STATISTICS')
-        start = time.time()
-        result['affinity_count'] = model_test.get_affinity_stats(X_test)  # dict with 2 1d arrays of len=n_boost
-        result['leaf_density'] = model_test.get_leaf_stats()  # dict with 1 1d array of len=n_boost
-        logger.info(f'time: {time.time() - start:.3f}s')
+        # logger.info('\n\nLEAF STATISTICS')
+        # start = time.time()
+        # result['affinity_count'] = model_test.get_affinity_stats(X_test)  # dict with 2 1d arrays of len=n_boost
+        # result['leaf_density'] = model_test.get_leaf_stats()  # dict with 1 1d array of len=n_boost
+        # logger.info(f'time: {time.time() - start:.3f}s')
 
         # posterior modeling
-        if args.custom_out_dir in ['dist', 'dist_fl', 'dist_fls']:
-            logger.info('\n\nPOSTERIOR MODELING')
-            val_res = eval_posterior(model=model_val, X=X_val, y=y_val, min_scale=model_val.min_scale_,
-                                     loc=loc_val, scale=scale_val_delta, distribution_list=args.distribution,
-                                     fixed_params=args.custom_out_dir, random_state=args.random_state,
-                                     logger=logger, prefix='VAL')
-            test_res = eval_posterior(model=model_test, X=X_test, y=y_test, min_scale=model_test.min_scale_,
-                                      loc=loc_test, scale=scale_test_delta, distribution_list=args.distribution,
-                                      fixed_params=args.custom_out_dir, random_state=args.random_state,
-                                      logger=logger, prefix='TEST')
-            result['val_posterior'] = val_res['performance']
-            result['test_posterior'] = test_res['performance']
-            if args.fold == 1:
-                result['neighbors'] = test_res['neighbors']
+        # if args.custom_out_dir in ['dist', 'dist_fl', 'dist_fls']:
+        #     logger.info('\n\nPOSTERIOR MODELING')
+        #     val_res = eval_posterior(model=model_val, X=X_val, y=y_val, min_scale=model_val.min_scale_,
+        #                              loc=loc_val, scale=scale_val_delta, distribution_list=args.distribution,
+        #                              fixed_params=args.custom_out_dir, random_state=args.random_state,
+        #                              logger=logger, prefix='VAL')
+        #     test_res = eval_posterior(model=model_test, X=X_test, y=y_test, min_scale=model_test.min_scale_,
+        #                               loc=loc_test, scale=scale_test_delta, distribution_list=args.distribution,
+        #                               fixed_params=args.custom_out_dir, random_state=args.random_state,
+        #                               logger=logger, prefix='TEST')
+        #     result['val_posterior'] = val_res['performance']
+        #     result['test_posterior'] = test_res['performance']
+        #     if args.fold == 1:
+        #         result['neighbors'] = test_res['neighbors']
 
     # Macs show this in bytes, unix machines show this in KB
     logger.info(f"\ntotal experiment time: {result['misc']['total_experiment_time']:.3f}s")
@@ -368,24 +341,34 @@ def main(args):
     train_args['tree_subsample_frac'] = 1.0
     train_args['tree_subsample_order'] = 'random'
     train_args['instance_subsample_frac'] = 1.0
-    method_name = util.get_method_identifier(args.model_type, train_args)
+    method_name1 = util.get_method_identifier(args.model_type1, train_args)
+    method_name2 = util.get_method_identifier(args.model_type2, train_args)
 
-    in_dir = os.path.join(args.in_dir,
-                          args.custom_in_dir,
-                          args.dataset,
-                          args.in_scoring,
-                          f'fold{args.fold}',
-                          method_name)
+    in_dir1 = os.path.join(args.in_dir,
+        args.custom_in_dir,
+        args.dataset,
+        args.in_scoring,
+        f'fold{args.fold}',
+        method_name1)
+
+    in_dir2 = os.path.join(args.in_dir,
+        args.custom_in_dir,
+        args.dataset,
+        args.in_scoring,
+        f'fold{args.fold}',
+        method_name2)
+
+    if not os.path.exists(in_dir1) or not os.path.exists(in_dir2):
+        print('one or more input directories do not exist, exiting...')
+        exit(0)
 
     # define output directory
-    method_name = util.get_method_identifier(args.model_type, vars(args))
-
     out_dir = os.path.join(args.out_dir,
                            args.custom_out_dir,
                            args.dataset,
                            args.out_scoring,
                            f'fold{args.fold}',
-                           method_name)
+                           method_name1 + '_' + method_name2)
 
     # create outut directory and clear any previous contents
     os.makedirs(out_dir, exist_ok=True)
@@ -400,7 +383,7 @@ def main(args):
     logfile, stdout, stderr = util.stdout_stderr_to_log(os.path.join(out_dir, 'log+.txt'))
 
     # run experiment
-    experiment(args, in_dir, out_dir, logger)
+    experiment(args, in_dir1, in_dir2, out_dir, logger)
 
     # restore original stdout and stderr settings
     util.reset_stdout_stderr(logfile, stdout, stderr)
@@ -411,7 +394,7 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--in_dir', type=str, default='output/experiments/train/')
+    parser.add_argument('--in_dir', type=str, default='output/experiments/predict/')
     parser.add_argument('--out_dir', type=str, default='output/experiments/predict/')
     parser.add_argument('--custom_in_dir', type=str, default='default')
     parser.add_argument('--custom_out_dir', type=str, default='default')
@@ -419,7 +402,8 @@ if __name__ == '__main__':
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='concrete')
     parser.add_argument('--fold', type=int, default=1)
-    parser.add_argument('--model_type', type=str, default='ibug')
+    parser.add_argument('--model_type1', type=str, default='cbu')
+    parser.add_argument('--model_type2', type=str, default='ibug')
 
     # Method settings
     parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, IBUG, PGBM
@@ -430,17 +414,17 @@ if __name__ == '__main__':
     parser.add_argument('--affinity', type=str, default='unweighted')  # IBUG
 
     # Default settings
-    parser.add_argument('--tune_delta', type=int, default=0)  # Constant and PGBM
+    # parser.add_argument('--tune_delta', type=int, default=0)  # Constant and PGBM
     parser.add_argument('--tune_frac', type=float, default=1.0)  # ALL
     parser.add_argument('--val_frac', type=float, default=0.2)  # ALL
     parser.add_argument('--random_state', type=int, default=1)  # ALL
-    parser.add_argument('--verbose', type=int, default=2)  # ALL
-    parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
+    # parser.add_argument('--verbose', type=int, default=2)  # ALL
+    # parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
     parser.add_argument('--in_scoring', type=str, default='crps')
     parser.add_argument('--out_scoring', type=str, default='crps')
-    parser.add_argument('--distribution', type=str, nargs='+',
-                        default=['normal', 'skewnormal', 'lognormal', 'laplace',
-                                 'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])
+    # parser.add_argument('--distribution', type=str, nargs='+',
+    #                     default=['normal', 'skewnormal', 'lognormal', 'laplace',
+    #                              'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])
 
     # Extra settings
     parser.add_argument('--n_jobs', type=int, default=1)

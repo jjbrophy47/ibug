@@ -562,14 +562,14 @@ def get_method_identifier(model, exp_params):
     if model == 'constant':
         settings['tree_type'] = exp_params['tree_type']
 
-    elif model == 'ibug':
+    elif model == 'ibug' or model.startswith('cbu_ibug'):
         settings['tree_subsample_frac'] = exp_params['tree_subsample_frac']
         settings['tree_subsample_order'] = exp_params['tree_subsample_order']
         settings['instance_subsample_frac'] = exp_params['instance_subsample_frac']
         settings['affinity'] = exp_params['affinity']
         settings['tree_type'] = exp_params['tree_type']
 
-    if exp_params['gridsearch'] and model in ['constant', 'ibug', 'pgbm']:
+    if exp_params['gridsearch'] and (model in ['constant', 'ibug', 'pgbm'] or model.startswith('cbu_ibug')):
         settings['gridsearch'] = exp_params['gridsearch']
 
     if len(settings) > 0:

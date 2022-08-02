@@ -536,7 +536,7 @@ def experiment(args, logger, out_dir, in_dir=None):
         tune_idxs = np.arange(len(X_train))
 
     # apply standard scaling if the method is KNN
-    if args.model_type in ['knn', 'knn_fi']:
+    if args.model_type in ['knn']:
         scaler = StandardScaler()
         scaler.fit(X_train)
         X_train = scaler.transform(X_train)
