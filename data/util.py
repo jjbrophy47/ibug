@@ -57,7 +57,7 @@ def get_feature_names(column_transformer, logger=None):
 
         try:
             if isinstance(transformer, OneHotEncoder):
-                names = list(transformer.get_feature_names(raw_col_name))
+                names = list(transformer.get_feature_names_out(raw_col_name))
 
             elif isinstance(transformer, SimpleImputer) and transformer.add_indicator:
                 missing_indicator_indices = transformer.indicator_.features_
@@ -65,7 +65,7 @@ def get_feature_names(column_transformer, logger=None):
                 names = raw_col_name + missing_indicators
 
             else:
-                names = list(transformer.get_feature_names())
+                names = list(transformer.get_feature_names_out())
 
         except AttributeError:
             names = raw_col_name

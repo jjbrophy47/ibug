@@ -13,7 +13,6 @@ warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler war
 import numpy as np
 import matplotlib.pyplot as plt
 import uncertainty_toolbox as uct
-from sklearn.preprocessing import StandardScaler
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility

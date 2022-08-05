@@ -567,6 +567,7 @@ def get_method_identifier(model, exp_params):
         settings['cond_mean_type'] = exp_params['cond_mean_type']
 
     elif model == 'ibug' or model.startswith('cbu_ibug'):
+        settings['cond_mean_type'] = exp_params['cond_mean_type']
         settings['tree_subsample_frac'] = exp_params['tree_subsample_frac']
         settings['tree_subsample_order'] = exp_params['tree_subsample_order']
         settings['instance_subsample_frac'] = exp_params['instance_subsample_frac']

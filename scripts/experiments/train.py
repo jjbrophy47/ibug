@@ -202,25 +202,19 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
     tune_dict['tune_time_extra'] = 0
     if model_type in ['ibug', 'knn']:
         best_params_wrapper = {}
-        if model_type == 'ibug':
-            WrapperClass = IBUGWrapper
-            model_val_wrapper = IBUGWrapper(scoring=scoring, variance_calibration=False,
-                verbose=verbose, n_jobs=n_jobs, logger=logger)
-        else:
-            WrapperClass = KNNWrapper
-            model_val_wrapper = KNNWrapper(scoring=scoring, variance_calibration=False,
-                cond_mean_type=cond_mean_type, verbose=verbose, n_jobs=n_jobs, logger=logger)
+        WrapperClass = IBUGWrapper if model_type == 'ibug' else KNNWrapper
+        model_val_wrapper = WrapperClass(scoring=scoring, variance_calibration=False,
+            cond_mean_type=cond_mean_type, verbose=verbose, n_jobs=n_jobs, logger=logger)
 
         if logger:
             logger.info('\nTuning k and min. scale...')
-
         start = time.time()
         model_val_wrapper = model_val_wrapper.fit(model_val, X_tune, y_tune, X_val=X_val, y_val=y_val)
         best_params_wrapper = {'k': model_val_wrapper.k_,
-                               'min_scale': model_val_wrapper.min_scale_}
+                               'min_scale': model_val_wrapper.min_scale_,
+                               'cond_mean_type': model_val_wrapper.cond_mean_type}
         if model_type == 'knn':
             best_params_wrapper['max_feat'] = model_val_wrapper.max_feat_
-            best_params_wrapper['cond_mean_type'] = model_val_wrapper.cond_mean_type
         tune_dict['model_val_wrapper'] = model_val_wrapper
         tune_dict['best_params_wrapper'] = best_params_wrapper
         tune_dict['WrapperClass'] = WrapperClass
@@ -420,7 +414,7 @@ def get_params(model_type, n_train, tree_type=None):
 
 
 def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=64,
-              lr=0.1, max_leaves=16, max_depth=6, min_leaf_samples=1,
+              lr=0.1, max_leaves=8, max_depth=6, min_leaf_samples=1,
               bagging_frac=1.0, random_state=1, verbose=2):
     """
     Return the appropriate classifier.
@@ -453,7 +447,7 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
         import pgbm  # dynamic import (some machines cannot install pgbm)
         model = pgbm.PGBMRegressor(n_estimators=n_estimators, learning_rate=lr,
                                    max_leaves=max_leaves, max_bin=max_bin,
-                                   bagging_fraction=bagging_frac,
+                                   max_depth=-1, bagging_fraction=bagging_frac,
                                    min_data_in_leaf=min_leaf_samples, verbose=verbose)
 
     elif model_type == 'knn' and tree_type == 'knn':

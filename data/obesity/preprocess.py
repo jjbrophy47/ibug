@@ -8,14 +8,14 @@ from datetime import datetime
 
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import KFold
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
 import util
 
 
-def main(n_splits=20, test_size=0.1, random_state=1):
+def main(n_splits=10, random_state=1):
 
     # create logger
     logger = util.get_logger('log.txt')
@@ -36,7 +36,7 @@ def main(n_splits=20, test_size=0.1, random_state=1):
                    'Data_Value_Alt', 'Data_Value_Footnote', 'GeoLocation', 'ClassID', 'TopicID',
                    'QuestionID', 'DataValueTypeID', 'LocationID', 'StratificationCategory1',
                    'Stratification1', 'StratificationCategoryId1', 'StratificationID1',
-                   'Data_Value_Footnote_Symbol']
+                   'Data_Value_Footnote_Symbol', 'Low_Confidence_Limit', 'High_Confidence_Limit ']
     if len(remove_cols) > 0:
         df = df.drop(columns=remove_cols)
         columns = [x for x in columns if x not in remove_cols]
@@ -44,15 +44,14 @@ def main(n_splits=20, test_size=0.1, random_state=1):
     # categorize attributes
     features = {}
     features['label'] = ['Data_Value']
-    features['numeric'] = ['YearStart', 'YearEnd', 'Low_Confidence_Limit', 'High_Confidence_Limit ',
-                           'Sample_Size']
+    features['numeric'] = ['YearStart', 'YearEnd', 'Sample_Size']
     features['categorical'] = list(set(columns) - set(features['numeric']) - set(features['label']))
 
     # split data into train and test
     fold = 1
     data = {}
 
-    rs = ShuffleSplit(n_splits=n_splits, test_size=test_size, random_state=random_state)
+    rs = KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
     for train_idxs, test_idxs in rs.split(df):
         logger.info(f'\nfold {fold}...')
         train_df = df.iloc[train_idxs]

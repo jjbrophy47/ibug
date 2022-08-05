@@ -15,6 +15,7 @@ output
 results
 videos
 
+data_20folds
 /data/**/*.npy
 /data/**/*.arff
 /data/**/*.csv

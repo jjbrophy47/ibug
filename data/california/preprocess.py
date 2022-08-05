@@ -8,7 +8,7 @@ from datetime import datetime
 
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import KFold
 from sklearn.datasets import fetch_california_housing
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -16,7 +16,7 @@ sys.path.insert(0, here + '/../')  # for utility
 import util
 
 
-def main(n_splits=20, test_size=0.1, random_state=1):
+def main(n_splits=10, random_state=1):
 
     # create logger
     logger = util.get_logger('log.txt')
@@ -49,7 +49,7 @@ def main(n_splits=20, test_size=0.1, random_state=1):
     fold = 1
     data = {}
 
-    rs = ShuffleSplit(n_splits=n_splits, test_size=test_size, random_state=random_state)
+    rs = KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
     for train_idxs, test_idxs in rs.split(df):
         logger.info(f'\nfold {fold}...')
         train_df = df.iloc[train_idxs]

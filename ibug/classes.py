@@ -26,6 +26,7 @@ class IBUGWrapper(Estimator):
     """
     def __init__(self,
                  k=100,
+                 cond_mean_type='base',
                  gamma=1.0,
                  delta=0.0,
                  variance_calibration=True,
@@ -43,6 +44,7 @@ class IBUGWrapper(Estimator):
         """
         Input
             k: int, no. neighbors to consider for uncertainty estimation.
+            cond_mean_type: str, Type of conditional mean to use.
             gamma: float, scale value applied to all variance estimates. '1.0' means no transformation.
             delta: float, value added to all variance estimates. '0.0' means no transformation.
             variance_calibration: bool, If True, tune variance valibration parameters gamma and delta.
@@ -60,9 +62,10 @@ class IBUGWrapper(Estimator):
             logger: object, If not None, output to logger.
         """
         assert k > 0
+        assert cond_mean_type in ['base', 'neighbors']
         assert gamma > 0.0
         assert delta >= 0.0
-        assert variance_calibration in [True, False]
+        assert type(variance_calibration) is bool
         assert tree_subsample_frac > 0 and tree_subsample_frac <= 1.0
         assert tree_subsample_order in ['random', 'ascending', 'descending']
         assert instance_subsample_frac > 0 and tree_subsample_frac <= 1.0
@@ -75,6 +78,7 @@ class IBUGWrapper(Estimator):
         assert isinstance(verbose, int) and verbose >= 0
 
         self.k = k
+        self.cond_mean_type = cond_mean_type
         self.gamma = gamma
         self.delta = delta
         self.variance_calibration = variance_calibration
@@ -144,6 +148,7 @@ class IBUGWrapper(Estimator):
         """
         d = {}
         d['k'] = self.k
+        d['cond_mean_type'] = self.cond_mean_type
         d['gamma'] = self.gamma
         d['delta'] = self.delta
         d['variance_calibration'] = self.variance_calibration
@@ -266,7 +271,10 @@ class IBUGWrapper(Estimator):
         test_leaves[:, 1:] += self.leaf_cum_sum_[:-1]  # shape=(n_test, n_boost)
 
         # result objects
-        loc = self.predict(X).squeeze()  # shape=(len(X),)
+        if self.cond_mean_type == 'base':
+            loc = self.predict(X).squeeze()  # shape=(len(X),)
+        else:
+            loc = np.zeros(len(X), dtype=np.float32)  # shape=(len(X),)
         scale = np.zeros(len(X), dtype=np.float32)  # shape=(len(X),)
         if return_kneighbors:
             neighbor_idxs = np.zeros((len(X), self.k_), dtype=np.int32)  # shape=(len(X), k)
@@ -282,14 +290,16 @@ class IBUGWrapper(Estimator):
             while n_remain > 0:
                 n = min(100, n_remain)
                 res_list = parallel(joblib.delayed(_pred_dist)
-                                    (test_idx, test_leaves[test_idx][self.tree_idxs_],
-                                    self.leaf_mat_, self.y_train_, self.k_, self.min_scale_,
-                                    return_kneighbors) for test_idx in range(n_done, n_done + n))
+                    (test_idx, test_leaves[test_idx][self.tree_idxs_], self.leaf_mat_,
+                    self.y_train_, self.k_, self.min_scale_, return_kneighbors,
+                    self.cond_mean_type) for test_idx in range(n_done, n_done + n))
 
                 # synchronization barrier
                 for res in res_list:
                     test_idx = res['test_idx']
                     scale[test_idx] = res['scale']
+                    if self.cond_mean_type == 'neighbors':
+                        loc[test_idx] = res['loc']
                     if return_kneighbors:
                         neighbor_idxs[test_idx, :] = res['train_idxs']
                         neighbor_vals[test_idx, :] = res['train_vals']
@@ -495,11 +505,13 @@ class IBUGWrapper(Estimator):
         Input
             X_train: 2d array of data.
             y: 1d array of targets.
-            scoring: str, evaluation metric.
             k_params: list, values of k to evaluate.
 
         Return
-            Best k.
+            - int, best k.
+            - float, min. scale.
+            - 1d np.array, loc values using best k.
+            - 1d np.array, scale values using best k.
         """
         start = time.time()
         k_params = [k for k in k_params if k <= self.n_train_]  # remove k larger than n_train
@@ -507,8 +519,11 @@ class IBUGWrapper(Estimator):
         test_leaves = self.model_.apply(X).squeeze()  # shape=(n_test, n_boost)
         test_leaves[:, 1:] += self.leaf_cum_sum_[:-1]  # shape=(len(X), n_boost)
 
+        if self.cond_mean_type == 'base':
+            loc = np.tile(self.model_.predict(X), len(k_params)).astype(np.float32)  # shape=(len(X), n_k)
+        else:
+            loc = np.zeros((len(X), len(k_params)), dtype=np.float32)  # shape=(len(X), n_k)
         scale = np.zeros((len(X), len(k_params)), dtype=np.float32)  # shape=(len(X), n_k)
-        loc = np.tile(self.model_.predict(X), len(k_params)).astype(np.float32)  # shape=(len(X), n_k)
 
         # parallelize predictions
         with joblib.Parallel(n_jobs=self.n_jobs_, max_nbytes=1e3) as parallel:
@@ -520,13 +535,15 @@ class IBUGWrapper(Estimator):
             while n_remain > 0:
                 n = min(100, n_remain)
                 res_list = parallel(joblib.delayed(_pred_dist_k)
-                                    (test_idx, test_leaves[test_idx][self.tree_idxs_], self.leaf_mat_,
-                                    self.y_train_, k_params, self.eps) for test_idx in range(n_done, n_done + n))
+                    (test_idx, test_leaves[test_idx][self.tree_idxs_], self.leaf_mat_,
+                    self.y_train_, k_params, self.eps, self.cond_mean_type) for test_idx in range(n_done, n_done + n))
 
                 # synchronization barrier
                 for res in res_list:
                     test_idx = res['test_idx']
                     scale[test_idx] = res['scale']  # shape=(n_k,)
+                    if self.cond_mean_type == 'neigbors':
+                        loc[test_idx] = res['loc']
 
                 # update incremeters
                 n_done += n
@@ -1384,7 +1401,8 @@ class KNNWrapper(Estimator):
 
 
 # parallelizable methods
-def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_kneighbors):
+def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_kneighbors,
+    cond_mean_type):
     """
     Compute affinity, variance, and nearest neighbor for the given test instance.
 
@@ -1396,13 +1414,15 @@ def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_knei
         k: int, number of nearest neighbors to retrieve.
         min_scale: float, minimum variance threshold.
         return_kneigbors: bool, if True, return neighbor indices and target values.
+        cond_mean_type: str, type of conditional mean to use.
 
     Return
         - Dict, including:
             * 'test_index': test index.
             * 'scale': variance estimate (uncalibrated).
-            * 'train_idxs': neighbor indices (if return_kneighbors==True).
-            * 'train_vals': neighbor values (if return_kneighbors==True).
+            * 'loc': location estimate (uncalibrated)  `cond_mean_type`=='neighbors'.
+            * 'train_idxs': neighbor indices if `return_kneighbors`==True.
+            * 'train_vals': neighbor values if `return_kneighbors`==True.
     """
     affinity = leaf_mat[leaf_idxs].sum(axis=0)  # shape=(n_train,)
     train_idxs = np.asarray(affinity.argsort())[0][-k:]  # k neighbors
@@ -1411,6 +1431,8 @@ def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_knei
 
     # compile result
     result = {'test_idx': test_idx, 'scale': scale}
+    if cond_mean_type == 'neighbors':
+        result['loc'] = np.mean(train_vals)
     if return_kneighbors:
         result['train_idxs'] = train_idxs
         result['train_vals'] = train_vals
@@ -1418,7 +1440,8 @@ def _pred_dist(test_idx, leaf_idxs, leaf_mat, y_train, k, min_scale, return_knei
     return result
 
 
-def _pred_dist_k(test_idx, leaf_idxs, leaf_mat, y_train, k_params, epsilon):
+def _pred_dist_k(test_idx, leaf_idxs, leaf_mat, y_train, k_params, epsilon,
+    cond_mean_type):
     """
     Compute affinity, variance, and nearest neighbor for the given test instance.
 
@@ -1429,14 +1452,18 @@ def _pred_dist_k(test_idx, leaf_idxs, leaf_mat, y_train, k_params, epsilon):
         y_train: np.ndarray, 1d array of train targets, shape=(n_train,).
         k_params: list, list of candidate k values to evaluate.
         epsilon: float, value added to variance estimate to prevent 0 variance.
+        cond_mean_type: str, type of conditional mean to use.
 
     Return
         - Dict, including:
             * 'test_index': test index.
             * 'scale': variance estimate (uncalibrated), shape=(len(k_params),).
+            * 'loc': location estimate (uncalibrated) if `cond_mean_type` is "neighbors", shape=(len(k_params),).
     """
 
     # result object
+    if cond_mean_type == 'neighbors':
+        loc = np.zeros(len(k_params), dtype=np.float32)
     scale = np.zeros(len(k_params), dtype=np.float32)  # shape=(len(k_params),)
 
     # compute variance for each k
@@ -1445,9 +1472,13 @@ def _pred_dist_k(test_idx, leaf_idxs, leaf_mat, y_train, k_params, epsilon):
     for j, k in enumerate(k_params):
         train_vals = y_train[train_idxs[-k:]]
         scale[j] = np.std(train_vals) + epsilon
+        if cond_mean_type == 'neighbors':
+            loc[j] = np.mean(train_vals)
 
     # compile result
     result = {'test_idx': test_idx, 'scale': scale}
+    if cond_mean_type == 'neighbors':
+        result['loc'] = loc
 
     return result
 
