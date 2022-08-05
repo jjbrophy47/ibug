@@ -561,6 +561,10 @@ def get_method_identifier(model, exp_params):
 
     if model == 'constant':
         settings['tree_type'] = exp_params['tree_type']
+    
+    elif model == 'knn':
+        settings['tree_type'] = exp_params['tree_type']
+        settings['cond_mean_type'] = exp_params['cond_mean_type']
 
     elif model == 'ibug' or model.startswith('cbu_ibug'):
         settings['tree_subsample_frac'] = exp_params['tree_subsample_frac']

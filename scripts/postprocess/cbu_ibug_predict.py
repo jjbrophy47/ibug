@@ -18,9 +18,7 @@ from sklearn.model_selection import train_test_split
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')  # for utility
 sys.path.insert(0, here + '/../../')  # for ibug
-import util
-from train import get_loc_scale
-from train import tune_delta
+from experiments import util
 
 
 # constants

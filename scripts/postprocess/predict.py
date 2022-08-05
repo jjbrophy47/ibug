@@ -57,10 +57,16 @@ metric_names = {
     'miscal_area': 'Miscalibration Area',
 }
 
+dmap = {
+    'meps': 'MEPS',
+    'msd': 'MSD',
+    'star': 'STAR'
+}
+
 method_map = {
     'cbu': 'CBU',
-    'cbu_ibug_3c6e45799d41bd18a1c73419c9a8cedf': 'CBU+IBUG',
-    'cbu_ibug_9924f746db4df90f0d794346ed144bbd': 'CBU+IBUG-CB',
+    'cbu_ibug_3c6e45799d41bd18a1c73419c9a8cedf': 'IBUG+CBU',
+    'cbu_ibug_9924f746db4df90f0d794346ed144bbd': 'IBUG-CB+CBU',
     'pgbm_5e13b5ea212546260ba205c54e1d9559': 'PGBM',
     'ngboost': 'NGBoost',
     'knn': 'KNN',
@@ -70,6 +76,33 @@ method_map = {
     'bart': 'BART',
     'dataset': 'Dataset',
 }
+
+def adjust_sigfigs(v, n=None):
+    """
+    Adjust number of significant figures.
+        - If v < 1, use 3 sigfigs.
+        - If 1 <= v < 10, use 3 sigfigs.
+        - If 10 <= v < 100, use 1 sigfigs.
+        - If 100 <= v, use 0 sigfigs.
+
+    Input
+        v: float, Input value.
+        n: int, Number of significant figures.
+
+    Return
+        str, with appropriate sigfigs.
+    """
+    assert type(v) == float
+    if n is not None:
+        res = f'{v:.{n}f}'
+    else:
+        if v < 10:
+            res = f'{v:.3f}'
+        elif v < 100:
+            res = f'{v:.1f}'
+        else:
+            res = f'{v:.0f}'
+    return res
 
 
 def get_ax_lims(ax):
@@ -85,112 +118,164 @@ def get_ax_lims(ax):
     return [np.min([ax.get_xlim(), ax.get_ylim()]),
             np.max([ax.get_xlim(), ax.get_ylim()])]
 
-
-def plot_runtime(bdf, pdf, out_dir):
+def plot_runtime_boxplots(btime_df, ptime_df, out_dir=None, logger=None):
     """
-    Plot train time and avg. predict time per test example scatter plots.
-
-    Input
-        bdf: pd.DataFrame, Average build time dataframe.
-        pdf: pd.DataFrame, Average predict time dataframe.
-        out_dir: str, Output directory.
+    Plot runtime boxplots for training and prediction.
     """
+    if logger:
+        logger.info('\nPlotting boxplots...')
+    
+    util.plot_settings(fontsize=11, libertine=True)
+    
+    # sanity checks
+    assert 'dataset' in btime_df
 
-    # find IBUG, NGBoost, and PGBM columns
-    igb_col = None
-    ngb_col = None
-    pgb_col = None
+    # filtering
+    btime_df = btime_df.replace(np.inf, np.nan).dropna()
+    ptime_df = ptime_df.replace(np.inf, np.nan).dropna()
+    assert np.all(btime_df.index == ptime_df.index)
 
-    ibug_count = 0
-    for c in bdf.columns:
-        if 'ibug' in c:
-            ibg_col = c
-            ibug_count += 1
-            assert ibg_col in pdf
-        elif 'ngboost' in c:
-            ngb_col = c
-            assert ngb_col in pdf
-        elif 'pgbm' in c:
-            pgb_col = c
-            assert pgb_col in pdf
+    # get dimensions
+    n_methods = len(btime_df.columns) - 1
+    n_datasets = len(btime_df.index) - n_methods
 
-    if (ibg_col is None and ngb_col is None and pgb_col is None) or (ibug_count > 1):
-        return None
+    # remove h2h from dataframes
+    btime_df = btime_df.iloc[:n_datasets, 1:].astype(np.float32)
+    ptime_df = ptime_df.iloc[:n_datasets, 1:].astype(np.float32)
 
-    util.plot_settings(fontsize=15, libertine=True)
+    # method names
+    cols = btime_df.columns.to_list()
+    col_names = [method_map[c] for c in cols]
 
-    fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
-    s = 75
+    _, axs = plt.subplots(1, 2, figsize=(4 * 2, 2.75 * 1))
+    axs = axs.flatten()
 
     ax = axs[0]
-    x = bdf[ibg_col]
-    y = bdf[ngb_col]
-    ax.scatter(x, y, marker='1', s=s)
-    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
-    ax.set_xscale('log')
+    btime_df.boxplot(cols, ax=ax, return_type='dict')
     ax.set_yscale('log')
-    ax.set_xlim(1e0, 1e5)
-    ax.set_ylim(1e0, 1e5)
-    lims = get_ax_lims(ax)
-    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    ax.set_xlabel('IBUG')
-    ax.set_ylabel('NGBoost')
-    ax.legend()
+    ax.set_xticklabels(col_names)
+    ax.set_ylabel('Total Train Time (s)')
+    ax.grid(b=False, which='major', axis='x')
+    ax.set_axisbelow(True)
 
     ax = axs[1]
-    x = bdf[ibg_col]
-    y = bdf[pgb_col]
-    ax.scatter(x, y, marker='1', s=s)
-    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', s=s)
-    ax.set_xscale('log')
+    ptime_df.boxplot(cols, ax=ax)
     ax.set_yscale('log')
-    ax.set_xlim(1e1, 1e6)
-    ax.set_ylim(1e1, 1e6)
-    lims = get_ax_lims(ax)
-    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    ax.set_xlabel('IBUG')
-    ax.set_ylabel('PGBM')
+    ax.set_xticklabels(col_names)
+    ax.set_ylabel('Avg. Predict Time (ms)')
+    ax.grid(b=False, which='major', axis='x')
+    ax.set_axisbelow(True)
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, f'runtime_train.pdf'))
-    plt.close('all')
+    if out_dir is not None:
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, 'runtime.pdf'), bbox_inches='tight')
 
-    fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
 
-    ax = axs[0]
-    x = pdf[ibg_col]
-    y = pdf[ngb_col]
-    ax.scatter(x, y, marker='1', s=s)
-    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlim(1e-2, 1e3)
-    ax.set_ylim(1e-2, 1e3)
-    lims = get_ax_lims(ax)
-    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    ax.tick_params(axis='both', which='minor')
-    ax.set_xlabel('IBUG')
-    ax.set_ylabel('NGBoost')
+# def plot_runtime(bdf, pdf, out_dir):
+#     """
+#     Plot train time and avg. predict time per test example scatter plots.
 
-    ax = axs[1]
-    x = pdf[ibg_col]
-    y = pdf[pgb_col]
-    ax.scatter(x, y, marker='1', s=s)
-    ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlim(1e-2, 1e3)
-    ax.set_ylim(1e-2, 1e3)
-    lims = get_ax_lims(ax)
-    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    ax.tick_params(axis='x', which='minor')
-    ax.set_xlabel('IBUG')
-    ax.set_ylabel('PGBM')
+#     Input
+#         bdf: pd.DataFrame, Average build time dataframe.
+#         pdf: pd.DataFrame, Average predict time dataframe.
+#         out_dir: str, Output directory.
+#     """
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, f'runtime_predict.pdf'))
+#     # find IBUG, NGBoost, and PGBM columns
+#     igb_col = None
+#     ngb_col = None
+#     pgb_col = None
 
-    return (ibg_col, ngb_col, pgb_col)
+#     ibug_count = 0
+#     for c in bdf.columns:
+#         if 'ibug' in c:
+#             ibg_col = c
+#             ibug_count += 1
+#             assert ibg_col in pdf
+#         elif 'ngboost' in c:
+#             ngb_col = c
+#             assert ngb_col in pdf
+#         elif 'pgbm' in c:
+#             pgb_col = c
+#             assert pgb_col in pdf
+
+#     if (ibg_col is None and ngb_col is None and pgb_col is None) or (ibug_count > 1):
+#         return None
+
+#     util.plot_settings(fontsize=15, libertine=True)
+
+#     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
+#     s = 75
+
+#     ax = axs[0]
+#     x = bdf[ibg_col]
+#     y = bdf[ngb_col]
+#     ax.scatter(x, y, marker='1', s=s)
+#     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
+#     ax.set_xscale('log')
+#     ax.set_yscale('log')
+#     ax.set_xlim(1e0, 1e5)
+#     ax.set_ylim(1e0, 1e5)
+#     lims = get_ax_lims(ax)
+#     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+#     ax.set_xlabel('IBUG')
+#     ax.set_ylabel('NGBoost')
+#     ax.legend()
+
+#     ax = axs[1]
+#     x = bdf[ibg_col]
+#     y = bdf[pgb_col]
+#     ax.scatter(x, y, marker='1', s=s)
+#     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', s=s)
+#     ax.set_xscale('log')
+#     ax.set_yscale('log')
+#     ax.set_xlim(1e1, 1e6)
+#     ax.set_ylim(1e1, 1e6)
+#     lims = get_ax_lims(ax)
+#     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+#     ax.set_xlabel('IBUG')
+#     ax.set_ylabel('PGBM')
+
+#     plt.tight_layout()
+#     plt.savefig(os.path.join(out_dir, f'runtime_train.pdf'))
+#     plt.close('all')
+
+#     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
+
+#     ax = axs[0]
+#     x = pdf[ibg_col]
+#     y = pdf[ngb_col]
+#     ax.scatter(x, y, marker='1', s=s)
+#     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
+#     ax.set_xscale('log')
+#     ax.set_yscale('log')
+#     ax.set_xlim(1e-2, 1e3)
+#     ax.set_ylim(1e-2, 1e3)
+#     lims = get_ax_lims(ax)
+#     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+#     ax.tick_params(axis='both', which='minor')
+#     ax.set_xlabel('IBUG')
+#     ax.set_ylabel('NGBoost')
+
+#     ax = axs[1]
+#     x = pdf[ibg_col]
+#     y = pdf[pgb_col]
+#     ax.scatter(x, y, marker='1', s=s)
+#     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
+#     ax.set_xscale('log')
+#     ax.set_yscale('log')
+#     ax.set_xlim(1e-2, 1e3)
+#     ax.set_ylim(1e-2, 1e3)
+#     lims = get_ax_lims(ax)
+#     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+#     ax.tick_params(axis='x', which='minor')
+#     ax.set_xlabel('IBUG')
+#     ax.set_ylabel('PGBM')
+
+#     plt.tight_layout()
+#     plt.savefig(os.path.join(out_dir, f'runtime_predict.pdf'))
+
+#     return (ibg_col, ngb_col, pgb_col)
 
 
 def compute_time_intersect(bdf, pdf, ref_col, skip_cols=[]):
@@ -241,7 +326,7 @@ def compute_relative(df, ref_col, skip_cols=[]):
     return res_df
 
 
-def markdown_table(df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}, logger=None, suffix=''):
+def markdown_table(df, logger=None, suffix=''):
     """
     Format dataframe.
     """
@@ -275,9 +360,9 @@ def markdown_table(df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}, logg
                 s += f'| {v}'
             else:
                 if v == min_vals[i]:
-                    s += f'| **{v:.3f}**'
+                    s += f'| **{adjust_sigfigs(v)}**'
                 else:
-                    s += f'| {v:.3f}'
+                    s += f'| {adjust_sigfigs(v)}'
         i += 1
         s += '|'
     
@@ -287,7 +372,7 @@ def markdown_table(df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}, logg
         print(f'\n### {suffix}\n{s}\n')
 
 
-def markdown_table_sem(df, sem_df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}, logger=None, suffix=''):
+def markdown_table_sem(df, sem_df, logger=None, suffix=''):
     """
     Format dataframe.
     """
@@ -324,9 +409,9 @@ def markdown_table_sem(df, sem_df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': '
                 s += f'| {v}'
             else:
                 if v == min_vals[i]:
-                    s += f'| **$${v:.3f}**' + '_{(' + f'{se:.3f}' + ')}$$'
+                    s += f'| **$${adjust_sigfigs(v)}**' + '_{(' + f'{adjust_sigfigs(se)}' + ')}$$'
                 else:
-                    s += f'| $${v:.3f}' + '_{(' + f'{se:.3f}' + ')}$$'
+                    s += f'| $${adjust_sigfigs(v)}' + '_{(' + f'{adjust_sigfigs(se)}' + ')}$$'
         i += 1
         s += '|'
     
@@ -336,9 +421,9 @@ def markdown_table_sem(df, sem_df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': '
         print(f'\n### {suffix}\n{s}\n')
 
 
-def markdown_table2(df1, df2, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}, logger=None, suffix=''):
+def markdown_table2(df1, df2, logger=None, suffix=''):
     """
-    Format dataframe.
+    Format dataframe, combining the columns from two dataframes into one column.
     """
     assert 'dataset' in df1
 
@@ -374,14 +459,14 @@ def markdown_table2(df1, df2, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'
                 s += f'| {v1}/{v2}'
             else:
                 if v1 == min_vals1[i]:
-                    s += f'| **{v1:.3f}**'
+                    s += f'| **{adjust_sigfigs(v1)}**'
                 else:
-                    s += f'| {v1:.3f}'
+                    s += f'| {adjust_sigfigs(v1)}'
 
                 if v2 == min_vals2[i]:
-                    s += f'/**{v2:.3f}**'
+                    s += f'/**{adjust_sigfigs(v2)}**'
                 else:
-                    s += f'/{v2:.3f}'
+                    s += f'/{adjust_sigfigs(v2)}'
         i += 1
         s += '|'
     
@@ -391,139 +476,218 @@ def markdown_table2(df1, df2, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'
         print(f'\n### {suffix}\n{s}\n')
 
 
-
-def format_dataset_names(df, dmap={'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}):
+def latex_table(df, logger=None, suffix='',
+    float_opt='t', caption='', label='', is_center=True, align_str=None):
     """
-    Capitalize dataset names.
-
-    Input
-        df: pd.DataFrame, Dataframe rename columns.
-        dmap: dict, Dict of special cases.
-
-    Return
-        Dataframe with the newly formatted columns.
+    Format dataframe.
     """
     assert 'dataset' in df
-    df['dataset'] = df['dataset'].apply(lambda x: dmap[x] if x in dmap else x.capitalize())
-    return df
+    df = df.replace(np.inf, np.nan).dropna()
+    num_cols = [c for c in df.columns if c != 'dataset']
 
-
-def join_mean_sem(mean_df, sem_df, metric, mask_cols=['dataset'],
-                  exclude_sem=False):
-    """
-    Joins floats from two dataframes into one dataframe of strings.
-
-    Input
-        mean_df: pd.DataFrame, dataframe with mean values.
-        sem_df: pd.DataFrame, dataframe with SEM values.
-        metric: str, metric to use for deciding formatting.
-        mask_cols: list, Columns to not join but included in the result.
-        exclude_sem: bool, If True, do not concatenate dataframes.
-
-    Return
-        pd.DataFrame object with all string columns.
-    """
-    float_cols = [c for c in mean_df.columns if c not in mask_cols]
-    for float_col in float_cols:
-        assert float_col in mean_df and float_col in sem_df
-
-    init_dataset_list = mean_df['dataset'].tolist()
-
-    # get min-value indices
-    min_val_dict = {}  # schema={[dataset]: [list of min. indicies; e.g., [1, 3]]}
-
-    mean_vals = mean_df[float_cols].values  # shape=(n_dataset, n_method)
-    sem_vals = sem_df[float_cols].values  # shape=(n_dataset, n_method)
-    mean_sem_vals = mean_vals - sem_vals  # shape=(n_dataset, n_method)
-
-    min_vals = np.min(mean_vals, axis=1)  # shape=(n_dataset,)
-
-    for dataset, mean_sem_row, min_val in list(zip(init_dataset_list, mean_sem_vals, min_vals)):
-        min_idxs = np.where(mean_sem_row <= min_val)[0]
-        min_val_dict[dataset] = min_idxs
-
-    if metric == 'crps':
-        formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
-                   (['star'], '{:.2f}'.format),
-                   (['bike', 'california', 'communities', 'concrete', 'energy',
-                     'facebook', 'kin8nm', 'life', 'meps', 'msd',
-                     'naval', 'obesity', 'power', 'protein',
-                     'superconductor', 'synthetic', 'wine', 'yacht'], '{:.3f}'.format)]
-    elif metric == 'nll':
-        formats = [(['ames', 'news', 'wave'], '{:.2f}'.format),
-                   (['bike', 'california', 'communities', 'concrete', 'energy',
-                     'facebook', 'kin8nm', 'life', 'meps', 'msd',
-                     'naval', 'obesity', 'power', 'protein', 'star',
-                     'superconductor', 'synthetic', 'wine', 'yacht'], '{:.3f}'.format)]
-    elif metric == 'rmse':
-        formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
-                   (['facebook', 'meps', 'synthetic'], '{:.2f}'.format),
-                   (['star'], '{:.1f}'.format),
-                   (['bike', 'california', 'communities', 'concrete', 'energy',
-                     'kin8nm', 'life', 'msd',
-                     'naval', 'obesity', 'power', 'protein',
-                     'superconductor', 'wine', 'yacht'], '{:.3f}'.format)]
-
-    elif metric == 'btime':
-        formats = [(['ames', 'news', 'wave'], '{:.0f}'.format),
-                   (['facebook', 'meps', 'synthetic'], '{:.0f}'.format),
-                   (['star'], '{:.0f}'.format),
-                   (['bike', 'california', 'communities', 'concrete', 'energy',
-                     'kin8nm', 'life', 'msd',
-                     'naval', 'obesity', 'power', 'protein',
-                     'superconductor', 'wine', 'yacht'], '{:.0f}'.format)]
-
-    elif metric == 'ptime':
-        formats = [(['ames', 'news', 'wave'], '{:.1f}'.format),
-                   (['facebook', 'meps', 'synthetic'], '{:.1f}'.format),
-                   (['star'], '{:.1f}'.format),
-                   (['bike', 'california', 'communities', 'concrete', 'energy',
-                     'kin8nm', 'life', 'msd',
-                     'naval', 'obesity', 'power', 'protein',
-                     'superconductor', 'wine', 'yacht'], '{:.1f}'.format)]
-
+    # preamble
+    s = f'\\begin{{table}}[{float_opt}]'
+    s += f'\n\\caption{{{caption}}}'
+    s += f'\n\\label{{{label}}}' 
+    if is_center:
+        s += '\n\\centering'
+    s += '\n\\begin{tabular}'
+    if align_str:
+        s += f'{{{align_str}}}'
     else:
-        raise ValueError(f'Unknown metric {metric}')
+        s += '{l' + 'c' * (len(num_cols) - 1) + 'c}'
+    s += '\n\\toprule'
 
-    # format rows differently
-    m_list = []
-    s_list = []
-    dataset_list = []
-    min_idxs_list = []
+    # column headers
+    s += '\n' + ' & '.join([method_map[c] for c in df.columns]) + ' \\\\'
+    s += '\n\\midrule'
 
-    for datasets, fmt in formats:
-        datasets = [d for d in datasets if d in init_dataset_list]
+    # table body
+    datasets = df['dataset'].values
+    num_arr = df[num_cols].values
 
-        if len(datasets) == 0:
-            continue
+    num_datasets = len(datasets) - (len(df.columns) - 1)
+    min_vals = num_arr[:num_datasets].min(axis=1)
 
-        idxs = mean_df[mean_df['dataset'].isin(datasets)].index
+    i = 0
+    for dataset, arr in zip(datasets, num_arr):
+        if dataset in dmap:
+            dataset_name = dmap[dataset]
+        elif dataset.split()[0] in method_map:
+            items = dataset.split()
+            dataset_name = method_map[items[0]] + ' ' + items[1].replace('w-l', 'W-L')
+        else:
+            dataset_name = f'{dataset.capitalize()}'
 
-        m_df = mean_df.loc[idxs][float_cols].applymap(fmt).astype(str)
-        m_list.append(m_df)
-
-        s_df = sem_df.loc[idxs][float_cols].applymap(fmt).astype(str)
-        s_list.append(s_df)
-
-        for d in datasets:
-            min_idxs_list.append(min_val_dict[d])
-        dataset_list += datasets
-
-    temp1_df = pd.concat(m_list)
-    temp2_df = pd.concat(s_list)
-
-    if exclude_sem:
-        result_df = temp1_df
+        s += '\n' + dataset_name
+        for v in arr:
+            if type(v) == str:
+                s += f' & {v}'
+            else:
+                if v == min_vals[i]:
+                    s += f' & {{\\bfseries {adjust_sigfigs(v)}}}'
+                else:
+                    s += f' & {adjust_sigfigs(v)}'
+        i += 1
+        s += ' \\\\'
+    
+    # bottom
+    s += '\n\\bottomrule'
+    s += '\n\\end{tabular}'
+    s += '\n\\end{table}'
+    
+    if logger:
+        logger.info(f'\n{suffix}\n{s}\n')
     else:
-        result_df = temp1_df + '$_{(' + temp2_df + ')}$'
+        print(f'\n{suffix}\n{s}\n')
 
-    for i, min_idxs in enumerate(min_idxs_list):  # wrap values with the min. val in bf series
-        for j in min_idxs:
-            result_df.iloc[i, j] = '{\\bfseries ' + result_df.iloc[i, j] + '}'
-    result_df.insert(loc=0, column='dataset', value=dataset_list)
-    result_df = result_df.sort_values('dataset')
 
-    return result_df
+def latex_table_sem(df, sem_df, logger=None, suffix='', float_opt='t', caption='',
+    label='', is_center=True, align_str=None):
+    """
+    Format dataframe.
+    """
+    assert 'dataset' in df
+    df = df.replace(np.inf, np.nan).dropna()
+    sem_df = sem_df.replace(np.inf, np.nan).dropna()
+    assert np.all(df.index == sem_df.index)
+
+    num_cols = [c for c in df.columns if c != 'dataset']
+
+    # preamble
+    s = f'\\begin{{table}}[{float_opt}]'
+    s += f'\n\\caption{{{caption}}}'
+    s += f'\n\\label{{{label}}}' 
+    if is_center:
+        s += '\n\\centering'
+    s += '\n\\begin{tabular}'
+    if align_str:
+        s += f'{{{align_str}}}'
+    else:
+        s += '{l' + 'c' * (len(num_cols) - 1) + 'c}'
+    s += '\n\\toprule'
+
+    # column headers
+    s += '\n' + ' & '.join([method_map[c] for c in df.columns]) + ' \\\\'
+    s += '\n\\midrule'
+
+    # table body
+    datasets = df['dataset'].values
+    num_arr = df[num_cols].values
+    sem_arr = sem_df[num_cols].values
+
+    num_datasets = len(datasets) - (len(df.columns) - 1)
+    min_vals = num_arr[:num_datasets].min(axis=1)
+
+    i = 0
+    for dataset, arr, s_arr in zip(datasets, num_arr, sem_arr):
+        if dataset in dmap:
+            dataset_name = dmap[dataset]
+        elif dataset.split()[0] in method_map:
+            items = dataset.split()
+            dataset_name = method_map[items[0]] + ' ' + items[1].replace('w-l', 'W-L')
+        else:
+            dataset_name = f'{dataset.capitalize()}'
+
+        s += '\n' + dataset_name
+        for v, se in zip(arr, s_arr):
+            if type(v) == str:
+                s += f' & {v}'
+            else:
+                if v == min_vals[i] or v - se <= min_vals[i]:
+                    s += f' & {{\\bfseries {adjust_sigfigs(v)}}}'
+                else:
+                    s += f' & {adjust_sigfigs(v)}'
+                s += f'$_{{({adjust_sigfigs(se)})}}$'
+        i += 1
+        s += ' \\\\'
+    
+    # bottom
+    s += '\n\\bottomrule'
+    s += '\n\\end{tabular}'
+    s += '\n\\end{table}'
+    
+    if logger:
+        logger.info(f'\n{suffix}\n{s}\n')
+    else:
+        print(f'\n{suffix}\n{s}\n')
+
+
+def latex_table2(df1, df2, logger=None, suffix='', float_opt='t', caption='',
+    label='', is_center=True, align_str=None):
+    """
+    Format dataframe.
+    """
+    assert 'dataset' in df1
+
+    df1 = df1.replace(np.inf, np.nan).dropna()
+    df2 = df2.replace(np.inf, np.nan).dropna()
+    assert np.all(df1.index == df2.index)
+
+    num_cols = [c for c in df1.columns if c != 'dataset']
+
+    # preamble
+    s = f'\\begin{{table}}[{float_opt}]'
+    s += f'\n\\caption{{{caption}}}'
+    s += f'\n\\label{{{label}}}' 
+    if is_center:
+        s += '\n\\centering'
+    s += '\n\\begin{tabular}'
+    if align_str:
+        s += f'{{{align_str}}}'
+    else:
+        s += '{l' + 'c' * (len(num_cols) - 1) + 'c}'
+    s += '\n\\toprule'
+
+    # column headers
+    s += '\n' + ' & '.join([method_map[c] for c in df1.columns]) + ' \\\\'
+    s += '\n\\midrule'
+
+    # table body
+    datasets = df1['dataset'].values
+    num_arr1 = df1[num_cols].values
+    num_arr2 = df2[num_cols].values
+
+    num_datasets = len(datasets) - (len(df1.columns) - 1)
+    min_vals1 = num_arr1[:num_datasets].min(axis=1)
+    min_vals2 = num_arr2[:num_datasets].min(axis=1)
+
+    i = 0
+    for dataset, arr1, arr2 in zip(datasets, num_arr1,  num_arr2):
+        if dataset in dmap:
+            dataset_name = dmap[dataset]
+        elif dataset.split()[0] in method_map:
+            items = dataset.split()
+            dataset_name = method_map[items[0]] + ' ' + items[1].replace('w-l', 'W-L')
+        else:
+            dataset_name = f'{dataset.capitalize()}'
+
+        s += '\n' + dataset_name
+        for v1, v2 in zip(arr1, arr2):
+            if type(v1) == str:
+                s += f' & {v1}/{v2}'
+            else:
+                if v1 == min_vals1[i]:
+                    s += f' & {{\\bfseries {adjust_sigfigs(v1)}}}'
+                else:
+                    s += f' & {adjust_sigfigs(v1)}'
+
+                if v2 == min_vals2[i]:
+                    s += f'/{{\\bfseries {adjust_sigfigs(v2)}}}'
+                else:
+                    s += f'/{adjust_sigfigs(v2)}'
+        i += 1
+        s += ' \\\\'
+    
+    # bottom
+    s += '\n\\bottomrule'
+    s += '\n\\end{tabular}'
+    s += '\n\\end{table}'
+    
+    if logger:
+        logger.info(f'\n{suffix}\n{s}\n')
+    else:
+        print(f'\n{suffix}\n{s}\n')
 
 
 def append_gmean(data_df, attach_df=None, fmt='int', remove_nan=True):
@@ -551,13 +715,6 @@ def append_gmean(data_df, attach_df=None, fmt='int', remove_nan=True):
             continue
 
         res[c] = stats.gmean(data_df[c])
-
-        if fmt == 'int':
-            res[c] = f'{int(res[c])}'
-        elif fmt == 'sci':
-            res[c] = f'{res[c]:.1e}'
-        else:
-            res[c] = f'{res[c]:.1f}'
     gmean_df = pd.DataFrame([res])
 
     if attach_df is not None:
@@ -974,7 +1131,7 @@ def process(args, in_dir, out_dir, logger):
                 val_prob3_delta[name] = res['metrics']['val_delta']['sharpness']['sharp']
 
                 btime[name] = res['timing']['tune_train']
-                ptime[name] = res['timing']['test_pred_time'] / res['data']['n_test'] * 1000  # milliseconds
+                ptime[name] = res['timing']['test_pred_time'] / res['data']['n_test'] * 1000 # milliseconds
                 param[name], param_names[name], param_types[name] = get_param_list(name, res)
 
             test_point_list.append(test_point)
@@ -1031,6 +1188,7 @@ def process(args, in_dir, out_dir, logger):
     # compute wins/losses
     mean_h2h = {key: append_head2head(df) for key, df in mean.items()}
     sem_h2h = {key: append_head2head(df) for key, df in sem.items()}
+    std_h2h = {key: append_head2head(df) for key, df in std.items()}
 
     # pd.set_option('display.max_columns', None)
 
@@ -1093,6 +1251,26 @@ def process(args, in_dir, out_dir, logger):
     markdown_table(df=mean_h2h['test_acc_df'], logger=logger, suffix=args.acc_metric.upper())
     markdown_table(df=mean_h2h['test_sr_df_delta'], logger=logger, suffix=args.scoring_rule_metric.upper())
     markdown_table2(df1=mean_h2h['test_cal_df_delta'], df2=mean_h2h['test_sharp_df_delta'], logger=logger, suffix='MACE/Sharpness')
+
+    # print latex tables
+    logger.info('\n\nLATEX TABLES')
+    latex_table_sem(df=mean_h2h['test_acc_df'], sem_df=sem_h2h['test_acc_df'], logger=logger, suffix=args.acc_metric.upper())
+    latex_table_sem(df=mean_h2h['test_sr_df'], sem_df=sem_h2h['test_sr_df'], logger=logger,
+        suffix=args.scoring_rule_metric.upper())
+    latex_table_sem(df=mean_h2h['test_sr_df_delta'], sem_df=sem_h2h['test_sr_df_delta'], logger=logger,
+        suffix=args.scoring_rule_metric.upper() + '+Delta')
+    latex_table2(df1=mean_h2h['test_cal_df_delta'], df2=mean_h2h['test_sharp_df_delta'], logger=logger, suffix='MACE/Sharpness')
+
+    param_df.to_csv(f'{out_dir}/param_df.csv', index=False)
+
+    # runtime
+    logger.info('\n\nRUNTIME')
+    logger.info(f'\n Train time (s):\n{append_gmean(mean["btime_df"])}')
+    logger.info(f'\n Avg. predict time per test example (s):\n{append_gmean(mean["ptime_df"])}')
+    latex_table_sem(df=mean_h2h['btime_df'], sem_df=std_h2h['btime_df'], logger=logger, suffix='Train Time (s)')
+    latex_table_sem(df=mean_h2h['ptime_df'], sem_df=std_h2h['ptime_df'], logger=logger, suffix='Avg. Predict Time (ms)')
+    plot_runtime_boxplots(btime_df=mean_h2h['btime_df'], ptime_df=mean_h2h['ptime_df'], out_dir=out_dir, logger=logger)
+
     exit(0)
 
     # test_point_mean_df = test_point_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])

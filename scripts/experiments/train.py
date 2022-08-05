@@ -29,13 +29,12 @@ sys.path.insert(0, here + '/../../')  # for ibug
 import util
 from ibug import IBUGWrapper
 from ibug import KNNWrapper
-from ibug import KNNFIWrapper
 
 MIN_NUM_TREES = 2
 
 
 def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
-               scoring='nll', bagging_frac=1.0, gridsearch=True,
+               scoring='nll', bagging_frac=1.0, gridsearch=True, cond_mean_type='base',
                n_stopping_rounds=25, in_dir=None, logger=None, verbose=0, n_jobs=1):
     """
     Hyperparameter tuning.
@@ -50,6 +49,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
         scoring: str, Probabilistic evaluation metric.
         bagging_frac: float, Fraction of training instances to sample per tree.
         gridsearch: bool, If True, do gridsearch tuning.
+        cond_mean_type: str, Conditional mean type.
         n_stopping_rounds: int, No. iterations to run without improved validation scoring.
             * Note: Only used when gridsearch is False.
         in_dir: If not None, then load in an already trained model.
@@ -90,7 +90,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             param_grid['n_estimators'] = [10, 50, 100, 200]
 
         # gridsearch
-        if model_type == 'knn' or (model_type in ['constant', 'ibug', 'pgbm', 'bart', 'cbu', 'knn_fi'] and gridsearch):
+        if model_type in ['constant', 'ibug', 'pgbm', 'bart', 'cbu', 'knn'] and gridsearch:
 
             if logger:
                 logger.info('\nmodel: {}, param_grid: {}'.format(model_type, param_grid))
@@ -126,7 +126,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             model_val = best_model
 
         # base model, only tune no. iterations
-        elif model_type in ['constant', 'ibug', 'knn_fi']:
+        elif model_type in ['constant', 'ibug', 'knn']:
             assert tree_type in ['lgb', 'xgb', 'cb', 'ngboost', 'pgbm']
 
             if tree_type == 'lgb':
@@ -200,28 +200,27 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
 
     # IBUG, KNN, and KNN_FI ONLY: tune k (and min. scale)
     tune_dict['tune_time_extra'] = 0
-    if model_type in ['ibug', 'knn', 'knn_fi']:
+    if model_type in ['ibug', 'knn']:
         best_params_wrapper = {}
         if model_type == 'ibug':
             WrapperClass = IBUGWrapper
-        elif model_type == 'knn':
-            WrapperClass = KNNWrapper
+            model_val_wrapper = IBUGWrapper(scoring=scoring, variance_calibration=False,
+                verbose=verbose, n_jobs=n_jobs, logger=logger)
         else:
-            assert model_type == 'knn_fi'
-            WrapperClass = KNNFIWrapper
+            WrapperClass = KNNWrapper
+            model_val_wrapper = KNNWrapper(scoring=scoring, variance_calibration=False,
+                cond_mean_type=cond_mean_type, verbose=verbose, n_jobs=n_jobs, logger=logger)
 
         if logger:
             logger.info('\nTuning k and min. scale...')
 
         start = time.time()
-        model_val_wrapper = WrapperClass(scoring=scoring, variance_calibration=False,
-                                         verbose=verbose, n_jobs=n_jobs,
-                                         logger=logger).fit(model_val, X_tune, y_tune,
-                                                            X_val=X_val, y_val=y_val)
+        model_val_wrapper = model_val_wrapper.fit(model_val, X_tune, y_tune, X_val=X_val, y_val=y_val)
         best_params_wrapper = {'k': model_val_wrapper.k_,
                                'min_scale': model_val_wrapper.min_scale_}
-        if model_type == 'knn_fi':
+        if model_type == 'knn':
             best_params_wrapper['max_feat'] = model_val_wrapper.max_feat_
+            best_params_wrapper['cond_mean_type'] = model_val_wrapper.cond_mean_type
         tune_dict['model_val_wrapper'] = model_val_wrapper
         tune_dict['best_params_wrapper'] = best_params_wrapper
         tune_dict['WrapperClass'] = WrapperClass
@@ -232,7 +231,7 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
             logger.info(f"tune time (extra): {tune_dict['tune_time_extra']:.3f}s")
 
     # get validation predictions
-    if model_type in ['ibug', 'knn', 'knn_fi']:
+    if model_type in ['ibug', 'knn']:
         loc_val, scale_val = model_val_wrapper.loc_val_, model_val_wrapper.scale_val_
     elif model_type in ['constant', 'ngboost', 'pgbm', 'bart', 'cbu']:
         loc_val, scale_val = get_loc_scale(model_val, model_type, X=X_val, y_train=y_tune)
@@ -321,9 +320,6 @@ def get_loc_scale(model, model_type, X, y_train=None):
 
     elif model_type == 'knn':
         loc, scale = model.pred_dist(X)
-    
-    elif model_type == 'knn_fi':  # KNN weighted by most important features
-        loc, scale = model.pred_dist(X)
 
     elif model_type == 'cbu':  # CatBoost RMSEWithUncertainty
         loc, scale = model.pred_dist(X)
@@ -367,7 +363,7 @@ def get_params(model_type, n_train, tree_type=None):
                   'min_data_in_leaf': [1, 20],
                   'max_bin': [255]}
 
-    elif model_type == 'knn':
+    elif model_type == 'knn' and tree_type == 'knn':
         k_list = [3, 5, 7, 11, 15, 31, 61, 91, 121, 151, 201, 301, 401, 501, 601, 701]
         params = {'n_neighbors': [k for k in k_list if k <= n_train]}
     
@@ -381,7 +377,7 @@ def get_params(model_type, n_train, tree_type=None):
                       'min_data_in_leaf': [1, 20],
                       'max_bin': [255]}
 
-    elif model_type in ['constant', 'ibug', 'knn_fi']:
+    elif model_type in ['constant', 'ibug', 'knn']:
         assert tree_type is not None
 
         if tree_type == 'lgb':
@@ -460,7 +456,7 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
                                    bagging_fraction=bagging_frac,
                                    min_data_in_leaf=min_leaf_samples, verbose=verbose)
 
-    elif model_type == 'knn':
+    elif model_type == 'knn' and tree_type == 'knn':
         model = KNeighborsRegressor(weights='uniform')
     
     elif model_type == 'bart':
@@ -475,7 +471,7 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
                                                     posterior_sampling=True,
                                                     random_state=random_state, logging_level='Silent')
 
-    elif model_type in ['constant', 'ibug', 'knn_fi']:
+    elif model_type in ['constant', 'ibug', 'knn']:
         assert tree_type is not None
 
         if tree_type == 'lgb':
@@ -562,6 +558,7 @@ def experiment(args, logger, out_dir, in_dir=None):
                            X_tune=X_tune, y_tune=y_tune, X_val=X_val, y_val=y_val,
                            tree_type=args.tree_type, scoring=args.scoring,
                            bagging_frac=args.bagging_frac,
+                           cond_mean_type=args.cond_mean_type,
                            n_stopping_rounds=args.n_stopping_rounds,
                            gridsearch=args.gridsearch, in_dir=in_dir,
                            logger=logger, verbose=args.verbose, n_jobs=args.n_jobs)
@@ -711,11 +708,12 @@ if __name__ == '__main__':
 
     # Method settings
     parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, IBUG, PGBM, BART, CBU
-    parser.add_argument('--tree_type', type=str, default='lgb')  # IBUG, constant, KKNNFI
+    parser.add_argument('--tree_type', type=str, default='lgb')  # IBUG, constant, kNN
     parser.add_argument('--tree_subsample_frac', type=float, default=1.0)  # IBUG
     parser.add_argument('--tree_subsample_order', type=str, default='random')  # IBUG
     parser.add_argument('--instance_subsample_frac', type=float, default=1.0)  # IBUG
     parser.add_argument('--affinity', type=str, default='unweighted')  # IBUG
+    parser.add_argument('--cond_mean_type', type=str, default='base')  # kNN
 
     # Default settings
     parser.add_argument('--tune_frac', type=float, default=1.0)  # ALL

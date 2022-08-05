@@ -33,11 +33,11 @@ for f in ${fold_list[@]}; do
 done
 
 # scratch pad
-fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
+fold_list=(1 2 4 6 7 8 9 10 11 12 14 17)
 for f in ${fold_list[@]}; do
-    # sbatch -a 10,21 -c 4  -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'cb' $s $s $td 'default' 'dist'
-    sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $s $s $td
-    sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
+    sbatch -a 11 -c 7 -t 3600 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $s $s $td
+    # sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $s $s $td
+    # sbatch -a 1-10,12-19,21 -c 5 -t 1440 -p 'preempt' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
 done
 
 # NGBoost and PGBM as base models

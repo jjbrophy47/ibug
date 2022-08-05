@@ -209,16 +209,8 @@ def experiment(args, in_dir, out_dir, logger):
     val_idxs = result['data']['val_idxs']
     tune_idxs = result['data']['tune_idxs']
 
-    # apply standard scaling if KNN
-    if args.model_type in ['knn']:
-        scaler = StandardScaler()
-        scaler.fit(X_train)
-        X_train = scaler.transform(X_train)
-        X_test = scaler.transform(X_test)
-        logger.info('\nApplying standard scaling...')
-
     X_val, y_val = X_train[val_idxs].copy(), y_train[val_idxs].copy()
-    X_tune, y_tune = X_train[tune_idxs].copy(), y_train[tune_idxs].copy()
+    _, y_tune = X_train[tune_idxs].copy(), y_train[tune_idxs].copy()
 
     logger.info('no. train: {:,}'.format(X_train.shape[0]))
     logger.info('  -> no. val.: {:,}'.format(X_val.shape[0]))
@@ -423,11 +415,12 @@ if __name__ == '__main__':
 
     # Method settings
     parser.add_argument('--gridsearch', type=int, default=1)  # affects constant, IBUG, PGBM
-    parser.add_argument('--tree_type', type=str, default='lgb')  # IBUG, constant
+    parser.add_argument('--tree_type', type=str, default='lgb')  # IBUG, constant, kNN
     parser.add_argument('--tree_subsample_frac', type=float, default=1.0)  # IBUG
     parser.add_argument('--tree_subsample_order', type=str, default='random')  # IBUG
     parser.add_argument('--instance_subsample_frac', type=float, default=1.0)  # IBUG
     parser.add_argument('--affinity', type=str, default='unweighted')  # IBUG
+    parser.add_argument('--cond_mean_type', type=str, default='base')  # kNN
 
     # Default settings
     parser.add_argument('--tune_delta', type=int, default=0)  # Constant and PGBM
