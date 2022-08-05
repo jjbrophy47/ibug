@@ -573,7 +573,7 @@ def get_method_identifier(model, exp_params):
         settings['affinity'] = exp_params['affinity']
         settings['tree_type'] = exp_params['tree_type']
 
-    if exp_params['gridsearch'] and (model in ['constant', 'ibug', 'pgbm'] or model.startswith('cbu_ibug')):
+    if exp_params['gridsearch'] and (model in ['constant', 'ibug', 'pgbm', 'knn'] or model.startswith('cbu_ibug')):
         settings['gridsearch'] = exp_params['gridsearch']
 
     if len(settings) > 0:

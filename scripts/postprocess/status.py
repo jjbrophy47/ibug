@@ -67,7 +67,7 @@ def process(args, in_dir, out_dir, logger):
         elif model_type == 'knn':
             method_args_lists = {
                 'tree_type': [t for t in args.tree_type if t in ['knn', 'lgb']],
-                'gridsearch': [1],
+                'gridsearch': args.gridsearch,
                 'cond_mean_type': args.cond_mean_type,
             }
 

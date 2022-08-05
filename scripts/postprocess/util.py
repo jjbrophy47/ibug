@@ -24,20 +24,23 @@ def get_results(args, exp_dir, logger=None, progress_bar=False):
                                          args.affinity,
                                          args.tree_subsample_frac,
                                          args.tree_subsample_order,
-                                         args.instance_subsample_frac]))
+                                         args.instance_subsample_frac,
+                                         args.cond_mean_type]))
 
     visited = set()
     results = []
 
     for items in tqdm(experiment_settings, disable=not progress_bar):
-        model_type, tree_type, affinity, tree_subsample_frac, tree_subsample_order, instance_subsample_frac = items
+        model_type, tree_type, affinity, tree_subsample_frac, tree_subsample_order,\
+            instance_subsample_frac, cond_mean_type = items
 
         template = {'tree_type': tree_type,
                     'affinity': affinity,
                     'tree_subsample_frac': tree_subsample_frac,
                     'tree_subsample_order': tree_subsample_order,
                     'instance_subsample_frac': instance_subsample_frac,
-                    'gridsearch': args.gridsearch}
+                    'gridsearch': args.gridsearch,
+                    'cond_mean_type': cond_mean_type}
 
         method_id = exp_util.get_method_identifier(model_type, template)
         method_dir = os.path.join(exp_dir, method_id)
