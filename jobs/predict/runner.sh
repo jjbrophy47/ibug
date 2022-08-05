@@ -15,6 +15,7 @@ out_scoring=$5
 tune_delta=$6
 custom_in_dir=$7
 custom_out_dir=$8
+cond_mean_type=$9
 tree_subsample_frac=$9
 tree_subsample_order=${10}
 n_jobs=${11}
@@ -30,6 +31,9 @@ fi
 if [[ ! $custom_out_dir ]]; then
     custom_out_dir='default'
 fi
+
+if [[ ! $cond_mean_type ]]; then
+    custom_dir='base'
 
 if [[ ! $tree_subsample_frac ]]; then
     tree_subsample_frac=1.0
@@ -57,6 +61,7 @@ python3 scripts/experiments/predict.py \
   --tune_delta=${tune_delta} \
   --custom_in_dir=${custom_in_dir} \
   --custom_out_dir=${custom_out_dir} \
+  --cond_mean_type=${cond_mean_type} \
   --tree_subsample_frac=${tree_subsample_frac} \
   --tree_subsample_order=${tree_subsample_order} \
   --n_jobs=${n_jobs} \
