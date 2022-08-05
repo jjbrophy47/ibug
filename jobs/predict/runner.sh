@@ -16,9 +16,9 @@ tune_delta=$6
 custom_in_dir=$7
 custom_out_dir=$8
 cond_mean_type=$9
-tree_subsample_frac=$9
-tree_subsample_order=${10}
-n_jobs=${11}
+tree_subsample_frac=${10}
+tree_subsample_order=${11}
+n_jobs=${12}
 
 if [[ ! $out_scoring ]]; then
     out_scoring=${in_scoring}
