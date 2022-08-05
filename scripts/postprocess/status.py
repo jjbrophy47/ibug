@@ -83,7 +83,6 @@ def process(args, in_dir, out_dir, logger):
 
         # get status updates for each method identifier
         for method_args in list(exp_util.product_dict(**method_args_lists)):
-            print(method_args)
             method_id = exp_util.get_method_identifier(model_type, method_args)
             df = get_status(args, settings, method_id, in_dir)
             df.to_csv(os.path.join(out_dir, f'{method_id}.csv'), index=False)

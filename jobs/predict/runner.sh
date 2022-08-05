@@ -34,6 +34,7 @@ fi
 
 if [[ ! $cond_mean_type ]]; then
     custom_dir='base'
+fi
 
 if [[ ! $tree_subsample_frac ]]; then
     tree_subsample_frac=1.0
