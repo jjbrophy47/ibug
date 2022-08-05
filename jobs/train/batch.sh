@@ -33,6 +33,18 @@ for f in ${fold_list[@]}; do
     done
 done
 
+# kNN variants
+tree_list=('knn' 'lgb')
+cond_mean_type_list=('base' 'neighbors')
+for t in ${tree_list[@]}; do
+    for cmt in ${cond_mean_type_list[@]}; do
+        for f in ${fold_list[@]}; do
+            sbatch -a 1-10,12-19,21-22 -c 4 -t 1440 -p 'short' -o ${o}'knn-%a.out' $run $f 'knn' $t $g $s 'default' $cmt
+            sbatch -a 11,20            -c 7 -t 3600 -p 'long'  -o ${o}'knn-%a.out' $run $f 'knn' $t $g $s 'default' $cmt
+        done
+    done
+done
+
 # scratch pad
 fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
 for f in ${fold_list[@]}; do

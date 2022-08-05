@@ -13,12 +13,17 @@ tree_type=$3
 gridsearch=$4
 scoring=$5
 custom_dir=$6
-load_model=$7
-in_scoring=$8
-n_jobs=$9
+cond_mean_type=$7
+load_model=$8
+in_scoring=$9
+n_jobs=${10}
 
 if [[ ! $custom_dir ]]; then
     custom_dir='default'
+fi
+
+if [[ ! $cond_mean_type ]]; then
+    custom_dir='base'
 fi
 
 if [[ ! $load_model ]]; then
@@ -57,3 +62,4 @@ python3 scripts/experiments/train.py \
   --in_scoring=${in_scoring} \
   --n_jobs=${n_jobs} \
   --custom_dir=${custom_dir} \
+  --cond_mean_type=${cond_mean_type} \

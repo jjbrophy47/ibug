@@ -63,9 +63,16 @@ def process(args, in_dir, out_dir, logger):
         if model_type == 'constant':
             method_args_lists = {'tree_type': args.tree_type,
                                  'gridsearch': args.gridsearch}
+        
+        elif model_type == 'knn':
+            method_args_lists = {
+                'tree_type': args.tree_type,
+                'gridsearch': args.gridsearch,
+                'cond_mean_type': args.cond_mean_type,
+            }
 
         if model_type == 'ibug':
-            method_args_lists = {'tree_type': args.tree_type,
+            method_args_lists = {'tree_type': [t for t in args.tree_type if t != 'knn'],
                                  'tree_subsample_frac': args.tree_subsample_frac,
                                  'tree_subsample_order': args.tree_subsample_order,
                                  'instance_subsample_frac': args.instance_subsample_frac,
@@ -118,13 +125,14 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
 
     # Method identifiers
-    parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'ibug', 'knn_fi', 'cbu', 'bart'])
-    parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb', 'xgb', 'cb'])
+    parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'ibug', 'knn', 'cbu', 'bart'])
+    parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb', 'xgb', 'cb', 'knn'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
     parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
     parser.add_argument('--gridsearch', type=int, nargs='+', default=[1])
+    parser.add_argument('--cond_mean_type', type=str, nargs='+', default=['base', 'neighbors'])
 
     # Additional settings
     parser.add_argument('--fn', type=str, nargs='+', default=['results.npy'])
