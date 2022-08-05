@@ -13,7 +13,6 @@ warnings.simplefilter(action='ignore', category=UserWarning)  # lgb compiler war
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
@@ -109,7 +108,8 @@ def tune_model(model_type, X_tune, y_tune, X_val, y_val, tree_type=None,
 
                 if logger:
                     logger.info(f'[{i + 1:,}/{len(param_dicts):,}] {param_dict}'
-                                f', cum. time: {time.time() - start:.3f}s')
+                                f', cum. time: {time.time() - start:.3f}s'
+                                f', score: {param_dict["score"]:.3f}')
 
                 if best_score is None or param_dict['score'] < best_score:
                     best_score = param_dict['score']
@@ -531,14 +531,6 @@ def experiment(args, logger, out_dir, in_dir=None):
     else:
         tune_idxs = np.arange(len(X_train))
 
-    # apply standard scaling if the method is KNN
-    if args.model_type in ['knn']:
-        scaler = StandardScaler()
-        scaler.fit(X_train)
-        X_train = scaler.transform(X_train)
-        X_test = scaler.transform(X_test)
-        logger.info('\nApplying standard scaling...')
-
     # split total tuning set into a train/validation set
     tune_idxs, val_idxs = train_test_split(tune_idxs, test_size=args.val_frac,
                                            random_state=args.random_state)
@@ -583,7 +575,7 @@ def experiment(args, logger, out_dir, in_dir=None):
     assert 'base_model' in tune_dict
     base_model = tune_dict['base_model']
 
-    if args.model_type in ['ibug', 'knn', 'knn_fi']:  # wrap model
+    if args.model_type in ['ibug', 'knn']:  # wrap model
         assert 'model_val_wrapper' in tune_dict
         assert 'best_params_wrapper' in tune_dict
         assert 'WrapperClass' in tune_dict

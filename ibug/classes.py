@@ -1100,7 +1100,7 @@ class KNNWrapper(Estimator):
           feature importance from the given GBRT model.
 
         Input
-            model: GBTregressor.
+            model: KNeighborsRegressor or GBTRegressor.
             X: 2d array of training data.
             y: 1d array of training targets.
             X_val: 2d array of validation data.
