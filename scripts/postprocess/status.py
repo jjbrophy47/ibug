@@ -11,7 +11,6 @@ import pandas as pd
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')
-import util
 from experiments import util as exp_util
 
 
@@ -77,7 +76,8 @@ def process(args, in_dir, out_dir, logger):
                                  'tree_subsample_order': args.tree_subsample_order,
                                  'instance_subsample_frac': args.instance_subsample_frac,
                                  'affinity': args.affinity,
-                                 'gridsearch': args.gridsearch}
+                                 'gridsearch': args.gridsearch,
+                                 'cond_mean_type': args.cond_mean_type}
         else:
             method_args_lists = {'gridsearch': args.gridsearch}
 
