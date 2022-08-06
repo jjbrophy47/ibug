@@ -122,7 +122,7 @@ if __name__ == '__main__':
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
     parser.add_argument('--metric', type=str, nargs='+', default=['nll', 'crps'])
-    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
+    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 11)))
 
     # Method identifiers
     parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'ibug', 'cbu', 'bart'])
