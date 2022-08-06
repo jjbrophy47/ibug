@@ -85,7 +85,8 @@ def process(args, in_dir, out_dir, logger):
 
         # get status updates for each method identifier
         for method_args in list(exp_util.product_dict(**method_args_lists)):
-            if method_args['tree_type'] in ['cb', 'xgb'] and method_args['cond_mrean_type'] == 'neighbors':
+            if model_type == 'ibug' and method_args['tree_type'] in ['cb', 'xgb']\
+                and method_args['cond_mean_type'] == 'neighbors':
                 continue
             method_id = exp_util.get_method_identifier(model_type, method_args)
             df = get_status(args, settings, method_id, in_dir)
