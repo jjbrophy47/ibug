@@ -71,18 +71,22 @@ def process(args, in_dir, out_dir, logger):
             }
 
         elif model_type == 'ibug':
-            method_args_lists = {'tree_type': [t for t in args.tree_type if t != 'knn'],
-                                 'tree_subsample_frac': args.tree_subsample_frac,
-                                 'tree_subsample_order': args.tree_subsample_order,
-                                 'instance_subsample_frac': args.instance_subsample_frac,
-                                 'affinity': args.affinity,
-                                 'gridsearch': args.gridsearch,
-                                 'cond_mean_type': args.cond_mean_type}
+            method_args_lists = {
+                'tree_type': [t for t in args.tree_type if t != 'knn'],
+                'tree_subsample_frac': args.tree_subsample_frac,
+                'tree_subsample_order': args.tree_subsample_order,
+                'instance_subsample_frac': args.instance_subsample_frac,
+                'affinity': args.affinity,
+                'gridsearch': args.gridsearch,
+                'cond_mean_type': args.cond_mean_type
+            }
         else:
             method_args_lists = {'gridsearch': args.gridsearch}
 
         # get status updates for each method identifier
         for method_args in list(exp_util.product_dict(**method_args_lists)):
+            if method_args['tree_type'] in ['cb', 'xgb'] and method_args['cond_mrean_type'] == 'neighbors':
+                continue
             method_id = exp_util.get_method_identifier(model_type, method_args)
             df = get_status(args, settings, method_id, in_dir)
             df.to_csv(os.path.join(out_dir, f'{method_id}.csv'), index=False)
