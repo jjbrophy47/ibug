@@ -33,7 +33,7 @@ if [[ ! $custom_out_dir ]]; then
 fi
 
 if [[ ! $cond_mean_type ]]; then
-    custom_dir='base'
+    cond_mean_type='base'
 fi
 
 if [[ ! $tree_subsample_frac ]]; then

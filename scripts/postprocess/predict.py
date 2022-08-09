@@ -826,7 +826,7 @@ def append_head2head(data_df, attach_df=None):
 
 
 def append_head2head_old(data_df, attach_df=None, include_ties=True,
-                     p_val_threshold=0.05):
+    p_val_threshold=0.05):
     """
     Attach head-to-head wins, ties, and losses to the given dataframe.
 
@@ -861,8 +861,7 @@ def append_head2head_old(data_df, attach_df=None, include_ties=True,
             n_wins, n_ties, n_losses = 0, 0, 0
             for dataset, df in data_df.groupby('dataset'):
                 t_stat, p_val = ttest_rel(df[c1], df[c2], nan_policy='omit')
-                c1_mean = np.mean(df[c1])
-                c2_mean = np.mean(df[c2])
+
                 if t_stat < 0 and p_val < p_val_threshold:
                     n_wins += 1
                 elif t_stat > 0 and p_val < p_val_threshold:
@@ -1186,7 +1185,9 @@ def process(args, in_dir, out_dir, logger):
     }
 
     # compute wins/losses
-    mean_h2h = {key: append_head2head(df) for key, df in mean.items()}
+    mean_h2h = {key: append_head2head(data_df=raw[key], attach_df=mean[key]) for key in mean.keys()}
+
+    # mean_h2h = {key: append_head2head(df) for key, df in mean.items()}
     sem_h2h = {key: append_head2head(df) for key, df in sem.items()}
     std_h2h = {key: append_head2head(df) for key, df in std.items()}
 

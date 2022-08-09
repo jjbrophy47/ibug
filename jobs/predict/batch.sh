@@ -2,50 +2,58 @@ run='jobs/predict/runner.sh'
 o='jobs/logs/predict/'
 t='lgb'
 s='crps'
-p='short'
-l='long'
 td=0
 ci='default'
 co='default'
 tf=1.0
 to='random'
 nj=-1
-fold_list=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)
-tree_list=('lgb' 'xgb' 'cb')
+fold_list=(1 2 3 4 5 6 7 8 9 10)
 
+# baselines
 for f in ${fold_list[@]}; do
-    sbatch -a 1-22 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'preempt' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
-    sbatch -a 1-22 -c 4 -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $s $s $td
+    sbatch -a 1-22 -c 4  -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost' $t $s $s $td
 
-    sbatch -a 1-22 -c 4 -t 1440  -p 'preempt' -o ${o}'constant-%a.out' $run $f 'constant' $t 'nll' 'crps' 1
-    sbatch -a 1-22 -c 4 -t 1440  -p 'preempt' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'     $t 'nll' 'crps' 1
-    sbatch -a 1-22 -c 4 -t 1440  -p 'preempt' -o ${o}'cbu-%a.out'      $run $f 'cbu'      $t 'nll' 'crps' 1
-    sbatch -a 1-22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out'     $run $f 'bart'     $t 'nll' 'crps' 1
+    sbatch -a 1-22 -c 4  -t 1440 -p 'preempt' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'    $t 'nll' $s 1
+    sbatch -a 1-22 -c 4  -t 1440 -p 'preempt' -o ${o}'cbu-%a.out'      $run $f 'cbu'     $t 'nll' $s 1
+    sbatch -a 1-22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out'     $run $f 'bart'    $t 'nll' $s 1
 done
+
+# IBUG tree variants
+tree_list=('xgb' 'cb')
 
 for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
-        # sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
-        sbatch -a 20               -c 4  -t 2880 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
-        sbatch -a 11               -c 7  -t 2880 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+        sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+        sbatch -a 11,20            -c 10 -t 2880 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+    done
+done
+
+# IBUG conditional mean variants
+cond_mean_type_list=('base' 'neighbors')
+
+for f in ${fold_list[@]}; do
+    for cmt in ${cond_mean_type_list[@]}; do
+        sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' 'lgb' $s $s $td $ci $co $cmt
+        sbatch -a 11,20            -c 10 -t 2880 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' 'lgb' $s $s $td $ci $co $cmt
     done
 done
 
 # kNN variants
 tree_list=('knn' 'lgb')
 cond_mean_type_list=('base' 'neighbors')
+
 for t in ${tree_list[@]}; do
     for cmt in ${cond_mean_type_list[@]}; do
         for f in ${fold_list[@]}; do
-            sbatch -a 1-10,12-19,21-22 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $s $s $td $ci $co $cmt
-            # sbatch -a 11,20            -c 7 -t 3600 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $s $s $td $ci $co $cmt
+            sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $s $s $td $ci $co $cmt
+            sbatch -a 11,20            -c 10 -t 2880 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $s $s $td $ci $co $cmt
         done
     done
 done
 
 # scratch pad
-fold_list=(1 2 4 6 7 8 9 10 11 12 14 17)
+fold_list=(1 2 4 5 6 7 8 9 10)
 for f in ${fold_list[@]}; do
     sbatch -a 11 -c 7 -t 3600 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $s $s $td
     # sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $s $s $td
