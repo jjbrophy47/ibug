@@ -964,11 +964,19 @@ def get_param_list(name, result):
         param_types += [int, int, float]
 
     elif 'knn' in name:
-        param_list.append(result['model_params']['base_model_params_']['n_neighbors'])
-        param_list.append(result['model_params']['k'])
-        param_list.append(result['model_params']['min_scale'])
-        param_names += ['$k_1$', '$k_2$', r'$\rho$']
-        param_types += [int, int, float]
+        if result['train_args']['tree_type'] == 'lgb':
+            param_list.append(result['model_params']['max_feat'])
+            param_list.append(result['model_params']['k'])
+            param_list.append(result['model_params']['min_scale'])
+            param_names += [r'$\upsilon$', '$k_2$', r'$\rho$']
+            param_types += [int, int, float]
+        else:
+            param_list.append(result['model_params']['max_feat'])
+            param_list.append(result['model_params']['base_model_params_']['n_neighbors'])
+            param_list.append(result['model_params']['k'])
+            param_list.append(result['model_params']['min_scale'])
+            param_names += [r'$\upsilon$', '$k_1$', '$k_2$', r'$\rho$']
+            param_types += [int, int, int, float]
 
     elif 'ngboost' in name:
         param_list.append(result['model_params']['n_estimators'])
