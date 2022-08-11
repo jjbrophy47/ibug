@@ -12,11 +12,11 @@ fold_list=(1 2 3 4 5 6 7 8 9 10)
 
 # baselines
 for f in ${fold_list[@]}; do
-    sbatch -a 1-22 -c 4  -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost' $t $s $s $td
+    sbatch -a 1-22                   -c 4  -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost' $t $s $s $td
 
-    sbatch -a 1-22 -c 4  -t 1440 -p 'preempt' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'    $t 'nll' $s 1
-    sbatch -a 1-22 -c 4  -t 1440 -p 'preempt' -o ${o}'cbu-%a.out'      $run $f 'cbu'     $t 'nll' $s 1
-    sbatch -a 1-22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out'     $run $f 'bart'    $t 'nll' $s 1
+    # sbatch -a 1-22 -c 4  -t 1440 -p 'preempt' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'    $t 'nll' $s 1
+    sbatch -a 1-22                   -c 4  -t 1440 -p 'preempt' -o ${o}'cbu-%a.out'      $run $f 'cbu'     $t 'nll' $s 1
+    sbatch -a 2-6,8-9,12,15-17,21,22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out'     $run $f 'bart'    $t 'nll' $s 1
 done
 
 # IBUG tree variants

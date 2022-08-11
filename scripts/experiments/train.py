@@ -447,7 +447,7 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
         import pgbm  # dynamic import (some machines cannot install pgbm)
         model = pgbm.PGBMRegressor(n_estimators=n_estimators, learning_rate=lr,
                                    max_leaves=max_leaves, max_bin=max_bin,
-                                   max_depth=-1, bagging_fraction=bagging_frac,
+                                   bagging_fraction=bagging_frac,
                                    min_data_in_leaf=min_leaf_samples, verbose=verbose)
 
     elif model_type == 'knn' and tree_type == 'knn':

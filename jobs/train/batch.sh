@@ -57,9 +57,9 @@ for t in ${tree_list[@]}; do
 done
 
 # scratch pad
-fold_list=(5)
+fold_list=(1 2 6 7 8 10)
 for f in ${fold_list[@]}; do
-    sbatch -a 1-10,12-19,21-22 -c 4  -t 1440  -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $g 'crps'
+    sbatch -a 11 -c 10 -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'cb' $g 'nll' 'default' 'base'
     # sbatch -a 1-22                   -c 4  -t 1440  -p 'preempt'  -o ${o}'knn-%a.out'    $run $f 'knn'    $t $g $s
     # sbatch -a 1-10,12-19,21-22       -c 4  -t 1440  -p 'short'  -o ${o}'knn_fi-%a.out' $run $f 'knn_fi' $t $g $s
     # sbatch -a 20,11                  -c 5  -t 2880  -p 'long'  -o ${o}'knn_fi-%a.out' $run $f 'knn_fi' $t $g $s
