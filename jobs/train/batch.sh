@@ -38,19 +38,19 @@ cond_mean_type_list=('base' 'neighbors')
 
 for f in ${fold_list[@]}; do
     for cmt in ${cond_mean_type_list[@]}; do
-        sbatch -a 1-10,12-19,21-22 -c 4  -t 1440  -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'lgb' $g $s $cd $cmt
-        # sbatch -a 11,20            -c 10 -t 1440  -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'lgb' $g $s $cd $cmt
+        sbatch -a 1-10,12-19,21-22 -c 4  -t 1440  -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'cb' $g $s $cd $cmt
+        sbatch -a 11,20            -c 10 -t 1440  -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'cb' $g $s $cd $cmt
     done
 done
 
 # kNN variants
-tree_list=('knn' 'lgb')
+tree_list=('knn' 'lgb' 'cb')
 cond_mean_type_list=('base' 'neighbors')
 
 for t in ${tree_list[@]}; do
     for cmt in ${cond_mean_type_list[@]}; do
         for f in ${fold_list[@]}; do
-            # sbatch -a 1-10,12-19,21-22 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $g $s $cd $cmt
+            sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $g $s $cd $cmt
             sbatch -a 11,20            -c 10 -t 2880 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $g $s $cd $cmt
         done
     done

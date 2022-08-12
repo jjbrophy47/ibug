@@ -53,10 +53,12 @@ for t in ${tree_list[@]}; do
 done
 
 # scratch pad
-fold_list=(1 2 4 5 6 7 8 9 10)
+fold_list=(5)
 for f in ${fold_list[@]}; do
-    sbatch -a 11 -c 7 -t 3600 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $s $s $td
-    # sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out'      $run $f 'knn'      $t $s $s $td
+    sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out' $run $f 'ngboost' $t 'crps' 'crps' $td
+    # sbatch -a 2 -c 28 -t 1440 -p 'preempt' -o ${o}'bart-%a.out' $run $f 'bart' $t 'crps' $s 1
+    # sbatch -a 11 -c 7 -t 3600 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $s $s $td
+    # sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' 'knn' 'crps' 'crps' $td $ci $co 'base'
     # sbatch -a 1-10,12-19,21 -c 5 -t 1440 -p 'preempt' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
 done
 
@@ -100,5 +102,15 @@ for cd in ${custom_dir_list[@]}; do
             # sbatch -a 20               -c 4  -t 2880 -p $l -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
             # sbatch -a 11               -c 10 -t 4320 -p $l -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
         done
+    done
+done
+
+
+# CBU+IBUG
+tree_type_list=('lgb' 'cb')
+metric_list=('crps' 'nll')
+for t in ${tree_type_list[@]}; do
+    for metric in ${metric_list[@]}; do
+        sbatch -c 4 -t 1440 -p 'preempt' -o ${o}'cbu_ibug-%a.out' 'scripts/postprocess/cbu_ibug_predict.sh' $t $metric
     done
 done

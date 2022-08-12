@@ -1183,6 +1183,9 @@ def process(args, in_dir, out_dir, logger):
     raw['ptime_df'] = pd.DataFrame(ptime_list)
     param_df = aggregate_params(pd.DataFrame(param_list), param_names, param_types)  # aggregate hyperparameters
 
+    # pd.set_option('display.max_rows', None)
+    # print(raw['test_sr_df_delta'])
+
     # compute mean and and SEM/s.d.
     group_cols = ['dataset']
     mean = {key: df.groupby(group_cols).mean().reset_index().drop(columns=['fold']) for key, df in raw.items()}
@@ -1192,8 +1195,11 @@ def process(args, in_dir, out_dir, logger):
         'ptime_df': raw['ptime_df'].groupby(group_cols).std().reset_index().drop(columns=['fold'])
     }
 
+    # print(mean['test_sr_df_delta'])
+    # exit(0)
+
     # compute wins/losses
-    mean_h2h = {key: append_head2head(data_df=raw[key], attach_df=mean[key]) for key in mean.keys()}
+    mean_h2h = {key: append_head2head_old(data_df=raw[key], attach_df=mean[key]) for key in mean.keys()}
 
     # mean_h2h = {key: append_head2head(df) for key, df in mean.items()}
     sem_h2h = {key: append_head2head(df) for key, df in sem.items()}
@@ -1459,16 +1465,16 @@ if __name__ == '__main__':
                                  'msd', 'naval', 'obesity', 'news', 'power', 'protein',
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
-    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
+    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 11)))
     parser.add_argument('--model_type', type=str, nargs='+',
         default=['knn', 'ngboost', 'pgbm', 'cbu', 'bart', 'ibug', 'cbu_ibug'])
-    parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
+    parser.add_argument('--tree_type', type=str, nargs='+', default=['knn', 'lgb'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
     parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
     parser.add_argument('--gridsearch', type=int, default=1)
-    parser.add_argument('--cond_mean_type', type=str, nargs='+', default=['base', 'neighbors'])
+    parser.add_argument('--cond_mean_type', type=str, nargs='+', default=['base'])
 
     parser.add_argument('--tuning_metric', type=str, default='crps')
     parser.add_argument('--acc_metric', type=str, default='rmse')

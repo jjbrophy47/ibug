@@ -65,12 +65,12 @@ def process(args, in_dir, out_dir, logger):
         
         elif model_type == 'knn':
             method_args_lists = {
-                'tree_type': [t for t in args.tree_type if t in ['knn', 'lgb']],
+                'tree_type': [t for t in args.tree_type if t in ['knn', 'lgb', 'cb']],
                 'gridsearch': args.gridsearch,
                 'cond_mean_type': args.cond_mean_type,
             }
 
-        elif model_type == 'ibug':
+        elif model_type in ['ibug', 'cbu_ibug']:
             method_args_lists = {
                 'tree_type': [t for t in args.tree_type if t != 'knn'],
                 'tree_subsample_frac': args.tree_subsample_frac,
@@ -85,7 +85,7 @@ def process(args, in_dir, out_dir, logger):
 
         # get status updates for each method identifier
         for method_args in list(exp_util.product_dict(**method_args_lists)):
-            if model_type == 'ibug' and method_args['tree_type'] in ['cb', 'xgb']\
+            if model_type == 'ibug' and method_args['tree_type'] in ['xgb']\
                 and method_args['cond_mean_type'] == 'neighbors':
                 continue
             method_id = exp_util.get_method_identifier(model_type, method_args)
@@ -130,7 +130,8 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 11)))
 
     # Method identifiers
-    parser.add_argument('--model_type', type=str, nargs='+', default=['knn', 'ngboost', 'pgbm', 'ibug', 'cbu', 'bart'])
+    parser.add_argument('--model_type', type=str, nargs='+',
+        default=['bart', 'knn', 'ngboost', 'pgbm', 'cbu', 'ibug', 'cbu_ibug'])
     parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb', 'xgb', 'cb', 'knn'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])

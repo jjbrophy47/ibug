@@ -410,19 +410,15 @@ if __name__ == '__main__':
     parser.add_argument('--tree_subsample_order', type=str, default='random')  # IBUG
     parser.add_argument('--instance_subsample_frac', type=float, default=1.0)  # IBUG
     parser.add_argument('--affinity', type=str, default='unweighted')  # IBUG
+    parser.add_argument('--cond_mean_type', type=str, default='base')  # IBUG
 
     # Default settings
     # parser.add_argument('--tune_delta', type=int, default=0)  # Constant and PGBM
     parser.add_argument('--tune_frac', type=float, default=1.0)  # ALL
     parser.add_argument('--val_frac', type=float, default=0.2)  # ALL
     parser.add_argument('--random_state', type=int, default=1)  # ALL
-    # parser.add_argument('--verbose', type=int, default=2)  # ALL
-    # parser.add_argument('--n_stopping_rounds', type=int, default=25)  # NGBoost, PGBM, IBUG, constant
     parser.add_argument('--in_scoring', type=str, default='crps')
     parser.add_argument('--out_scoring', type=str, default='crps')
-    # parser.add_argument('--distribution', type=str, nargs='+',
-    #                     default=['normal', 'skewnormal', 'lognormal', 'laplace',
-    #                              'student_t', 'logistic', 'gumbel', 'weibull', 'kde'])
 
     # Extra settings
     parser.add_argument('--n_jobs', type=int, default=1)
