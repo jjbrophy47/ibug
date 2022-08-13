@@ -57,13 +57,16 @@ for t in ${tree_list[@]}; do
 done
 
 # scratch pad
-fold_list=(1 2 6 7 8 10)
+fold_list=(1 2 3 4 5 6 7 8 9 10)
 for f in ${fold_list[@]}; do
-    sbatch -a 11 -c 10 -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'cb' $g 'nll' 'default' 'base'
+    # sbatch -a 1-10,12-19,21-22 -c 4 -t 1440 -p 'short' -o ${o}'knn-%a.out' $run $f 'knn' 'cb' $g 'nll' 'default' 'neighbors'
+    sbatch -a 11 -c 12 -t 1440 -p 'short' -o ${o}'knn-%a.out' $run $f 'knn' 'cb' $g 'nll' 'default' 'neighbors'
+    # sbatch -a 1-10,12-19,21-22 -c 12 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $g 'nll' 'default' 'base'
+    # sbatch -a 20 -c 12 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $g 'nll' 'default' 'base'
     # sbatch -a 1-22                   -c 4  -t 1440  -p 'preempt'  -o ${o}'knn-%a.out'    $run $f 'knn'    $t $g $s
     # sbatch -a 1-10,12-19,21-22       -c 4  -t 1440  -p 'short'  -o ${o}'knn_fi-%a.out' $run $f 'knn_fi' $t $g $s
     # sbatch -a 20,11                  -c 5  -t 2880  -p 'long'  -o ${o}'knn_fi-%a.out' $run $f 'knn_fi' $t $g $s
     # sbatch -a 2 -c 28 -t 1440 -p 'preempt' -o ${o}'bart-%a.out'     $run $f 'bart'     $t $g $s
-    # sbatch -a 11 -c 4  -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $g $s
+    # sbatch -a 11 -c 5  -t 1440 -p 'short' -o ${o}'ngboost-%a.out'  $run $f 'ngboost'  $t $g 'crps'
     # sbatch -a 21 -c 4  -t 1440 -p 'preempt' -o ${o}'cbu-%a.out'      $run $f 'cbu'      $t $g $s
 done

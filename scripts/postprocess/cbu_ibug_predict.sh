@@ -11,7 +11,7 @@ tree_type=$1
 metric=$2
 
 if [[ ! $tree_type ]]; then
-    metric='lgb'
+    tree_type='lgb'
 fi
 
 if [[ ! $metric ]]; then
@@ -31,6 +31,6 @@ for dataset in ${dataset_list[@]}; do
             --tree_type=${tree_type} \
             --in_scoring=${metric} \
             --out_scoring=${metric} \
-            --fold=${fold} \
+            --fold=${fold}
     done
 done

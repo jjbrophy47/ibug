@@ -111,6 +111,6 @@ tree_type_list=('lgb' 'cb')
 metric_list=('crps' 'nll')
 for t in ${tree_type_list[@]}; do
     for metric in ${metric_list[@]}; do
-        sbatch -c 4 -t 1440 -p 'preempt' -o ${o}'cbu_ibug-%a.out' 'scripts/postprocess/cbu_ibug_predict.sh' $t $metric
+        sbatch -c 4 -t 1440 -p 'preempt' -o ${o}'cbu_ibug.out' 'scripts/postprocess/cbu_ibug_predict.sh' $t $metric
     done
 done
