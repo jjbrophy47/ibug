@@ -85,7 +85,7 @@ def process(args, in_dir, out_dir, logger):
 
         # get status updates for each method identifier
         for method_args in list(exp_util.product_dict(**method_args_lists)):
-            if model_type == 'ibug' and method_args['tree_type'] in ['xgb']\
+            if model_type in ['ibug', 'cbu_ibug'] and method_args['tree_type'] in ['xgb']\
                 and method_args['cond_mean_type'] == 'neighbors':
                 continue
             elif args.exp == 'train' and model_type == 'cbu_ibug':
