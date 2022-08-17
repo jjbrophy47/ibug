@@ -92,6 +92,8 @@ def process(args, in_dir, out_dir, logger):
                 continue
             elif args.exp == 'predict' and model_type == 'cbu_ibug' and method_args['cond_mean_type'] == 'neighbors':
                 continue
+            elif args.exp == 'predict' and model_type == 'cbu_ibug' and method_args['tree_type'] == 'xgb':
+                continue
             method_id = exp_util.get_method_identifier(model_type, method_args)
             df = get_status(args, settings, method_id, in_dir)
             df.to_csv(os.path.join(out_dir, f'{method_id}.csv'), index=False)
