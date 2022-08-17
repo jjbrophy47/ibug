@@ -53,10 +53,10 @@ for t in ${tree_list[@]}; do
 done
 
 # scratch pad
-fold_list=(5)
+fold_list=(6 7 10)
 for f in ${fold_list[@]}; do
-    sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out' $run $f 'ngboost' $t 'crps' 'crps' $td
-    # sbatch -a 2 -c 28 -t 1440 -p 'preempt' -o ${o}'bart-%a.out' $run $f 'bart' $t 'crps' $s 1
+    # sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out' $run $f 'ngboost' $t 'crps' 'crps' $td
+    sbatch -a 2 -c 25 -t 1440 -p 'short' -o ${o}'bart-%a.out' $run $f 'bart' $t 'nll' 'nll' 1
     # sbatch -a 11 -c 7 -t 3600 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $s $s $td
     # sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' 'knn' 'crps' 'crps' $td $ci $co 'base'
     # sbatch -a 1-10,12-19,21 -c 5 -t 1440 -p 'preempt' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td

@@ -65,14 +65,18 @@ dmap = {
 
 method_map = {
     'cbu': 'CBU',
-    'cbu_ibug_3c6e45799d41bd18a1c73419c9a8cedf': 'IBUG+CBU',
-    'cbu_ibug_9924f746db4df90f0d794346ed144bbd': 'IBUG-CB+CBU',
+    'cbu_ibug_831ff4730ee884556c05a3751389d8fb': 'IBUG-LGB+CBU',
+    'cbu_ibug_732b2e458f8d0c10e5d5f534f9acc2fb': 'IBUG-CB+CBU',
     'pgbm_5e13b5ea212546260ba205c54e1d9559': 'PGBM',
     'ngboost': 'NGBoost',
-    'knn': 'KNN',
-    'knn_fi': 'KNN-FI',
-    'ibug_3c6e45799d41bd18a1c73419c9a8cedf': 'IBUG',
-    'ibug_9924f746db4df90f0d794346ed144bbd': 'IBUG-CB',
+    'knn_8bf9fb55d7e448013b5150404e77a943': 'KNN',
+    'knn_001a4a2d54c0e64a8368b4daf1c08aff': 'KNN_n',
+    'knn_f4cf753c299e5105a821a0e29f3a2403': 'KNN-LGB',
+    'knn_f6d49086cea3bad421507f7084c8c516': 'KNN-LGB_n',
+    'ibug_831ff4730ee884556c05a3751389d8fb': 'IBUG-LGB',
+    'ibug_5b54b77b1323676a6ed208e39cf10155': 'IBUG-LGB_n',
+    'ibug_732b2e458f8d0c10e5d5f534f9acc2fb': 'IBUG-CB',
+    'ibug_e01ca97af6a59a305a51f8eaad593980': 'IBUG-XGB',
     'bart': 'BART',
     'dataset': 'Dataset',
 }
@@ -857,9 +861,11 @@ def append_head2head_old(data_df, attach_df=None, include_ties=True,
             if c1 == c2:
                 res[c1] = '-'
                 continue
+            
+            temp_df = data_df[['dataset', c1, c2]].dropna()
 
             n_wins, n_ties, n_losses = 0, 0, 0
-            for dataset, df in data_df.groupby('dataset'):
+            for dataset, df in temp_df.groupby('dataset'):
                 t_stat, p_val = ttest_rel(df[c1], df[c2], nan_policy='omit')
 
                 if t_stat < 0 and p_val < p_val_threshold:
@@ -1123,17 +1129,17 @@ def process(args, in_dir, out_dir, logger):
                 name = method
 
                 test_point[name] = res['metrics']['test']['accuracy'][args.acc_metric]
-                test_prob[name] = res['metrics']['test']['scoring_rule'][args.scoring_rule_metric]
+                test_prob[name] = res['metrics']['test']['scoring_rule'][args.sr_metric]
                 test_prob2[name] = res['metrics']['test']['avg_calibration'][args.cal_metric]
                 test_prob3[name] = res['metrics']['test']['sharpness']['sharp']
-                test_prob_delta[name] = res['metrics']['test_delta']['scoring_rule'][args.scoring_rule_metric]
+                test_prob_delta[name] = res['metrics']['test_delta']['scoring_rule'][args.sr_metric]
                 test_prob2_delta[name] = res['metrics']['test_delta']['avg_calibration'][args.cal_metric]
                 test_prob3_delta[name] = res['metrics']['test_delta']['sharpness']['sharp']
 
-                val_prob[name] = res['metrics']['val']['scoring_rule'][args.scoring_rule_metric]
+                val_prob[name] = res['metrics']['val']['scoring_rule'][args.sr_metric]
                 val_prob2[name] = res['metrics']['val']['avg_calibration'][args.cal_metric]
                 val_prob3[name] = res['metrics']['val']['sharpness']['sharp']
-                val_prob_delta[name] = res['metrics']['val_delta']['scoring_rule'][args.scoring_rule_metric]
+                val_prob_delta[name] = res['metrics']['val_delta']['scoring_rule'][args.sr_metric]
                 val_prob2_delta[name] = res['metrics']['val_delta']['avg_calibration'][args.cal_metric]
                 val_prob3_delta[name] = res['metrics']['val_delta']['sharpness']['sharp']
 
@@ -1209,39 +1215,43 @@ def process(args, in_dir, out_dir, logger):
 
     logger.info('\n\nNO VARIANCE CALIBRATION')
     logger.info(f"\n{metric_names[args.acc_metric]} (Accuracy):\n{mean_h2h['test_acc_df']}")
-    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{mean_h2h['test_sr_df']}")
+    logger.info(f"\n{metric_names[args.sr_metric]} (Proper Scoring Rule):\n{mean_h2h['test_sr_df']}")
     logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{mean_h2h['test_cal_df']}")
     logger.info(f"\nSharpness:\n{mean_h2h['test_sharp_df']}")
 
     logger.info('\n\nWITH VARIANCE CALIBRATION')
     logger.info(f"\n{metric_names[args.acc_metric]} (Accuracy):\n{mean_h2h['test_acc_df']}")
-    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{mean_h2h['test_sr_df_delta']}")
+    logger.info(f"\n{metric_names[args.sr_metric]} (Proper Scoring Rule):\n{mean_h2h['test_sr_df_delta']}")
     logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{mean_h2h['test_cal_df_delta']}")
     logger.info(f"\nSharpness:\n{mean_h2h['test_sharp_df_delta']}")
 
     # delta comparison
     keys = [k for k in mean.keys() if 'delta' not in k and k not in ['test_acc_df', 'btime_df', 'ptime_df']]
-    delta = {key: mean[key].merge(mean[key+'_delta'], on='dataset', how='left') for key in keys}
-    delta_h2h = {key: append_head2head(df) for key, df in delta.items()}
+    # delta = {key: mean[key].merge(mean[key+'_delta'], on='dataset', how='left') for key in keys}
+    # delta_h2h = {key: append_head2head(df) for key, df in delta.items()}
 
-    logger.info('\n\nW/O VS. WITH VARIANCE CALIBRATION\n')
-    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{delta_h2h['test_sr_df']}")
-    logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{delta_h2h['test_cal_df']}")
+    delta_raw = {key: raw[key].merge(raw[key+'_delta'], on=['dataset', 'fold'], how='left') for key in keys}
+    delta_mean = {key: mean[key].merge(mean[key+'_delta'], on='dataset', how='left') for key in keys}
+    delta_h2h = {key: append_head2head_old(data_df=df, attach_df=delta_mean[key]) for key, df in delta_raw.items()}
+
+    # logger.info('\n\nW/O VS. WITH VARIANCE CALIBRATION\n')
+    # logger.info(f"\n{metric_names[args.sr_metric]} (Proper Scoring Rule):\n{delta_h2h['test_sr_df']}")
+    # logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{delta_h2h['test_cal_df']}")
 
     # val-test comparison
     keys = [k for k in mean.keys() if not any(x in k for x in ['test', 'test_acc_df', 'btime_df', 'ptime_df'])]
     vtest_h2h = {k.replace('val', 'vtest'): valtest_h2h(val_df=mean[k], test_df=mean[k.replace('val', 'test')]) for k in keys}
 
-    logger.info('\n\nVALIDATION AND TEST\n')
-    logger.info('\nW/O Calibration')
-    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{vtest_h2h['vtest_sr_df']}")
-    logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{vtest_h2h['vtest_cal_df']}")
-    logger.info(f"\nSharpness:\n{vtest_h2h['vtest_sharp_df']}")
+    # logger.info('\n\nVALIDATION AND TEST\n')
+    # logger.info('\nW/O Calibration')
+    # logger.info(f"\n{metric_names[args.sr_metric]} (Proper Scoring Rule):\n{vtest_h2h['vtest_sr_df']}")
+    # logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{vtest_h2h['vtest_cal_df']}")
+    # logger.info(f"\nSharpness:\n{vtest_h2h['vtest_sharp_df']}")
 
-    logger.info('\nW/ Calibration')
-    logger.info(f"\n{metric_names[args.scoring_rule_metric]} (Proper Scoring Rule):\n{vtest_h2h['vtest_sr_df_delta']}")
-    logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{vtest_h2h['vtest_cal_df_delta']}")
-    logger.info(f"\nSharpness:\n{vtest_h2h['vtest_sharp_df_delta']}")
+    # logger.info('\nW/ Calibration')
+    # logger.info(f"\n{metric_names[args.sr_metric]} (Proper Scoring Rule):\n{vtest_h2h['vtest_sr_df_delta']}")
+    # logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{vtest_h2h['vtest_cal_df_delta']}")
+    # logger.info(f"\nSharpness:\n{vtest_h2h['vtest_sharp_df_delta']}")
 
     # save
     for key, df in mean_h2h.items():
@@ -1250,8 +1260,8 @@ def process(args, in_dir, out_dir, logger):
     for key, df in delta_h2h.items():
         df.to_csv(f'{out_dir}/dcomp_{key}.csv', index=False)
 
-    for key, df in vtest_h2h.items():
-        df.to_csv(f'{out_dir}/vtest_{key}.csv', index=False)
+    # for key, df in vtest_h2h.items():
+    #     df.to_csv(f'{out_dir}/vtest_{key}.csv', index=False)
 
     logger.info(f'\nSaving results to {out_dir}...')
 
@@ -1264,16 +1274,16 @@ def process(args, in_dir, out_dir, logger):
     # print markdown tables
     logger.info('\n\nMARKDOWN TABLES')
     markdown_table(df=mean_h2h['test_acc_df'], logger=logger, suffix=args.acc_metric.upper())
-    markdown_table(df=mean_h2h['test_sr_df_delta'], logger=logger, suffix=args.scoring_rule_metric.upper())
+    markdown_table(df=mean_h2h['test_sr_df_delta'], logger=logger, suffix=args.sr_metric.upper())
     markdown_table2(df1=mean_h2h['test_cal_df_delta'], df2=mean_h2h['test_sharp_df_delta'], logger=logger, suffix='MACE/Sharpness')
 
     # print latex tables
     logger.info('\n\nLATEX TABLES')
     latex_table_sem(df=mean_h2h['test_acc_df'], sem_df=sem_h2h['test_acc_df'], logger=logger, suffix=args.acc_metric.upper())
     latex_table_sem(df=mean_h2h['test_sr_df'], sem_df=sem_h2h['test_sr_df'], logger=logger,
-        suffix=args.scoring_rule_metric.upper())
+        suffix=args.sr_metric.upper())
     latex_table_sem(df=mean_h2h['test_sr_df_delta'], sem_df=sem_h2h['test_sr_df_delta'], logger=logger,
-        suffix=args.scoring_rule_metric.upper() + '+Delta')
+        suffix=args.sr_metric.upper() + '+Delta')
     latex_table2(df1=mean_h2h['test_cal_df_delta'], df2=mean_h2h['test_sharp_df_delta'], logger=logger, suffix='MACE/Sharpness')
 
     param_df.to_csv(f'{out_dir}/param_df.csv', index=False)
@@ -1478,7 +1488,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--tuning_metric', type=str, default='crps')
     parser.add_argument('--acc_metric', type=str, default='rmse')
-    parser.add_argument('--scoring_rule_metric', type=str, default='crps')
+    parser.add_argument('--sr_metric', type=str, default='crps')
     parser.add_argument('--cal_metric', type=str, default='ma_cal')
 
     args = parser.parse_args()
