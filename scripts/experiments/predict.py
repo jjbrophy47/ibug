@@ -310,10 +310,6 @@ def experiment(args, in_dir, out_dir, logger):
         'val': val_res, 'val_delta': val_res_delta,
         'test': test_res, 'test_delta': test_res_delta
     }
-    result['misc'] = {
-        'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
-        'total_experiment_time': time.time() - begin
-    }
     if args.tune_delta:
         result['timing']['tune_delta'] = tune_time_delta
         result['delta'] = {'best_delta': best_delta, 'best_op': best_op}
@@ -341,6 +337,10 @@ def experiment(args, in_dir, out_dir, logger):
             result['test_posterior'] = test_res['performance']
             if args.fold == 1:
                 result['neighbors'] = test_res['neighbors']
+    result['misc'] = {
+        'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
+        'total_experiment_time': time.time() - begin
+    }
 
     # Macs show this in bytes, unix machines show this in KB
     logger.info(f"\ntotal experiment time: {result['misc']['total_experiment_time']:.3f}s")

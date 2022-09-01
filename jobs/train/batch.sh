@@ -24,9 +24,9 @@ for f in ${fold_list[@]}; do
 done
 
 # scratch pad
-fold_list=(2 7 8)
+fold_list=(1 2 3 4 5 6 7 8 9 10)
 for f in ${fold_list[@]}; do
-    sbatch -a 20 -c 20 -t 7200 -p 'long' -o ${o}'pgbm-%a.out' $run $f 'pgbm' 'lgb' $g 'crps' 'default' 'base'
+    sbatch -a 11 -c 4 -t 2880 -p 'long' -o ${o}'knn-%a.out' $run $f 'knn' 'cb' $g 'nll' 'default' 'neighbors'
 done
 
 # IBUG tree variants

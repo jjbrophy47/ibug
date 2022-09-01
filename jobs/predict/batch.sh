@@ -12,15 +12,15 @@ fold_list=(1 2 3 4 5 6 7 8 9 10)
 
 # baselines
 for f in ${fold_list[@]}; do
-    sbatch -a 1-22                   -c 4  -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost' $t $s $s $td
+    # sbatch -a 1-22                   -c 4  -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out'  $run $f 'ngboost' $t $s $s $td
 
-    # sbatch -a 1-22 -c 4  -t 1440 -p 'preempt' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'    $t 'nll' $s 1
-    sbatch -a 1-22                   -c 4  -t 1440 -p 'preempt' -o ${o}'cbu-%a.out'      $run $f 'cbu'     $t 'nll' $s 1
-    sbatch -a 2-6,8-9,12,15-17,21,22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out'     $run $f 'bart'    $t 'nll' $s 1
+    sbatch -a 1-22 -c 4  -t 1440 -p 'short' -o ${o}'pgbm-%a.out'     $run $f 'pgbm'    $t 'crps' $s 1
+    # sbatch -a 1-22                   -c 4  -t 1440 -p 'preempt' -o ${o}'cbu-%a.out'      $run $f 'cbu'     $t 'nll' $s 1
+    # sbatch -a 2-6,8-9,12,15-17,21,22 -c 10 -t 1440 -p 'preempt' -o ${o}'bart-%a.out'     $run $f 'bart'    $t 'nll' $s 1
 done
 
 # IBUG tree variants
-tree_list=('xgb' 'cb')
+tree_list=('xgb')
 
 for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
@@ -30,6 +30,7 @@ for f in ${fold_list[@]}; do
 done
 
 # IBUG conditional mean variants
+fold_list=(1 2 3 4 5 6 7 8 9 10)
 cond_mean_type_list=('base' 'neighbors')
 
 for f in ${fold_list[@]}; do
@@ -40,26 +41,22 @@ for f in ${fold_list[@]}; do
 done
 
 # kNN variants
-tree_list=('knn' 'lgb')
+tree_list=('cb')
 cond_mean_type_list=('base' 'neighbors')
 
 for t in ${tree_list[@]}; do
     for cmt in ${cond_mean_type_list[@]}; do
         for f in ${fold_list[@]}; do
-            sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $s $s $td $ci $co $cmt
-            sbatch -a 11,20            -c 10 -t 2880 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' $t $s $s $td $ci $co $cmt
+            sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'short' -o ${o}'knn-%a.out' $run $f 'knn' $t $s $s $td $ci $co $cmt
+            sbatch -a 11,20            -c 10 -t 2880 -p 'long'  -o ${o}'knn-%a.out' $run $f 'knn' $t $s $s $td $ci $co $cmt
         done
     done
 done
 
 # scratch pad
-fold_list=(6 7 10)
+fold_list=(1 2 3 4 5 6 7 8 9 10)
 for f in ${fold_list[@]}; do
-    # sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'ngboost-%a.out' $run $f 'ngboost' $t 'crps' 'crps' $td
-    sbatch -a 2 -c 25 -t 1440 -p 'short' -o ${o}'bart-%a.out' $run $f 'bart' $t 'nll' 'nll' 1
-    # sbatch -a 11 -c 7 -t 3600 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' 'xgb' $s $s $td
-    # sbatch -a 11 -c 4 -t 1440 -p 'preempt' -o ${o}'knn-%a.out' $run $f 'knn' 'knn' 'crps' 'crps' $td $ci $co 'base'
-    # sbatch -a 1-10,12-19,21 -c 5 -t 1440 -p 'preempt' -o ${o}'knn_fi-%a.out'   $run $f 'knn_fi'   $t $s $s $td
+    sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'knn-%a.out' $run $f 'knn' 'cb' 'nll' 'nll' $td $ci $co 'neighbors'
 done
 
 # NGBoost and PGBM as base models
@@ -73,19 +70,20 @@ done
 
 
 # Tree subsampling
+tree_list=('lgb' 'cb')
 tree_subsample_order_list=('random' 'ascending' 'descending')
 tree_subsample_frac_list=(0.01 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0)
 op=${o}'ibug-%a.out'
 
-for tree in ${tree_list[@]}; do
+for t in ${tree_list[@]}; do
     for i in ${!tree_subsample_order_list[@]}; do
         to=${tree_subsample_order_list[$i]}
         cd='tree_subsample_'${to}
         for tf in ${tree_subsample_frac_list[@]}; do
             for f in ${fold_list[@]}; do
-                # sbatch -a 1-10,11-19,21-22 -c 4  -t 300 -p $p -o $op $run $f 'ibug' $tree $s $s $td $cd $tf $to
-                sbatch -a 20 -c 4 -t 2880 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
-                sbatch -a 11 -c 7 -t 2880 -p 'long' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+                sbatch -a 1-10,11-19,21-22 -c 4 -t 300  -p 'short' -o $op $run $f 'ibug' $tree $s $s $td $ci $cd 'base' $tf $to 4
+                sbatch -a 20               -c 4 -t 2880 -p 'long'  -o $op $run $f 'ibug' $tree $s $s $td $ci $cd 'base' $tf $to 4
+                sbatch -a 11               -c 7 -t 2880 -p 'long'  -o $op $run $f 'ibug' $tree $s $s $td $ci $cd 'base' $tf $to 7
             done
         done
     done
@@ -93,14 +91,17 @@ done
 
 
 # Posterior modeling
-custom_dir_list=('dist' 'dist_fl' 'dist_fls')
+tree_list=('lgb')
+custom_dir_list=('dist')
+op=${o}'ibug-%a.out'
 
-for cd in ${custom_dir_list[@]}; do
-    for f in ${fold_list[@]}; do
-        for tree in ${tree_list[@]}; do
-            sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p $p -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
-            # sbatch -a 20               -c 4  -t 2880 -p $l -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
-            # sbatch -a 11               -c 10 -t 4320 -p $l -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd
+for t in ${tree_list[@]}; do
+    for cd in ${custom_dir_list[@]}; do
+        for f in ${fold_list[@]}; do
+            sbatch -a 3,6,12,18,20 -c 10 -t 1440 -p 'short' -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 10
+            # sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'short' -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 4
+            # sbatch -a 20               -c 4  -t 2880 -p 'long'  -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 4
+            # sbatch -a 11               -c 10 -t 4320 -p 'long'  -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 10
         done
     done
 done
@@ -111,6 +112,6 @@ tree_type_list=('lgb' 'cb')
 metric_list=('crps' 'nll')
 for t in ${tree_type_list[@]}; do
     for metric in ${metric_list[@]}; do
-        sbatch -c 4 -t 1440 -p 'preempt' -o ${o}'cbu_ibug.out' 'scripts/postprocess/cbu_ibug_predict.sh' $t $metric
+        sbatch -c 4 -t 1440 -p 'short' -o ${o}'cbu_ibug.out' 'scripts/postprocess/cbu_ibug_predict.sh' $t $metric
     done
 done
