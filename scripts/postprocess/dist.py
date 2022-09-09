@@ -1,19 +1,16 @@
 """
-Organize results.
+Organize posterior results.
 """
 import os
 import sys
 import argparse
 from datetime import datetime
-from itertools import product
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import sem
-from scipy import stats
-from tqdm import tqdm
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')
@@ -63,8 +60,8 @@ def process(args, in_dir, out_dir, logger):
             val_list.append(val_dict)
             test_list.append(test_dict)
 
-            val_norm_list.append(res['val_performance'][f'{args.scoring}_delta'])
-            test_norm_list.append(res['test_performance'][f'{args.scoring}_delta'])
+            val_norm_list.append(res['metrics']['val_delta']['scoring_rule'][f'{args.scoring}'])
+            test_norm_list.append(res['metrics']['test_delta']['scoring_rule'][f'{args.scoring}'])
 
             if fold == 1:
                 neighbor_idxs = res['neighbors']['idxs']
@@ -112,7 +109,6 @@ def process(args, in_dir, out_dir, logger):
         test_idxs = rng.choice(neighbor_idxs.shape[0], size=5, replace=False)
 
         dataset_name = dataset_map[dataset] if dataset in dataset_map else dataset.capitalize()
-        stat = 'count'
 
         for j, test_idx in enumerate(test_idxs):
             ax = axs[i][j] if args.combine else axs[j]
@@ -163,7 +159,7 @@ def process(args, in_dir, out_dir, logger):
 def main(args):
 
     in_dir = os.path.join(args.in_dir, args.custom_in_dir)
-    out_dir = os.path.join(args.out_dir, args.custom_out_dir)
+    out_dir = os.path.join(args.out_dir, args.custom_out_dir, args.scoring)
 
     # create logger
     os.makedirs(out_dir, exist_ok=True)
@@ -178,8 +174,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--in_dir', type=str, default='results/experiments/predict/')
-    parser.add_argument('--out_dir', type=str, default='results/postprocess/')
+    parser.add_argument('--in_dir', type=str, default='output/talapas/experiments/predict/')
+    parser.add_argument('--out_dir', type=str, default='output/talapas/postprocess/')
     parser.add_argument('--custom_in_dir', type=str, default='dist')
     parser.add_argument('--custom_out_dir', type=str, default='dist')
 
@@ -190,13 +186,14 @@ if __name__ == '__main__':
                                  'msd', 'naval', 'obesity', 'news', 'power', 'protein',
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
-    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
+    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 11)))
     parser.add_argument('--model_type', type=str, nargs='+', default=['ibug'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
     parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
-    parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
+    parser.add_argument('--tree_type', type=str, nargs='+', default=['cb'])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
+    parser.add_argument('--cond_mean_type', type=str, nargs='+', default=['base'])
     parser.add_argument('--gridsearch', type=int, default=1)
     parser.add_argument('--scoring', type=str, default='nll')
     parser.add_argument('--random_state', type=int, default=1)

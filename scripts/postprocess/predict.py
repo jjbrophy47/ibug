@@ -6,16 +6,12 @@ import sys
 import time
 import argparse
 from datetime import datetime
-from itertools import product
 
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
-from scipy.stats import sem
 from scipy.stats import ttest_rel
 from scipy import stats
-from tqdm import tqdm
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')
@@ -73,9 +69,12 @@ method_map = {
     'knn_001a4a2d54c0e64a8368b4daf1c08aff': 'KNN_n',
     'knn_f4cf753c299e5105a821a0e29f3a2403': 'KNN-LGB',
     'knn_f6d49086cea3bad421507f7084c8c516': 'KNN-LGB_n',
+    'knn_5ba9d95f9045b3ea4a0248804c44dbb3': 'KNN-CB',
+    'knn_d11684036f81bfaa8f34a3c0a1a46fb9': 'KNN-CB_n',
     'ibug_831ff4730ee884556c05a3751389d8fb': 'IBUG-LGB',
     'ibug_5b54b77b1323676a6ed208e39cf10155': 'IBUG-LGB_n',
     'ibug_732b2e458f8d0c10e5d5f534f9acc2fb': 'IBUG-CB',
+    'ibug_897d3256175ee64ce73e931ccf70f4f4': 'IBUG-CB_n',
     'ibug_e01ca97af6a59a305a51f8eaad593980': 'IBUG-XGB',
     'bart': 'BART',
     'dataset': 'Dataset',
@@ -84,10 +83,13 @@ method_map = {
 def adjust_sigfigs(v, n=None):
     """
     Adjust number of significant figures.
-        - If v < 1, use 3 sigfigs.
-        - If 1 <= v < 10, use 3 sigfigs.
-        - If 10 <= v < 100, use 1 sigfigs.
-        - If 100 <= v, use 0 sigfigs.
+        - If          v < 1e-3, use scientific notation w/ 0 sigfigs.
+        - If 1e-3  <= v < 1, use 3 sigfigs.
+        - If 1     <= v < 10, use 3 sigfigs.
+        - If 10    <= v < 100, use 1 sigfigs.
+        - If 100   <= v < 1e5, use 0 sigfigs.
+        - If 1e5   <= v < 1e6, use scientific notation w/ 1 sigfig.
+        - If          v >= 1e6, use scientific notation w/ 0 sigfigs.
 
     Input
         v: float, Input value.
@@ -96,16 +98,26 @@ def adjust_sigfigs(v, n=None):
     Return
         str, with appropriate sigfigs.
     """
+    if type(v) != float:
+        v = float(v)
     assert type(v) == float
     if n is not None:
         res = f'{v:.{n}f}'
     else:
-        if v < 10:
+        if v < 1e-3:
+            res = f'{v:.0e}'
+        elif v < 1:
+            res = f'{v:.3f}'
+        elif v < 10:
             res = f'{v:.3f}'
         elif v < 100:
             res = f'{v:.1f}'
-        else:
+        elif v < 1e5:
             res = f'{v:.0f}'
+        elif v < 1e6:
+            res = f'{v:.1e}'
+        else:
+            res = f'{v:.0e}'
     return res
 
 
@@ -122,7 +134,8 @@ def get_ax_lims(ax):
     return [np.min([ax.get_xlim(), ax.get_ylim()]),
             np.max([ax.get_xlim(), ax.get_ylim()])]
 
-def plot_runtime_boxplots(btime_df, ptime_df, out_dir=None, logger=None):
+def plot_runtime_boxplots(btime_df, ptime_df, rotate_labels=False, shorten_names=True,
+    out_dir=None, logger=None):
     """
     Plot runtime boxplots for training and prediction.
     """
@@ -150,6 +163,8 @@ def plot_runtime_boxplots(btime_df, ptime_df, out_dir=None, logger=None):
     # method names
     cols = btime_df.columns.to_list()
     col_names = [method_map[c] for c in cols]
+    if shorten_names:
+        col_names = [c.replace('-LGB', '').replace('-CB', '') for c in col_names]
 
     _, axs = plt.subplots(1, 2, figsize=(4 * 2, 2.75 * 1))
     axs = axs.flatten()
@@ -161,6 +176,8 @@ def plot_runtime_boxplots(btime_df, ptime_df, out_dir=None, logger=None):
     ax.set_ylabel('Total Train Time (s)')
     ax.grid(b=False, which='major', axis='x')
     ax.set_axisbelow(True)
+    if rotate_labels:
+        ax.set_xticklabels(col_names, ha='right', rotation=45)
 
     ax = axs[1]
     ptime_df.boxplot(cols, ax=ax)
@@ -169,117 +186,12 @@ def plot_runtime_boxplots(btime_df, ptime_df, out_dir=None, logger=None):
     ax.set_ylabel('Avg. Predict Time (ms)')
     ax.grid(b=False, which='major', axis='x')
     ax.set_axisbelow(True)
+    if rotate_labels:
+        ax.set_xticklabels(col_names, ha='right', rotation=45)
 
     if out_dir is not None:
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, 'runtime.pdf'), bbox_inches='tight')
-
-
-# def plot_runtime(bdf, pdf, out_dir):
-#     """
-#     Plot train time and avg. predict time per test example scatter plots.
-
-#     Input
-#         bdf: pd.DataFrame, Average build time dataframe.
-#         pdf: pd.DataFrame, Average predict time dataframe.
-#         out_dir: str, Output directory.
-#     """
-
-#     # find IBUG, NGBoost, and PGBM columns
-#     igb_col = None
-#     ngb_col = None
-#     pgb_col = None
-
-#     ibug_count = 0
-#     for c in bdf.columns:
-#         if 'ibug' in c:
-#             ibg_col = c
-#             ibug_count += 1
-#             assert ibg_col in pdf
-#         elif 'ngboost' in c:
-#             ngb_col = c
-#             assert ngb_col in pdf
-#         elif 'pgbm' in c:
-#             pgb_col = c
-#             assert pgb_col in pdf
-
-#     if (ibg_col is None and ngb_col is None and pgb_col is None) or (ibug_count > 1):
-#         return None
-
-#     util.plot_settings(fontsize=15, libertine=True)
-
-#     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
-#     s = 75
-
-#     ax = axs[0]
-#     x = bdf[ibg_col]
-#     y = bdf[ngb_col]
-#     ax.scatter(x, y, marker='1', s=s)
-#     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
-#     ax.set_xscale('log')
-#     ax.set_yscale('log')
-#     ax.set_xlim(1e0, 1e5)
-#     ax.set_ylim(1e0, 1e5)
-#     lims = get_ax_lims(ax)
-#     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-#     ax.set_xlabel('IBUG')
-#     ax.set_ylabel('NGBoost')
-#     ax.legend()
-
-#     ax = axs[1]
-#     x = bdf[ibg_col]
-#     y = bdf[pgb_col]
-#     ax.scatter(x, y, marker='1', s=s)
-#     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', s=s)
-#     ax.set_xscale('log')
-#     ax.set_yscale('log')
-#     ax.set_xlim(1e1, 1e6)
-#     ax.set_ylim(1e1, 1e6)
-#     lims = get_ax_lims(ax)
-#     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-#     ax.set_xlabel('IBUG')
-#     ax.set_ylabel('PGBM')
-
-#     plt.tight_layout()
-#     plt.savefig(os.path.join(out_dir, f'runtime_train.pdf'))
-#     plt.close('all')
-
-#     fig, axs = plt.subplots(1, 2, figsize=(4 * 2, 3))
-
-#     ax = axs[0]
-#     x = pdf[ibg_col]
-#     y = pdf[ngb_col]
-#     ax.scatter(x, y, marker='1', s=s)
-#     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
-#     ax.set_xscale('log')
-#     ax.set_yscale('log')
-#     ax.set_xlim(1e-2, 1e3)
-#     ax.set_ylim(1e-2, 1e3)
-#     lims = get_ax_lims(ax)
-#     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-#     ax.tick_params(axis='both', which='minor')
-#     ax.set_xlabel('IBUG')
-#     ax.set_ylabel('NGBoost')
-
-#     ax = axs[1]
-#     x = pdf[ibg_col]
-#     y = pdf[pgb_col]
-#     ax.scatter(x, y, marker='1', s=s)
-#     ax.scatter(stats.gmean(x), stats.gmean(y), marker='X', color='red', label='Geo. mean', s=s)
-#     ax.set_xscale('log')
-#     ax.set_yscale('log')
-#     ax.set_xlim(1e-2, 1e3)
-#     ax.set_ylim(1e-2, 1e3)
-#     lims = get_ax_lims(ax)
-#     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-#     ax.tick_params(axis='x', which='minor')
-#     ax.set_xlabel('IBUG')
-#     ax.set_ylabel('PGBM')
-
-#     plt.tight_layout()
-#     plt.savefig(os.path.join(out_dir, f'runtime_predict.pdf'))
-
-#     return (ibg_col, ngb_col, pgb_col)
 
 
 def compute_time_intersect(bdf, pdf, ref_col, skip_cols=[]):
@@ -481,7 +393,8 @@ def markdown_table2(df1, df2, logger=None, suffix=''):
 
 
 def latex_table(df, logger=None, suffix='',
-    float_opt='t', caption='', label='', is_center=True, align_str=None):
+    float_opt='t', caption='', label='', is_center=True,
+    align_str=None, header_formatting=True):
     """
     Format dataframe.
     """
@@ -503,7 +416,10 @@ def latex_table(df, logger=None, suffix='',
     s += '\n\\toprule'
 
     # column headers
-    s += '\n' + ' & '.join([method_map[c] for c in df.columns]) + ' \\\\'
+    if not header_formatting:
+        s += '\n' + ' & '.join([c for c in df.columns]) + ' \\\\'
+    else:
+        s += '\n' + ' & '.join([method_map[c] for c in df.columns]) + ' \\\\'
     s += '\n\\midrule'
 
     # table body
@@ -830,7 +746,7 @@ def append_head2head(data_df, attach_df=None):
 
 
 def append_head2head_old(data_df, attach_df=None, include_ties=True,
-    p_val_threshold=0.05):
+    p_val_threshold=0.05, return_significance=False):
     """
     Attach head-to-head wins, ties, and losses to the given dataframe.
 
@@ -840,6 +756,7 @@ def append_head2head_old(data_df, attach_df=None, include_ties=True,
         skip_cols: list, List of columns to ignore when computing scores.
         include_ties: bool, If True, include ties with scores.
         p_val_threshold: float, p-value threshold to denote statistical significance.
+        return_significance: bool, If True, return significance dictionary.
 
     Return
         Dataframe attached to `attach_df` if not None, otherwise scores
@@ -848,6 +765,8 @@ def append_head2head_old(data_df, attach_df=None, include_ties=True,
     assert 'dataset' in data_df.columns
     assert 'fold' in data_df.columns
     cols = [c for c in data_df.columns if c not in ['dataset', 'fold']]
+
+    sig = {}  # stores the wins-ties-losses for each comparison
 
     res_list = []
     for c1 in cols:
@@ -864,18 +783,24 @@ def append_head2head_old(data_df, attach_df=None, include_ties=True,
             
             temp_df = data_df[['dataset', c1, c2]].dropna()
 
+            sig_key = f'{c1} {c2}'
+            sig[sig_key] = {'wins': [], 'ties': [], 'losses': []}
+
             n_wins, n_ties, n_losses = 0, 0, 0
             for dataset, df in temp_df.groupby('dataset'):
                 t_stat, p_val = ttest_rel(df[c1], df[c2], nan_policy='omit')
 
                 if t_stat < 0 and p_val < p_val_threshold:
                     n_wins += 1
+                    sig[sig_key]['wins'].append(dataset)
                 elif t_stat > 0 and p_val < p_val_threshold:
                     n_losses += 1
+                    sig[sig_key]['losses'].append(dataset)
                 else:
                     if np.isnan(p_val):  # no difference in method values
                         print('NAN P_val', dataset, c1, c2)
                     n_ties += 1
+                    sig[sig_key]['ties'].append(dataset)
 
             if include_ties:
                 res[c2] = f'{n_wins}-{n_ties}-{n_losses}'
@@ -890,7 +815,7 @@ def append_head2head_old(data_df, attach_df=None, include_ties=True,
     else:
         result_df = pd.concat([data_df, h2h_df])
 
-    return result_df
+    return sig if return_significance else result_df
 
 
 def get_param_list(name, result):
@@ -930,8 +855,8 @@ def get_param_list(name, result):
             md = result['model_params']['base_model_params_']['max_depth']
             md = -1 if md is None else md
             min_leaf_name = 'min_child_weight' if tree_type == 'xgb' else 'min_data_in_leaf'
-            param_list.append(result['model_params']['base_model_params_'][min_leaf_name])
             param_list.append(md)
+            param_list.append(result['model_params']['base_model_params_'][min_leaf_name])
             param_names += ['$d$', r'$n_{\ell_0}$']
             param_types += [int, int]
 
@@ -939,6 +864,21 @@ def get_param_list(name, result):
         param_list.append(result['model_params']['min_scale'])
         param_names += ['$k$', r'$\rho$']
         param_types += [int, float]
+    
+    elif 'cbu' in name:
+        param_list.append(result['model_params']['n_estimators'])
+        param_list.append(result['model_params']['learning_rate'])
+        param_names += ['$T$', r'$\eta$']
+        param_types += [int, float]
+
+        tree_type = result['train_args']['tree_type']
+        md = result['model_params']['max_depth']
+        md = -1 if md is None else md
+        param_list.append(md)
+        param_list.append(result['model_params']['min_data_in_leaf'])
+        param_names += ['$d$', r'$n_{\ell_0}$']
+        param_types += [int, int]
+
 
     elif 'constant' in name:
         param_list.append(result['model_params']['n_estimators'])
@@ -962,15 +902,8 @@ def get_param_list(name, result):
             param_names += ['$d$', r'$n_{\ell_0}$']
             param_types += [int, int]
 
-    elif 'knn_fi' in name:
-        param_list.append(result['model_params']['max_feat'])
-        param_list.append(result['model_params']['k'])
-        param_list.append(result['model_params']['min_scale'])
-        param_names += [r'$\upsilon$', '$k$', r'$\rho$']
-        param_types += [int, int, float]
-
     elif 'knn' in name:
-        if result['train_args']['tree_type'] == 'lgb':
+        if result['train_args']['tree_type'] in ['lgb', 'cb']:
             param_list.append(result['model_params']['max_feat'])
             param_list.append(result['model_params']['k'])
             param_list.append(result['model_params']['min_scale'])
@@ -1043,12 +976,7 @@ def aggregate_params(param_df, param_names, param_types):
 
                     if param_name == r'$\rho$':
                         param_val = np.median(param_vals)
-                        if dataset in ['ames', 'news', 'star', 'wave']:
-                            param_str = f'{param_val:.0f}'.rstrip('0').rstrip('.')
-                        elif dataset == 'naval':
-                            param_str = f'{param_val:.0e}'
-                        else:
-                            param_str = f'{param_val:.3f}'.rstrip('0').rstrip('.')
+                        param_str = adjust_sigfigs(param_val)
 
                     elif param_name == '$T$' and 'NGBoost' in name:
                         param_val = int(np.median(param_vals))
@@ -1071,8 +999,6 @@ def aggregate_params(param_df, param_names, param_types):
 
 
 def process(args, in_dir, out_dir, logger):
-    # color, ls, label = util.get_plot_dicts()
-    # scoring2 = 'crps' if args.scoring == 'nll' else 'nll'
 
     # get results
     test_point_list = []
@@ -1239,10 +1165,19 @@ def process(args, in_dir, out_dir, logger):
     # logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{delta_h2h['test_cal_df']}")
 
     # val-test comparison
-    keys = [k for k in mean.keys() if not any(x in k for x in ['test', 'test_acc_df', 'btime_df', 'ptime_df'])]
-    vtest_h2h = {k.replace('val', 'vtest'): valtest_h2h(val_df=mean[k], test_df=mean[k.replace('val', 'test')]) for k in keys}
+    # keys = [k for k in mean.keys() if not any(x in k for x in ['test', 'test_acc_df', 'btime_df', 'ptime_df'])]
+    # vtest_h2h = {k.replace('val', 'vtest'): valtest_h2h(val_df=mean[k], test_df=mean[k.replace('val', 'test')]) for k in keys}
 
-    # logger.info('\n\nVALIDATION AND TEST\n')
+    # val-test comparison (scoring rule only)
+    logger.info('\n\nVALIDATION AND TEST')
+    val_sig = append_head2head_old(data_df=raw['val_sr_df_delta'], return_significance=True)
+    test_sig = append_head2head_old(data_df=raw['test_sr_df_delta'], return_significance=True)
+    logger.info('\nW/ Calibration (validation)')
+    for k, v in val_sig.items():
+        logger.info(f'{k}: {v["wins"]}')
+    logger.info('\nW/ Calibration (test)')
+    for k, v in test_sig.items():
+        logger.info(f'{k}: {v["wins"]}')
     # logger.info('\nW/O Calibration')
     # logger.info(f"\n{metric_names[args.sr_metric]} (Proper Scoring Rule):\n{vtest_h2h['vtest_sr_df']}")
     # logger.info(f"\n{metric_names[args.cal_metric]} (Calibration):\n{vtest_h2h['vtest_cal_df']}")
@@ -1259,6 +1194,8 @@ def process(args, in_dir, out_dir, logger):
 
     for key, df in delta_h2h.items():
         df.to_csv(f'{out_dir}/dcomp_{key}.csv', index=False)
+    
+    param_df.to_csv(f'{out_dir}/param_df.csv', index=False)
 
     # for key, df in vtest_h2h.items():
     #     df.to_csv(f'{out_dir}/vtest_{key}.csv', index=False)
@@ -1266,10 +1203,11 @@ def process(args, in_dir, out_dir, logger):
     logger.info(f'\nSaving results to {out_dir}...')
 
     if 'cbu' in mean['test_cal_df']:
+        logger.info('\n\nCBU Calibration Improvements')
         cbu_cal_ratio = mean['test_cal_df']['cbu'] / mean['test_cal_df_delta']['cbu']
         cbu_sharp_ratio = mean['test_sharp_df']['cbu'] / mean['test_sharp_df_delta']['cbu']
-        print(cbu_cal_ratio.mean(), cbu_cal_ratio.median())
-        print(cbu_sharp_ratio.mean(), cbu_sharp_ratio.median())
+        logger.info(f'Median CBU calibration error ratio w/ and w/o delta: {cbu_cal_ratio.median():.3f}')
+        logger.info(f'Median CBU sharpness ratio w/ and w/o delta: {cbu_sharp_ratio.median():.3f}')
 
     # print markdown tables
     logger.info('\n\nMARKDOWN TABLES')
@@ -1285,8 +1223,7 @@ def process(args, in_dir, out_dir, logger):
     latex_table_sem(df=mean_h2h['test_sr_df_delta'], sem_df=sem_h2h['test_sr_df_delta'], logger=logger,
         suffix=args.sr_metric.upper() + '+Delta')
     latex_table2(df1=mean_h2h['test_cal_df_delta'], df2=mean_h2h['test_sharp_df_delta'], logger=logger, suffix='MACE/Sharpness')
-
-    param_df.to_csv(f'{out_dir}/param_df.csv', index=False)
+    latex_table(df=param_df, logger=logger, suffix='Hyperparameters', header_formatting=False)
 
     # runtime
     logger.info('\n\nRUNTIME')
@@ -1294,7 +1231,8 @@ def process(args, in_dir, out_dir, logger):
     logger.info(f'\n Avg. predict time per test example (s):\n{append_gmean(mean["ptime_df"])}')
     latex_table_sem(df=mean_h2h['btime_df'], sem_df=std_h2h['btime_df'], logger=logger, suffix='Train Time (s)')
     latex_table_sem(df=mean_h2h['ptime_df'], sem_df=std_h2h['ptime_df'], logger=logger, suffix='Avg. Predict Time (ms)')
-    plot_runtime_boxplots(btime_df=mean_h2h['btime_df'], ptime_df=mean_h2h['ptime_df'], out_dir=out_dir, logger=logger)
+    plot_runtime_boxplots(btime_df=mean_h2h['btime_df'], ptime_df=mean_h2h['ptime_df'], rotate_labels=args.rotate_labels,
+        shorten_names=args.shorten_names, out_dir=out_dir, logger=logger)
 
     exit(0)
 
@@ -1478,7 +1416,7 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 11)))
     parser.add_argument('--model_type', type=str, nargs='+',
         default=['knn', 'ngboost', 'pgbm', 'cbu', 'bart', 'ibug', 'cbu_ibug'])
-    parser.add_argument('--tree_type', type=str, nargs='+', default=['knn', 'lgb'])
+    parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
     parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
@@ -1490,6 +1428,10 @@ if __name__ == '__main__':
     parser.add_argument('--acc_metric', type=str, default='rmse')
     parser.add_argument('--sr_metric', type=str, default='crps')
     parser.add_argument('--cal_metric', type=str, default='ma_cal')
+
+    # plot settings
+    parser.add_argument('--rotate_labels', action='store_true')
+    parser.add_argument('--shorten_names', action='store_true')
 
     args = parser.parse_args()
     main(args)

@@ -56,7 +56,7 @@ done
 # scratch pad
 fold_list=(1 2 3 4 5 6 7 8 9 10)
 for f in ${fold_list[@]}; do
-    sbatch -a 11 -c 7 -t 4320 -p 'long' -o ${o}'knn-%a.out' $run $f 'knn' 'cb' 'nll' 'nll' $td $ci $co 'neighbors'
+    sbatch -a 11 -c 7 -t 1440 -p 'short' -o ${o}'knn-%a.out' $run $f 'knn' 'cb' 'nll' 'nll' $td $ci $co 'base'
 done
 
 # NGBoost and PGBM as base models
@@ -70,8 +70,8 @@ done
 
 
 # Tree subsampling
-tree_list=('lgb' 'cb')
-tree_subsample_order_list=('random' 'ascending' 'descending')
+tree_list=('cb')  # cb lgb
+tree_subsample_order_list=('descending')  # random ascending descending
 tree_subsample_frac_list=(0.01 0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0)
 op=${o}'ibug-%a.out'
 
@@ -81,9 +81,8 @@ for t in ${tree_list[@]}; do
         cd='tree_subsample_'${to}
         for tf in ${tree_subsample_frac_list[@]}; do
             for f in ${fold_list[@]}; do
-                sbatch -a 1-10,11-19,21-22 -c 4 -t 300  -p 'short' -o $op $run $f 'ibug' $tree $s $s $td $ci $cd 'base' $tf $to 4
-                sbatch -a 20               -c 4 -t 2880 -p 'long'  -o $op $run $f 'ibug' $tree $s $s $td $ci $cd 'base' $tf $to 4
-                sbatch -a 11               -c 7 -t 2880 -p 'long'  -o $op $run $f 'ibug' $tree $s $s $td $ci $cd 'base' $tf $to 7
+                sbatch -a 1-10,12-19,21-22 -c 4 -t 600  -p 'short' -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to
+                # sbatch -a 11,20         -c 10 -t 2880 -p 'long'  -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to
             done
         done
     done
@@ -92,13 +91,13 @@ done
 
 # Posterior modeling
 tree_list=('lgb')
-custom_dir_list=('dist')
+custom_dir_list=('dist')  # dist_fl, dist_fls
 op=${o}'ibug-%a.out'
 
 for t in ${tree_list[@]}; do
     for cd in ${custom_dir_list[@]}; do
         for f in ${fold_list[@]}; do
-            sbatch -a 3,6,12,18,20 -c 10 -t 1440 -p 'short' -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 10
+            sbatch -a 1-22 -c 10 -t 1440 -p 'short' -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 10
             # sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'short' -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 4
             # sbatch -a 20               -c 4  -t 2880 -p 'long'  -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 4
             # sbatch -a 11               -c 10 -t 4320 -p 'long'  -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to 10

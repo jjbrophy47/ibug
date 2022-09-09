@@ -43,6 +43,8 @@ def get_status(args, settings, method_id, in_dir):
                 if not os.path.exists(fp):
                     missing_list.append(fold)
                     break
+            
+            print(method_dir)
 
         setting['method'] = method_id
         setting['incomplete_folds'] = 'None!' if len(missing_list) == 0 else ','.join([str(x) for x in missing_list])

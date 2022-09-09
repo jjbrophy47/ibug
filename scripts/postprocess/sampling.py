@@ -3,18 +3,13 @@ Organize results.
 """
 import os
 import sys
-import copy
 import time
 import argparse
 from datetime import datetime
-from itertools import product
 
 import numpy as np
-import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import sem
-from tqdm import tqdm
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')
@@ -29,20 +24,21 @@ def process(args, in_dir, in_dir2, out_dir, logger):
     if args.combine:
         n_row = 2
         n_col = len(args.dataset)
-        fig, axs = plt.subplots(n_row, n_col, figsize=(n_col * 4, n_row * 3))
+        _, axs = plt.subplots(n_row, n_col, figsize=(n_col * 4, n_row * 3))
     else:
-        fig, axs = plt.subplots(2, 1, figsize=(4, 6), sharex=False)
+        _, axs = plt.subplots(2, 1, figsize=(4, 6), sharex=False)
 
     for i, dataset in enumerate(args.dataset):
         logger.info(f'{dataset}...')
-        start = time.time()
 
         # result containers
         prob = {'ibug': np.full((len(args.fold), len(args.tree_subsample_frac)), np.nan, dtype=np.float32),
+                'cbu': np.full(len(args.fold), np.nan, dtype=np.float32),
                 'pgbm': np.full(len(args.fold), np.nan, dtype=np.float32),
                 'ngboost': np.full(len(args.fold), np.nan, dtype=np.float32)}
 
         ptime = {'ibug': np.full((len(args.fold), len(args.tree_subsample_frac)), np.nan, dtype=np.float32),
+                 'cbu': np.full(len(args.fold), np.nan, dtype=np.float32),
                  'pgbm': np.full(len(args.fold), np.nan, dtype=np.float32),
                  'ngboost': np.full(len(args.fold), np.nan, dtype=np.float32)}
 
@@ -57,22 +53,26 @@ def process(args, in_dir, in_dir2, out_dir, logger):
             for method, res in results:
                 assert 'ibug' in method
                 idx = args.tree_subsample_frac.index(res['predict_args']['tree_subsample_frac'])
-                prob['ibug'][fold - 1][idx] = res['test_performance'][f'{args.scoring}_delta']
+                prob['ibug'][fold - 1][idx] = res['metrics']['test_delta']['scoring_rule'][f'{args.scoring}']
                 ptime['ibug'][fold - 1][idx] = res['timing']['test_pred_time'] / res['data']['n_test'] * 1000  # ms
 
-            # get NGBoost and PGBM results
-            args.model_type = ['ngboost', 'pgbm']
-            exp_dir2 = os.path.join(args.in_dir2, dataset, args.scoring, f'fold{fold}')
+            # get CBU, NGBoost, and PGBM results
+            args.model_type = ['cbu', 'ngboost', 'pgbm']
+            exp_dir2 = os.path.join(in_dir2, dataset, args.scoring, f'fold{fold}')
             results = util.get_results(args, exp_dir2, logger)
 
             for method, res in results:
 
-                if 'pgbm' in method:
-                    prob['pgbm'][fold - 1] = res['test_performance'][f'{args.scoring}_delta']
+                if 'cbu' in method:
+                    prob['cbu'][fold - 1] = res['metrics']['test_delta']['scoring_rule'][f'{args.scoring}']
+                    ptime['cbu'][fold - 1] = res['timing']['test_pred_time'] / res['data']['n_test'] * 1000  # ms
+
+                elif 'pgbm' in method:
+                    prob['pgbm'][fold - 1] = res['metrics']['test_delta']['scoring_rule'][f'{args.scoring}']
                     ptime['pgbm'][fold - 1] = res['timing']['test_pred_time'] / res['data']['n_test'] * 1000  # ms
 
                 elif 'ngboost' in method:
-                    prob['ngboost'][fold - 1] = res['test_performance'][f'{args.scoring}_delta']
+                    prob['ngboost'][fold - 1] = res['metrics']['test_delta']['scoring_rule'][f'{args.scoring}']
                     ptime['ngboost'][fold - 1] = res['timing']['test_pred_time'] / res['data']['n_test'] * 1000  # ms
 
         # aggregate results
@@ -80,6 +80,11 @@ def process(args, in_dir, in_dir2, out_dir, logger):
                      'prob_sem': sem(prob['ibug'], axis=0, nan_policy='omit'),
                      'ptime_mean': np.nanmean(ptime['ibug'], axis=0),
                      'ptime_std': np.nanstd(ptime['ibug'], axis=0)}
+
+        cbu_dict = {'prob_mean': np.nanmean(prob['cbu']),
+                    'prob_sem': sem(prob['cbu'], nan_policy='omit'),
+                    'ptime_mean': np.nanmean(ptime['cbu']),
+                    'ptime_std': np.nanstd(ptime['cbu'])}
 
         pgbm_dict = {'prob_mean': np.nanmean(prob['pgbm']),
                      'prob_sem': sem(prob['pgbm'], nan_policy='omit'),
@@ -95,8 +100,12 @@ def process(args, in_dir, in_dir2, out_dir, logger):
         dataset_dict = {'meps': 'MEPS', 'msd': 'MSD', 'star': 'STAR'}
 
         x = np.array(args.tree_subsample_frac) * 100
+
         y = ibug_dict['prob_mean']
         yerr = ibug_dict['prob_sem']
+
+        y_cbu = cbu_dict['prob_mean']
+        yerr_cbu = cbu_dict['prob_sem']
 
         y_pgbm = pgbm_dict['prob_mean']
         yerr_pgbm = pgbm_dict['prob_sem']
@@ -107,6 +116,9 @@ def process(args, in_dir, in_dir2, out_dir, logger):
         ax = axs[0][i] if args.combine else axs[0]
         ax.plot(x, y, color='red', label='IBUG', ls='-')
         ax.fill_between(x, y + yerr, y - yerr, color='red', alpha=0.1)
+
+        ax.plot([0, 100], [y_cbu] * 2, color='green', label='CBU', ls=':')
+        ax.fill_between([0, 100], [y_cbu + yerr_cbu] * 2, [y_cbu - yerr_cbu] * 2, color='green', alpha=0.1)
 
         ax.plot([0, 100], [y_pgbm] * 2, color='orange', label='PGBM', ls='-.')
         ax.fill_between([0, 100], [y_pgbm + yerr_pgbm] * 2, [y_pgbm - yerr_pgbm] * 2, color='orange', alpha=0.1)
@@ -122,12 +134,14 @@ def process(args, in_dir, in_dir2, out_dir, logger):
 
         if i == 0:
             ax.set_ylabel(f'Test {args.scoring.upper()}')
-        elif i == 1:
-            ax.legend(fontsize=15)
+            ax.legend(fontsize=11, ncol=2)
 
         # runtime
         y = ibug_dict['ptime_mean']
         yerr = ibug_dict['ptime_std']
+
+        y_cbu = cbu_dict['ptime_mean']
+        yerr_cbu = cbu_dict['ptime_std']
 
         y_pgbm = pgbm_dict['ptime_mean']
         yerr_pgbm = pgbm_dict['ptime_std']
@@ -139,10 +153,13 @@ def process(args, in_dir, in_dir2, out_dir, logger):
         ax.plot(x, y, color='red', label='IBUG', ls='-')
         # ax.fill_between(x, y + yerr, y - yerr, color='red', alpha=0.1)
 
+        ax.plot([0, 100], [y_cbu] * 2, color='green', label='CBU', ls=':')
+        # ax.fill_between([0, 100], [y_cbu + yerr_cbu] * 2, [y_cbu - yerr_cbu] * 2, color='yellow', alpha=0.1)
+
         ax.plot([0, 100], [y_pgbm] * 2, color='orange', label='PGBM', ls='-.')
         # ax.fill_between([0, 100], [y_pgbm + yerr_pgbm] * 2, [y_pgbm - yerr_pgbm] * 2, color='orange', alpha=0.1)
 
-        ax.plot([0, 100], [y_ngb] * 2, color='purple', label='NGBoost', ls='--')
+        ax.plot([0, 100], [y_ngb] * 2, color='purple', label='NGB', ls='--')
         # ax.fill_between([0, 100], [y_ngb + yerr_ngb] * 2, [y_ngb - yerr_ngb] * 2, color='purple', alpha=0.1)
 
         ax.set_xticks(xticks)
@@ -151,7 +168,7 @@ def process(args, in_dir, in_dir2, out_dir, logger):
         ax.set_yscale('log')
 
         if i == 0:
-            ax.set_ylabel('Avg. pred. time (ms)')
+            ax.set_ylabel('Avg. predict\ntime (ms)')
 
         if not args.combine:
             plt.tight_layout()
@@ -189,9 +206,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--in_dir', type=str, default='results/experiments/predict/')
-    parser.add_argument('--in_dir2', type=str, default='results/experiments/predict/default/')
-    parser.add_argument('--out_dir', type=str, default='results/postprocess/tree_sampling/')
+    parser.add_argument('--in_dir', type=str, default='output/talapas/experiments/predict/')
+    parser.add_argument('--in_dir2', type=str, default='output/talapas/experiments/predict/default/')
+    parser.add_argument('--out_dir', type=str, default='output/talapas/postprocess/tree_sampling/')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, nargs='+',
@@ -200,16 +217,17 @@ if __name__ == '__main__':
                                  'msd', 'naval', 'obesity', 'news', 'power', 'protein',
                                  'star', 'superconductor', 'synthetic', 'wave',
                                  'wine', 'yacht'])
-    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
+    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 11)))
     parser.add_argument('--model_type', type=str, nargs='+', default=['ibug'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+',
                         default=[0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
     parser.add_argument('--instance_subsample_frac', type=str, nargs='+', default=[1.0])
-    parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
+    parser.add_argument('--tree_type', type=str, nargs='+', default=['cb'])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
+    parser.add_argument('--cond_mean_type', type=str, nargs='+', default=['base'])
     parser.add_argument('--gridsearch', type=int, default=1)
-    parser.add_argument('--scoring', type=str, default='nll')
+    parser.add_argument('--scoring', type=str, default='crps')
     parser.add_argument('--random_state', type=int, default=1)
 
     # Additional settings

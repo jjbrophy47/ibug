@@ -5,33 +5,32 @@ import os
 import sys
 import argparse
 from datetime import datetime
-from itertools import product
 
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
-from scipy.stats import sem
-from scipy.stats import spearmanr
-from tqdm import tqdm
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')
 import util
 from experiments import util as exp_util
 
+# constants
+tree_map = {'cb': 'CatBoost', 'lgb': 'LightGBM', 'xgb': 'XGBoost'}
+
 
 def process(args, in_dir, out_dir, logger):
 
-    util.plot_settings(fontsize=11, libertine=True)
-    rng = np.random.default_rng(args.random_state)
+    util.plot_settings(fontsize=args.font_size, libertine=True) # 20 for agg.pdf, 15 for affinity.pdf
 
     res_list = []
     affinity_list = []
     max_density_list = []
 
-    fig, axs = plt.subplots(1, 2, figsize=(8, 3), sharey=True)
+    n_agg_datasets = len(args.agg_datasets)
+    _, axs = plt.subplots(1, n_agg_datasets, figsize=(4*n_agg_datasets, 4), sharey=True)
 
+    j = 0
     for dataset in args.dataset:
         logger.info(f'{dataset}...')
         fails = 0
@@ -78,29 +77,34 @@ def process(args, in_dir, out_dir, logger):
         affinity = np.vstack(affinity_list)
         max_density = np.vstack(max_density_list)
 
-        fig, axs = plt.subplots(1, 2, figsize=(8, 3), sharey=True)
+        # _, ax = plt.subplots(figsize=(4, 3), sharey=True)
+        # _, axs = plt.subplots(1, 2, figsize=(8, 3), sharey=True)
 
-        ax = axs[0]
-        x = frac_list * 100
-        y, yerr = np.mean(affinity, axis=0) * 100, np.std(affinity, axis=0) * 100
-        ax.plot(x, y)
-        ax.fill_between(x, y + yerr, y - yerr, alpha=0.1)
-        ax.set_title('Avg. Affinity per Test Instance')
-        ax.set_xlabel('Boosting iteration (%)')
-        ax.set_ylabel('% training examples')
+        if dataset in args.agg_datasets:
+            ax = axs[j]
+            x = frac_list * 100
+            y, yerr = np.mean(affinity, axis=0) * 100, np.std(affinity, axis=0) * 100
+            ax.plot(x, y)
+            ax.fill_between(x, y + yerr, y - yerr, alpha=0.1)
+            # ax.set_title('Avg. Affinity per Test Instance')
+            ax.set_title(f'{dataset.capitalize()}')
+            ax.set_xlabel('Boosting iteration (%)')
+            ax.set_ylim(0, 100)
+            if j == 0:
+                ax.set_ylabel(f'({tree_map[args.tree_type[0]]})\n% train visited')
+            j += 1
 
-        ax = axs[1]
-        x = frac_list * 100
-        y, yerr = np.mean(max_density, axis=0) * 100, np.std(max_density, axis=0) * 100
-        ax.plot(x, y)
-        ax.fill_between(x, y + yerr, y - yerr, alpha=0.1)
-        ax.set_title('Max. Leaf Density')
-        ax.set_xlabel('Boosting iteration (%)')
+        # ax = axs[1]
+        # x = frac_list * 100
+        # y, yerr = np.mean(max_density, axis=0) * 100, np.std(max_density, axis=0) * 100
+        # ax.plot(x, y)
+        # ax.fill_between(x, y + yerr, y - yerr, alpha=0.1)
+        # ax.set_title('Max. Leaf Density')
+        # ax.set_xlabel('Boosting iteration (%)')
 
-        plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, f'{dataset}.pdf'), bbox_inches='tight')
-
-        plt.close('all')
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, f'agg.pdf'), bbox_inches='tight')
+    plt.close('all')
 
     # plot averge affinity and leaf denstity over all trees
     df = pd.DataFrame(res_list)
@@ -110,23 +114,25 @@ def process(args, in_dir, out_dir, logger):
     logger.info(f'Saving results to {out_dir}...')
     mean_df.to_csv(os.path.join(out_dir, 'affinity.csv'))
 
-    fig, axs = plt.subplots(1, 2, figsize=(8, 3), sharey=True)
+    _, ax = plt.subplots(figsize=(4, 3), sharey=True)
+    # _, axs = plt.subplots(1, 2, figsize=(8, 3), sharey=True)
 
-    ax = axs[0]
+    # ax = axs[0]
     ax.errorbar(x=mean_df['n_train'], y=mean_df['affinity'] * 100, yerr=std_df['affinity'] * 100,
                 fmt='o', ecolor='k', color='blue', lw=1, capsize=2)
-    ax.set_title('Avg. Affinity per Test Instance')
-    ax.set_xlabel('No. training examples')
+    # ax.set_title('Avg. Affinity per Test Instance')
+    ax.set_xlabel('No. train')
     ax.set_ylabel('% train visited / tree')
     ax.set_xscale('log')
+    ax.set_ylim(0, 100)
 
-    ax = axs[1]
-    ax.errorbar(x=mean_df['n_train'], y=mean_df['max_density'] * 100, yerr=std_df['max_density'] * 100,
-                fmt='o', ecolor='k', color='blue', lw=1, capsize=2)
-    ax.set_title('Max. Leaf Density')
-    ax.set_xlabel('No. training examples')
-    ax.set_ylabel('Max. % train / tree')
-    ax.set_xscale('log')
+    # ax = axs[1]
+    # ax.errorbar(x=mean_df['n_train'], y=mean_df['max_density'] * 100, yerr=std_df['max_density'] * 100,
+    #             fmt='o', ecolor='k', color='blue', lw=1, capsize=2)
+    # ax.set_title('Max. Leaf Density')
+    # ax.set_xlabel('No. training examples')
+    # ax.set_ylabel('Max. % train / tree')
+    # ax.set_xscale('log')
 
     plt.tight_layout()
     plt.savefig(os.path.join(out_dir, f'affinity.pdf'), bbox_inches='tight')
@@ -153,29 +159,34 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--in_dir', type=str, default='results/experiments/predict/')
-    parser.add_argument('--out_dir', type=str, default='results/postprocess/')
+    parser.add_argument('--in_dir', type=str, default='output/talapas/experiments/predict/')
+    parser.add_argument('--out_dir', type=str, default='output/talapas/postprocess/')
     parser.add_argument('--custom_in_dir', type=str, default='default')
     parser.add_argument('--custom_out_dir', type=str, default='affinity')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, nargs='+',
-                        default=['ames', 'bike', 'california', 'communities', 'concrete',
-                                 'energy', 'facebook', 'kin8nm', 'life', 'meps',
-                                 'msd', 'naval', 'obesity', 'news', 'power', 'protein',
-                                 'star', 'superconductor', 'synthetic', 'wave',
-                                 'wine', 'yacht'])
-    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 21)))
+        default=['ames', 'bike', 'california', 'communities', 'concrete',
+        'energy', 'facebook', 'kin8nm', 'life', 'meps',
+        'msd', 'naval', 'obesity', 'news', 'power', 'protein',
+        'star', 'superconductor', 'synthetic', 'wave',
+        'wine', 'yacht'])
+    parser.add_argument('--agg_datasets', type=str, nargs='+',
+        default=['concrete', 'kin8nm', 'synthetic', 'wine'])
+    parser.add_argument('--fold', type=int, nargs='+', default=list(range(1, 11)))
     parser.add_argument('--model_type', type=str, nargs='+', default=['ibug'])
     parser.add_argument('--tree_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--tree_subsample_order', type=str, nargs='+', default=['random'])
     parser.add_argument('--instance_subsample_frac', type=float, nargs='+', default=[1.0])
     parser.add_argument('--min_scale_pct', type=float, nargs='+', default=[0.0])
-    parser.add_argument('--tree_type', type=str, nargs='+', default=['lgb'])
+    parser.add_argument('--tree_type', type=str, nargs='+', default=['cb'])
     parser.add_argument('--affinity', type=str, nargs='+', default=['unweighted'])
-    parser.add_argument('--scoring', type=str, default='nll')
+    parser.add_argument('--cond_mean_type', type=str, nargs='+', default=['base'])
+    parser.add_argument('--scoring', type=str, default='crps')
     parser.add_argument('--gridsearch', type=int, default=1)
     parser.add_argument('--random_state', type=int, default=1)
+
+    parser.add_argument('--font_size', type=int, default=15)
 
     args = parser.parse_args()
     main(args)
