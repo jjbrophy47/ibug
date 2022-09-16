@@ -82,7 +82,7 @@ for t in ${tree_list[@]}; do
         for tf in ${tree_subsample_frac_list[@]}; do
             for f in ${fold_list[@]}; do
                 sbatch -a 1-10,12-19,21-22 -c 4 -t 600  -p 'short' -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to
-                # sbatch -a 11,20         -c 10 -t 2880 -p 'long'  -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to
+                # sbatch -a 11,20         -c 7 -t 2880 -p 'long'  -o $op $run $f 'ibug' $t $s $s $td $ci $cd 'base' $tf $to
             done
         done
     done

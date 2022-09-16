@@ -1,12 +1,9 @@
-import sys
 import time
 import joblib
 
 import numpy as np
 import pandas as pd
-import properscoring as ps
 import uncertainty_toolbox as uct
-from sklearn.base import clone
 from scipy.sparse import csr_matrix
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
@@ -19,10 +16,10 @@ from .parsers.tree import TreeEnsemble
 
 class IBUGWrapper(Estimator):
     """
-    K-Nearest Neigbors Gradient Boosting Machine.
-        Wrapper around any GBM model enabling probabilistic forecasting
-        by modeling the output distribution of the k-nearest neighbors to a
-        given test example in the learnt tree-kernel space.
+    Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Trees.
+        Wrapper around any GBT model enabling probabilistic predictions
+        by modeling the output distribution using the k-nearest neighbors to a
+        given test example in the learned tree-kernel space.
     """
     def __init__(self,
                  k=100,
@@ -489,8 +486,8 @@ class IBUGWrapper(Estimator):
         train_leaves = self.model_.apply(X).squeeze()  # shape=(len(X), n_boost)
         train_leaves[:, 1:] += leaf_cum_sum[:-1]  # shape=(len(X), n_boost)
 
-        row = train_leaves.flatten().astype(np.int32)  # shape=(n_boost * len(X))
-        col = np.concatenate([[i] * self.n_boost_ for i in range(len(X))]).astype(np.int32)  # (len(X) * n_boost)
+        row = train_leaves.flatten().astype(np.int32)  # shape=(n_boost * len(X),)
+        col = np.concatenate([[i] * self.n_boost_ for i in range(len(X))]).astype(np.int32)  # (n_boost * len(X),)
         data = np.ones(self.n_boost_ * len(X), dtype=np.float32)  # shape=(n_boost * len(X),)
         leaf_mat = csr_matrix((data, (row, col)), shape=(total_num_leaves, len(X)), dtype=np.float32)
 
@@ -683,11 +680,9 @@ class IBUGWrapper(Estimator):
 
 class KNNWrapper(Estimator):
     """
-    K-Nearest neigbors regressor with feature importance and uncertainty estimation.
-        Wrapper around a KNN regressor model enabling probabilistic forecasting
+    Wrapper around a KNN regressor model enabling probabilistic predictions
         by modeling the output distribution of the k-nearest neighbors to a
-        given test example using the most important features based on
-        a given GBRT model.
+        given test example in Euclidean space.
     """
     def __init__(self,
                  max_feat=20,
