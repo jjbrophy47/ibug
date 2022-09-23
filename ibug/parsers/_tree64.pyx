@@ -127,6 +127,34 @@ cdef class _Tree64:
 
         return out
 
+    cpdef np.ndarray leaf_depth(self, DTYPE_t[:, :] X):
+        """
+        Predict leaf depth for x in X.
+        """
+
+        # In / out
+        cdef SIZE_t n_samples = X.shape[0]
+        cdef np.ndarray[DTYPE_t] out = np.zeros((n_samples,), dtype=np_dtype_t)
+
+        # Incrementers
+        cdef SIZE_t i = 0
+        cdef Node*  node = NULL
+
+        with nogil:
+
+            for i in range(n_samples):
+                node = self.root_
+
+                while not node.is_leaf:
+                    if self._test_threshold(X[i, node.feature], node.threshold):
+                        node = node.left_child
+                    else:
+                        node = node.right_child
+
+                out[i] = node.depth
+
+        return out
+
     cpdef np.ndarray get_leaf_values(self):
         """
         Return 1d array of leaf values in order of their leaf IDs.
@@ -170,6 +198,29 @@ cdef class _Tree64:
 
         # clean up
         free(leaf_weights)
+
+        return np.asarray(out)
+
+    cpdef np.ndarray get_leaf_depths(self):
+        """
+        Return 1d array of leaf depths in order of their leaf IDs.
+        """
+
+        # result
+        cdef DTYPE_t* leaf_depths = <DTYPE_t *>malloc(self.leaf_count_ * sizeof(DTYPE_t))
+        cdef DTYPE_t[:] out = np.zeros((self.leaf_count_,), dtype=np_dtype_t)
+
+        # incrementer
+        cdef SIZE_t i = 0
+
+        self._get_leaf_depths(self.root_, leaf_depths, 0)
+
+        # copy values to np.ndarray
+        for i in range(self.leaf_count_):
+            out[i] = leaf_depths[i]
+
+        # clean up
+        free(leaf_depths)
 
         return np.asarray(out)
 
@@ -374,6 +425,23 @@ cdef class _Tree64:
         else:
             self._get_leaf_weights(node.left_child, leaf_weights, leaf_scale)
             self._get_leaf_weights(node.right_child, leaf_weights, leaf_scale)
+
+        return
+
+    cdef void _get_leaf_depths(self,
+                               Node* node,
+                               DTYPE_t* leaf_depths,
+                               DTYPE_t depth) nogil:
+        """
+        Recursively fill 1d array of leaf depths in order of their leaf IDs.
+        """
+
+        if node.is_leaf:
+            leaf_depths[node.leaf_id] = depth
+
+        else:
+            self._get_leaf_depths(node.left_child, leaf_depths, depth+1)
+            self._get_leaf_depths(node.right_child, leaf_depths, depth+1)
 
         return
 

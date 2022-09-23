@@ -78,6 +78,13 @@ class Tree(object):
         assert X.ndim == 2
         return self.tree_.apply(X)
 
+    def leaf_depth(self, X):
+        """
+        Return 1d array of leaf depths, shape=(X.shape[0],).
+        """
+        assert X.ndim == 2
+        return self.tree_.leaf_depth(X)
+
     def get_leaf_values(self):
         """
         Return 1d array of leaf values, shape=(no. leaves,).
@@ -95,6 +102,12 @@ class Tree(object):
             - Must run `update_node_count` BEFORE this method.
         """
         return self.tree_.get_leaf_weights(scale)
+
+    def get_leaf_depths(self):
+        """
+        Return 1d array of leaf depths, shape=(no. leaves,).
+        """
+        return self.tree_.get_leaf_depths()
 
     def update_node_count(self, X):
         """
@@ -225,6 +238,19 @@ class TreeEnsemble(object):
                 leaves[:, boost_idx, class_idx] = self.trees[boost_idx][class_idx].apply(X)
         return leaves
 
+    def leaf_depth(self, X):
+        """
+        Returns 3d array of leaf depths; shape=(X.shape[0], no. boost, no. class).
+        """
+        X = util.check_input_data(X)
+
+        depths = np.zeros((X.shape[0], self.n_boost_, self.n_class_), dtype=np.float32)
+
+        for boost_idx in range(self.n_boost_):
+            for class_idx in range(self.n_class_):
+                depths[:, boost_idx, class_idx] = self.trees[boost_idx][class_idx].leaf_depth(X)
+        return depths
+
     def get_leaf_values(self):
         """
         Returns 1d array of leaf values of shape=(no. leaves across all trees,).
@@ -249,6 +275,17 @@ class TreeEnsemble(object):
             - Must run `update_node_count` BEFORE this method.
         """
         return np.concatenate([tree.get_leaf_weights(scale) for tree in self.trees.flatten()]).astype(util.dtype_t)
+
+    def get_leaf_depths(self, flatten=False):
+        """
+        Return
+            - If flatten, return 1d array of leaf depths, shape=(no. leaves across all trees,).
+            - Otherwise, return list of 1d arrays of leaf depths, shape=(no. leaves across all trees,).
+        """
+        depths = [tree.get_leaf_depths() for tree in self.trees.flatten()]
+        if flatten:
+            depths = np.concatenate(depths).astype(util.dtype_t)
+        return depths
 
     def get_leaf_counts(self):
         """

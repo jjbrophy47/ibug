@@ -337,6 +337,14 @@ def experiment(args, in_dir, out_dir, logger):
             result['test_posterior'] = test_res['performance']
             if args.fold == 1:
                 result['neighbors'] = test_res['neighbors']
+
+        if args.custom_out_dir in ['leaf_depth']:
+            result['leaf_depth'] = {
+                'all_depths': model_test.model_.get_leaf_depths(flatten=True),  # shape=(total_n_leaves,)
+                'leaf_counts': model_test.model_.get_leaf_counts().squeeze(),  # shape=(n_boost,)
+                'pred_depth': model_test.model_.leaf_depth(X_train).squeeze()  # shape=(n_train, n_boost)
+            }
+
     result['misc'] = {
         'max_RSS': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,  # MB if OSX, GB if Linux
         'total_experiment_time': time.time() - begin

@@ -17,6 +17,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.ensemble import RandomForestRegressor
 from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
@@ -405,6 +406,11 @@ def get_params(model_type, n_train, tree_type=None):
                       'min_data_in_leaf': [1, 20],
                       'max_bin': [255]}
 
+        elif tree_type == 'skrf':
+            params = {'n_estimators': [10, 25, 50, 100, 250, 500, 1000, 2000],
+                      'max_depth': [2, 3, 5, 7, None],
+                      'min_samples_leaf': [1, 20]}
+
         else:
             raise ValueError('tree_type unknown: {}'.format(tree_type))
     else:
@@ -415,7 +421,7 @@ def get_params(model_type, n_train, tree_type=None):
 
 def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=64,
               lr=0.1, max_leaves=8, max_depth=6, min_leaf_samples=1,
-              bagging_frac=1.0, random_state=1, verbose=2):
+              bagging_frac=1.0, max_features='sqrt', random_state=1, verbose=2):
     """
     Return the appropriate classifier.
 
@@ -430,6 +436,7 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
         max_depth: int, Maximum depth of each tree.
         min_leaf_samples: int, Miniumum number of samples per leaf.
         bagging_frac: float, Fraction of training instances to sample per tree.
+        max_features: str, Maximum features to sample per decision node.
         random_state: int, Random seed.
         verbose: int, Verbosity level.
 
@@ -498,6 +505,11 @@ def get_model(model_type, tree_type, scoring='nll', n_estimators=2000, max_bin=6
                                        max_leaves=max_leaves, max_bin=max_bin,
                                        bagging_fraction=bagging_frac,
                                        min_data_in_leaf=min_leaf_samples, verbose=verbose)
+
+        elif tree_type == 'skrf':
+            model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth,
+                                          min_samples_leaf=min_leaf_samples, max_features=max_features,
+                                          random_state=random_state)
 
         else:
             raise ValueError('tree_type unknown: {}'.format(tree_type))
