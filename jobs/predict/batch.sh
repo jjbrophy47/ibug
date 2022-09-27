@@ -20,12 +20,13 @@ for f in ${fold_list[@]}; do
 done
 
 # IBUG tree variants
-tree_list=('xgb')
+tree_list=('skrf' 'cb' 'lgb')
+cd='leaf_depth'
 
 for f in ${fold_list[@]}; do
     for tree in ${tree_list[@]}; do
-        sbatch -a 1-10,12-19,21-22 -c 4  -t 1440 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
-        sbatch -a 11,20            -c 10 -t 2880 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
+        sbatch -a 1-10,12-19,21-22 -c 10 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td $cd $cd
+        # sbatch -a 11,20            -c 10 -t 2880 -p 'preempt'  -o ${o}'ibug-%a.out' $run $f 'ibug' $tree $s $s $td
     done
 done
 

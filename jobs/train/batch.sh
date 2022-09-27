@@ -30,12 +30,13 @@ for f in ${fold_list[@]}; do
 done
 
 # IBUG tree variants
-tree_list=('xgb' 'cb')
+tree_list=('skrf')
 
 for f in ${fold_list[@]}; do
     for t in ${tree_list[@]}; do
-        # sbatch -a 1-10,12-19,21-22 -c 4  -t 1440  -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' $t $g $s
-        sbatch -a 11,20            -c 10 -t 1440  -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' $t $g $s
+        sbatch -a 1-10,12-19,21-22 -c 4 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $t $g $s 'leaf_depth' 'base'
+        # sbatch -a 1-10,12-19,21-22 -c 4 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $t $g $s 'leaf_depth' 'base' 0 $s 4
+        # sbatch -a 11,20            -c 10 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' $t $g $s 'leaf_depth' 'base' 0 $s 10
     done
 done
 
@@ -63,7 +64,7 @@ for t in ${tree_list[@]}; do
 done
 
 # scratch pad
-fold_list=(5 8)
+fold_list=(1 2 3 4 5 6 7 8 9 10)
 for f in ${fold_list[@]}; do
-    sbatch -a 22 -c 4 -t 1440 -p 'preempt' -o ${o}'ibug-%a.out' $run $f 'ibug' 'cb' $g 'nll' 'default' 'neighbors'
+    sbatch -a 13 -c 15 -t 1440 -p 'short' -o ${o}'ibug-%a.out' $run $f 'ibug' 'skrf' $g $s 'leaf_depth'
 done

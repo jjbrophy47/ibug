@@ -1115,9 +1115,6 @@ def process(args, in_dir, out_dir, logger):
     raw['ptime_df'] = pd.DataFrame(ptime_list)
     param_df = aggregate_params(pd.DataFrame(param_list), param_names, param_types)  # aggregate hyperparameters
 
-    # pd.set_option('display.max_rows', None)
-    # print(raw['test_sr_df_delta'])
-
     # compute mean and and SEM/s.d.
     group_cols = ['dataset']
     mean = {key: df.groupby(group_cols).mean().reset_index().drop(columns=['fold']) for key, df in raw.items()}
@@ -1127,17 +1124,10 @@ def process(args, in_dir, out_dir, logger):
         'ptime_df': raw['ptime_df'].groupby(group_cols).std().reset_index().drop(columns=['fold'])
     }
 
-    # print(mean['test_sr_df_delta'])
-    # exit(0)
-
     # compute wins/losses
     mean_h2h = {key: append_head2head_old(data_df=raw[key], attach_df=mean[key]) for key in mean.keys()}
-
-    # mean_h2h = {key: append_head2head(df) for key, df in mean.items()}
     sem_h2h = {key: append_head2head(df) for key, df in sem.items()}
     std_h2h = {key: append_head2head(df) for key, df in std.items()}
-
-    # pd.set_option('display.max_columns', None)
 
     logger.info('\n\nNO VARIANCE CALIBRATION')
     logger.info(f"\n{metric_names[args.acc_metric]} (Accuracy):\n{mean_h2h['test_acc_df']}")
@@ -1194,11 +1184,8 @@ def process(args, in_dir, out_dir, logger):
 
     for key, df in delta_h2h.items():
         df.to_csv(f'{out_dir}/dcomp_{key}.csv', index=False)
-    
-    param_df.to_csv(f'{out_dir}/param_df.csv', index=False)
 
-    # for key, df in vtest_h2h.items():
-    #     df.to_csv(f'{out_dir}/vtest_{key}.csv', index=False)
+    param_df.to_csv(f'{out_dir}/param_df.csv', index=False)
 
     logger.info(f'\nSaving results to {out_dir}...')
 
@@ -1233,153 +1220,6 @@ def process(args, in_dir, out_dir, logger):
     latex_table_sem(df=mean_h2h['ptime_df'], sem_df=std_h2h['ptime_df'], logger=logger, suffix='Avg. Predict Time (ms)')
     plot_runtime_boxplots(btime_df=mean_h2h['btime_df'], ptime_df=mean_h2h['ptime_df'], rotate_labels=args.rotate_labels,
         shorten_names=args.shorten_names, out_dir=out_dir, logger=logger)
-
-    exit(0)
-
-    # test_point_mean_df = test_point_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # test_prob_mean_df = test_prob_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # test_prob2_mean_df = test_prob2_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # test_prob_delta_mean_df = test_prob_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # test_prob2_delta_mean_df = test_prob2_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # val_prob_mean_df = val_prob_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # val_prob2_mean_df = val_prob2_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # val_prob_delta_mean_df = val_prob_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # val_prob2_delta_mean_df = val_prob2_delta_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # btime_mean_df = btime_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-    # ptime_mean_df = ptime_df.groupby(group_cols).mean().reset_index().drop(columns=['fold'])
-
-    # test_point_sem_df = test_point_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # test_prob_sem_df = test_prob_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # test_prob2_sem_df = test_prob2_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # test_prob_delta_sem_df = test_prob_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # test_prob2_delta_sem_df = test_prob2_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # val_prob_sem_df = val_prob_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # val_prob2_sem_df = val_prob2_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # val_prob_delta_sem_df = val_prob_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # val_prob2_delta_sem_df = val_prob2_delta_df.groupby(group_cols).sem().reset_index().drop(columns=['fold'])
-    # btime_std_df = btime_df.groupby(group_cols).std().reset_index().drop(columns=['fold'])
-    # ptime_std_df = ptime_df.groupby(group_cols).std().reset_index().drop(columns=['fold'])
-
-    # combine mean and sem into one dataframe
-    test_point_ms_df = join_mean_sem(test_point_mean_df, test_point_sem_df, metric=args.point_metric)
-    test_prob_ms_df = join_mean_sem(test_prob_mean_df, test_prob_sem_df, metric=args.prob_metric1)
-    test_prob2_ms_df = join_mean_sem(test_prob2_mean_df, test_prob2_sem_df, metric=args.prob_metric2)
-    test_prob_delta_ms_df = join_mean_sem(test_prob_delta_mean_df, test_prob_delta_sem_df, metric=args.prob_metric1)
-    test_prob2_delta_ms_df = join_mean_sem(test_prob2_delta_mean_df, test_prob2_delta_sem_df, metric=args.prob_metric2)
-    val_prob_ms_df = join_mean_sem(val_prob_mean_df, val_prob_sem_df, metric=args.prob_metric1)
-    val_prob2_ms_df = join_mean_sem(val_prob2_mean_df, val_prob2_sem_df, metric=args.prob_metric2)
-    val_prob_delta_ms_df = join_mean_sem(val_prob_delta_mean_df, val_prob_delta_sem_df, metric=args.prob_metric1)
-    val_prob2_delta_ms_df = join_mean_sem(val_prob2_delta_mean_df, val_prob2_delta_sem_df, metric=args.prob_metric2)
-    btime_ms_df = join_mean_sem(btime_mean_df, btime_std_df, metric='btime', exclude_sem=True)
-    ptime_ms_df = join_mean_sem(ptime_mean_df, ptime_std_df, metric='ptime', exclude_sem=True)
-
-    # attach head-to-head scores
-    test_point_ms2_df = append_head2head(data_df=test_point_df, attach_df=test_point_ms_df)
-    test_prob_ms2_df = append_head2head(data_df=test_prob_df, attach_df=test_prob_ms_df)
-    test_prob2_ms2_df = append_head2head(data_df=test_prob2_df, attach_df=test_prob2_ms_df)
-    test_prob_delta_ms2_df = append_head2head(data_df=test_prob_delta_df, attach_df=test_prob_delta_ms_df)
-    test_prob2_delta_ms2_df = append_head2head(data_df=test_prob2_delta_df, attach_df=test_prob2_delta_ms_df)
-    val_prob_ms2_df = append_head2head(data_df=val_prob_df, attach_df=val_prob_ms_df)
-    val_prob2_ms2_df = append_head2head(data_df=val_prob2_df, attach_df=val_prob2_ms_df)
-    val_prob_delta_ms2_df = append_head2head(data_df=val_prob_delta_df, attach_df=val_prob_delta_ms_df)
-    val_prob2_delta_ms2_df = append_head2head(data_df=val_prob2_delta_df, attach_df=val_prob2_delta_ms_df)
-
-    # attach g. mean scores
-    btime_ms2_df = append_gmean(data_df=btime_df, attach_df=btime_ms_df, fmt='int')
-    ptime_ms2_df = append_gmean(data_df=ptime_df, attach_df=ptime_ms_df, fmt='float')
-
-    # format columns
-    test_point_ms2_df = format_dataset_names(test_point_ms2_df)
-    test_prob_ms2_df = format_dataset_names(test_prob_ms2_df)
-    test_prob2_ms2_df = format_dataset_names(test_prob2_ms2_df)
-    test_prob_delta_ms2_df = format_dataset_names(test_prob_delta_ms2_df)
-    test_prob2_delta_ms2_df = format_dataset_names(test_prob2_delta_ms2_df)
-    val_prob_ms2_df = format_dataset_names(val_prob_ms2_df)
-    val_prob2_ms2_df = format_dataset_names(val_prob2_ms2_df)
-    val_prob_delta_ms2_df = format_dataset_names(val_prob_delta_ms2_df)
-    val_prob2_delta_ms2_df = format_dataset_names(val_prob2_delta_ms2_df)
-    btime_ms2_df = format_dataset_names(btime_ms2_df)
-    ptime_ms2_df = format_dataset_names(ptime_ms2_df)
-
-    # merge specific dataframes
-    test_prob_point_delta_ms2_df = test_prob_delta_ms2_df.merge(test_point_ms2_df, on='dataset')
-    bptime_ms2_df = btime_ms2_df.merge(ptime_ms2_df, on='dataset')
-
-    # display
-    logger.info(f'\n[TEST] Point peformance (RMSE):\n{test_point_ms2_df}')
-    logger.info(f'\n[TEST] Probabilistic peformance ({args.scoring.upper()}):\n{test_prob_ms2_df}')
-    logger.info(f'\n[TEST] Probabilistic peformance ({args.scoring.upper()}, w/ delta):\n{test_prob_delta_ms2_df}')
-    logger.info(f'\n[VAL] Probabilistic peformance ({args.scoring.upper()}):\n{val_prob_ms2_df}')
-    logger.info(f'\n[VAL] Probabilistic peformance ({args.scoring.upper()}, w/ delta):\n{val_prob_delta_ms2_df}')
-    logger.info(f'\n[TEST] Build time:\n{btime_ms2_df}')
-    logger.info(f'\n[TEST] Avg. predict time:\n{ptime_ms2_df}')
-    logger.info(f'\nParams:\n{param_df}')
-
-    # save
-    logger.info(f'\nSaving results to {out_dir}...')
-
-    test_point_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.point_metric}_str.csv'), index=None)
-    test_prob_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric1}_str.csv'), index=None)
-    test_prob2_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric2}_str.csv'), index=None)
-    test_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric1}_delta_str.csv'), index=None)
-    test_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric2}_delta_str.csv'), index=None)
-    val_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.prob_metric1}_str.csv'), index=None)
-    val_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.prob_metric2}_str.csv'), index=None)
-    val_prob_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.prob_metric1}_delta_str.csv'), index=None)
-    val_prob2_delta_ms2_df.to_csv(os.path.join(out_dir, f'val_{args.prob_metric2}_delta_str.csv'), index=None)
-    btime_ms2_df.to_csv(os.path.join(out_dir, 'test_btime_str.csv'), index=None)
-    ptime_ms2_df.to_csv(os.path.join(out_dir, 'test_ptime_str.csv'), index=None)
-
-    test_prob_point_delta_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric1}_rmse_str.csv'), index=None)
-    bptime_ms2_df.to_csv(os.path.join(out_dir, f'test_bptime_str.csv'), index=None)
-    param_df.to_csv(os.path.join(out_dir, 'param.csv'), index=None)
-
-    # delta comparison
-    test_prob_dboth_df = test_prob_df.merge(test_prob_delta_df, on=['dataset', 'fold'], how='left')
-    test_prob_mean_dboth_df = test_prob_mean_df.merge(test_prob_delta_mean_df, on='dataset', how='left')
-    test_prob_sem_dboth_df = test_prob_sem_df.merge(test_prob_delta_sem_df, on='dataset', how='left')
-    test_prob_dboth_ms_df = join_mean_sem(test_prob_mean_dboth_df, test_prob_sem_dboth_df, metric=args.prob_metric1)
-    test_prob_dboth_ms2_df = append_head2head(data_df=test_prob_dboth_df, attach_df=test_prob_dboth_ms_df)
-    test_prob_dboth_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric1}_dcomp.csv'), index=None)
-
-    # delta comparison (scoring 2)
-    test_prob2_dboth_df = test_prob2_df.merge(test_prob2_delta_df, on=['dataset', 'fold'], how='left')
-    test_prob2_mean_dboth_df = test_prob2_mean_df.merge(test_prob2_delta_mean_df, on='dataset', how='left')
-    test_prob2_sem_dboth_df = test_prob2_sem_df.merge(test_prob2_delta_sem_df, on='dataset', how='left')
-    test_prob2_dboth_ms_df = join_mean_sem(test_prob2_mean_dboth_df, test_prob2_sem_dboth_df, metric=args.prob_metric2)
-    test_prob2_dboth_ms2_df = append_head2head(data_df=test_prob2_dboth_df, attach_df=test_prob2_dboth_ms_df)
-    test_prob2_dboth_ms2_df.to_csv(os.path.join(out_dir, f'test_{args.prob_metric2}_dcomp.csv'), index=None)
-
-    # runtime
-    logger.info('\nRuntime...')
-    ref_cols = plot_runtime(bdf=btime_mean_df, pdf=ptime_mean_df, out_dir=out_dir)
-
-    # # boxplot
-    # logger.info('\nPlotting boxplots...')
-    # fig, axs = plt.subplots(5, 5, figsize=(4 * 5, 3 * 5))
-    # axs = axs.flatten()
-    # i = 0
-    # for dataset, gf in test_prob_delta_df.groupby('dataset'):
-    #     gf.boxplot([c for c in gf.columns if c not in ['dataset', 'fold']], ax=axs[i])
-    #     axs[i].set_title(dataset)
-    #     axs[i].set_xticks([])
-    #     i += 1
-    # fig.delaxes(axs[-1])
-    # fig.delaxes(axs[-2])
-    # fig.delaxes(axs[-3])
-    # plt.tight_layout()
-    # plt.savefig(os.path.join(out_dir, 'boxplot.pdf'), bbox_inches='tight')
-
-    # # Wilcoxon ranked test
-    # if ref_cols is not None:
-    #     ibg_col, ngb_col, pgb_col = ref_cols
-    #     logger.info('\nWilocoxon signed rank test (two-tailed):')
-    #     for c in [ngb_col, pgb_col]:
-    #         test_prob_delta_df = test_prob_delta_df.dropna()  # TEMP
-    #         test_prob_delta_mean_df = test_prob_delta_mean_df.dropna()  # TEMP
-    #         statistic, p_val = stats.wilcoxon(test_prob_delta_df[ibg_col], test_prob_delta_df[c])
-    #         statistic_m, p_val_m = stats.wilcoxon(test_prob_delta_mean_df[ibg_col], test_prob_delta_mean_df[c])
-    #         logger.info(f'[{ibg_col} & {c}] ALL FOLDS p-val: {p_val}, MEAN of FOLDS p-val: {p_val_m}')
 
 
 def main(args):

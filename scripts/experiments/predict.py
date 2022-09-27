@@ -342,7 +342,7 @@ def experiment(args, in_dir, out_dir, logger):
             result['leaf_depth'] = {
                 'all_depths': model_test.model_.get_leaf_depths(flatten=True),  # shape=(total_n_leaves,)
                 'leaf_counts': model_test.model_.get_leaf_counts().squeeze(),  # shape=(n_boost,)
-                'pred_depth': model_test.model_.leaf_depth(X_train).squeeze()  # shape=(n_train, n_boost)
+                'pred_depth': model_test.model_.leaf_depth(X_test).squeeze()  # shape=(n_test, n_boost)
             }
 
     result['misc'] = {
