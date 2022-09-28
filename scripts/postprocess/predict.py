@@ -76,6 +76,7 @@ method_map = {
     'ibug_732b2e458f8d0c10e5d5f534f9acc2fb': 'IBUG-CB',
     'ibug_897d3256175ee64ce73e931ccf70f4f4': 'IBUG-CB_n',
     'ibug_e01ca97af6a59a305a51f8eaad593980': 'IBUG-XGB',
+    'ibug_fc813e5057b0b17774f983502e59797b': 'IBUG-SKRF',
     'bart': 'BART',
     'dataset': 'Dataset',
 }
