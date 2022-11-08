@@ -23,7 +23,7 @@ Quickstart
 
 ```python
 from ibug import IBUGWrapper
-from lightgbm import LGBMRegressor
+from xgboost import XGBRegressor
 from sklearn.datasets import load_diabetes
 from sklearn.model_selection import train_test_split
 
@@ -36,7 +36,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_
 X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, random_state=1)
 
 # train GBRT model
-model = LGBMRegressor().fit(X_train, y_train)
+model = XGBRegressor().fit(X_train, y_train)
 
 # extend GBRT model into a probabilistic estimator
 prob_model = IBUGWrapper().fit(model, X_train, y_train, X_val=X_val, y_val=y_val)

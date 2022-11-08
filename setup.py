@@ -44,4 +44,5 @@ setup(name="ibug",
     ],
     ext_modules=cythonize(ext_modules, compiler_directives={'language_level': 3}, annotate=True),
     include_dirs=np.get_include(),
-    zip_safe=False)
+    zip_safe=False
+)
