@@ -39,7 +39,8 @@ setup(name="ibug",
         "scikit-learn>=1.1.1",
         "scipy>=1.8.1",
         "pandas>=1.4.3",
-        "Cython>=0.29.23"
+        "Cython>=0.29.23",
+        "lightgbm>=3.3.2"
     ],
     ext_modules=cythonize(ext_modules, compiler_directives={'language_level': 3}, annotate=True),
     include_dirs=np.get_include(),
