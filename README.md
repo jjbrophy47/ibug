@@ -54,13 +54,13 @@ License
 
 Reference
 ---
-Brophy and Lowd. [Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Trees](https://arxiv.org/abs/2205.11412). arXiv 2022.
+Brophy and Lowd. [Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Trees](https://arxiv.org/abs/2205.11412). NeurIPS 2022.
 
 ```
-@article{brophy2021ibug,
+@inproceedings{brophy2022ibug,
   title={Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Trees},
   author={Brophy, Jonathan and Lowd, Daniel},
-  journal={arXiv preprint arXiv:2205.11412},
-  year={2022},
+  booktitle={International Conference on Neural Information Processing Systems},
+  year={2022}
 }
 ```
