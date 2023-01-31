@@ -11,7 +11,7 @@ scikit-learn==0.24.2
 catboost==1.0.6
 lightgbm==3.3.2  # if arm64, install using conda-forge
 xgboost==1.6.1
-torch==1.12.0
+torch==1.13.1
 pandas==1.4.3
 pgbm==1.6
 properscoring==0.1
