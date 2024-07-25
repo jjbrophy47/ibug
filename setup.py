@@ -16,7 +16,7 @@ if os.name == 'posix':
     libraries.append('m')
 
 setup(name="ibug",
-    version="0.0.11",
+    version="0.0.12",
     description="Instance-Based Uncertainty Estimation for Gradient-Boosted Regression Trees",
     author="Jonathan Brophy",
     author_email="jonathanbrophy47@gmail.com",
@@ -36,7 +36,7 @@ setup(name="ibug",
         "numpy>=1.22",
         "uncertainty-toolbox>=0.1.0",
         "joblib>=1.1.0",
-        "scikit-learn>=1.1.1",
+        "scikit-learn>=1.5.0",
         "scipy>=1.8.1",
         "pandas>=1.4.3",
         "Cython>=0.29.23",
